@@ -4,7 +4,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Run (Crystal Sphinx)",
+			"label": "Crystal Sphinx - Run Game",
 			"command": "cargo",
 			"args": [
 				"run",
@@ -13,35 +13,6 @@
 				"--",
 				"-v"
 			],
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "Run Editor (Crystal Sphinx)",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--bin",
-				"crystal-sphinx-editor",
-				"--",
-				"-v"
-			],
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "Build Assets (Crystal Sphinx)",
-			"command": "cargo",
-			"args": [
-				"run",
-				"--bin",
-				"crystal-sphinx-editor",
-				"--",
-				"-v",
-				"-build-assets",
-				"-package"
-			],
-			"group": "build",
 			"problemMatcher": []
 		}
 	]
