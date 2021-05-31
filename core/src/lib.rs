@@ -1,3 +1,6 @@
+//! will need to separate to its own git repository at some point https://stosb.com/blog/retaining-history-when-moving-files-across-repositories-in-git/
+//! this operation will need to retain move history (i.e. `git log --name-only --format=format: --follow -- path/to/file | sort -u`)
+
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
 
