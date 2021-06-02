@@ -56,10 +56,8 @@ pub fn run() -> VoidResult {
 		.build(&engine)?;
 
 	// TODO: create a non-default renderpass info which has multiple subpasses (one for world, and at least one more for just ui)
-	log::debug!("create render chain");
 	let chain = window.create_render_chain(engine::graphics::renderpass::Info::default())?;
 
-	log::debug!("load render pass");
 	let rp = engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
 		.downcast::<engine::graphics::render_pass::Pass>()
 		.unwrap();
