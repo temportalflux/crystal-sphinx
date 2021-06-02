@@ -1,0 +1,45 @@
+{
+	"asset_type": "render-pass",
+	"subpass_order": [
+		"crystal-sphinx:render_pass/world_subpass",
+		"crystal-sphinx:render_pass/ui_subpass"
+	],
+	"dependencies": [
+		{
+			"first": {
+				"stage": [
+					"ColorAttachmentOutput"
+				]
+			},
+			"then": {
+				"id": "crystal-sphinx:render_pass/world_subpass",
+				"stage": [
+					"ColorAttachmentOutput"
+				],
+				"access": [
+					"ColorAttachmentWrite"
+				]
+			}
+		},
+		{
+			"first": {
+				"id": "crystal-sphinx:render_pass/world_subpass",
+				"stage": [
+					"ColorAttachmentOutput"
+				],
+				"access": [
+					"ColorAttachmentWrite"
+				]
+			},
+			"then": {
+				"id": "crystal-sphinx:render_pass/ui_subpass",
+				"stage": [
+					"ColorAttachmentOutput"
+				],
+				"access": [
+					"ColorAttachmentWrite"
+				]
+			}
+		}
+	]
+}

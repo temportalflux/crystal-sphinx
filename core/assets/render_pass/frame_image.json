@@ -1,0 +1,20 @@
+{
+	"asset_type": "render-attachment",
+	"format": {
+		"color": [
+			"R",
+			"G",
+			"B",
+			"A"
+		],
+		"bits": "Bit32",
+		"data": "SRGB"
+	},
+	"ops": {
+		"general": {
+			"load": "Clear",
+			"store": "Store"
+		}
+	},
+	"layout": "PresentSrc"
+}
