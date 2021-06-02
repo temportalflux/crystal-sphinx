@@ -61,7 +61,7 @@ pub fn run() -> VoidResult {
 	let rp = engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
 		.downcast::<engine::graphics::render_pass::Pass>()
 		.unwrap();
-	log::debug!("{:?}", rp);
+	log::debug!("{:?}", rp.as_graphics());
 
 	engine.run(chain);
 	window.wait_until_idle().unwrap();

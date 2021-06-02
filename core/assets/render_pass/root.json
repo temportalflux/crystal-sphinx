@@ -12,7 +12,7 @@
 				]
 			},
 			"then": {
-				"id": "crystal-sphinx:render_pass/world_subpass",
+				"subpass": "crystal-sphinx:render_pass/world_subpass",
 				"stage": [
 					"ColorAttachmentOutput"
 				],
@@ -23,7 +23,7 @@
 		},
 		{
 			"first": {
-				"id": "crystal-sphinx:render_pass/world_subpass",
+				"subpass": "crystal-sphinx:render_pass/world_subpass",
 				"stage": [
 					"ColorAttachmentOutput"
 				],
@@ -32,7 +32,7 @@
 				]
 			},
 			"then": {
-				"id": "crystal-sphinx:render_pass/ui_subpass",
+				"subpass": "crystal-sphinx:render_pass/ui_subpass",
 				"stage": [
 					"ColorAttachmentOutput"
 				],

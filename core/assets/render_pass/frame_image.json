@@ -2,15 +2,15 @@
 	"asset_type": "render-attachment",
 	"format": {
 		"color": [
-			"R",
-			"G",
 			"B",
+			"G",
+			"R",
 			"A"
 		],
-		"bits": "Bit32",
+		"bits": "Bit8",
 		"data": "SRGB"
 	},
-	"ops": {
+	"operations": {
 		"general": {
 			"load": "Clear",
 			"store": "Store"
