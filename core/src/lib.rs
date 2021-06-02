@@ -46,7 +46,7 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run() -> VoidResult {
-	let engine = engine::Engine::new::<CrystalSphinx>()?;
+	let mut engine = engine::Engine::new::<CrystalSphinx>()?;
 
 	let mut window = engine::window::Window::builder()
 		.with_title(CrystalSphinx::display_name())
@@ -55,15 +55,23 @@ pub fn run() -> VoidResult {
 		.with_application::<CrystalSphinx>()
 		.build(&engine)?;
 
-	// TODO: create a non-default renderpass info which has multiple subpasses (one for world, and at least one more for just ui)
-	let chain = window.create_render_chain(engine::graphics::renderpass::Info::default())?;
+	let chain = window.create_render_chain({
+		engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
+			.downcast::<engine::graphics::render_pass::Pass>()
+			.unwrap()
+			.as_graphics()?
+	})?;
 
-	let rp = engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
-		.downcast::<engine::graphics::render_pass::Pass>()
-		.unwrap();
-	log::debug!("{:?}", rp.as_graphics());
+	engine::ui::System::new(&chain)?
+		.with_engine_shaders()?
+		.with_all_fonts()?
+		.with_tree_root(engine::ui::make_widget!(crate::engine::ui::content_box))
+		.attach_system(
+			&mut engine,
+			&chain,
+			Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
+		)?;
 
-	engine.run(chain);
-	window.wait_until_idle().unwrap();
+	engine.run(chain.clone());
 	Ok(())
 }
