@@ -12,3 +12,5 @@ profile = []
 [dependencies]
 temportal-engine = { path = "../../temportal-engine" }
 log = "0.4.14"
+serde = { version = "1.0", features = ["derive"] }
+enumset = { version = "1.0", features = ["serde"] }
