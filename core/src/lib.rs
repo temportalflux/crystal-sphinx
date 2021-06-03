@@ -22,7 +22,7 @@
 //! - [anymap](https://crates.io/crates/anymap)
 //!
 
-use engine::{utility::VoidResult, Application};
+use engine::{math::Vector, utility::VoidResult, Application};
 pub use temportal_engine as engine;
 
 #[path = "ui/_.rs"]
@@ -56,6 +56,7 @@ pub fn run() -> VoidResult {
 		.with_size(1280.0, 720.0)
 		.with_resizable(true)
 		.with_application::<CrystalSphinx>()
+		.with_clear_color(Vector::new([0.0, 0.05, 0.1, 1.0]))
 		.build(&engine)?;
 
 	let chain = window.create_render_chain({

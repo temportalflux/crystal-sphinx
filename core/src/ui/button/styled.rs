@@ -28,32 +28,32 @@ impl Default for Style {
 				},
 			),
 			border_color: state::Var::<Color>::new(Color {
-				r: 0.1,
-				g: 0.1,
-				b: 0.1, // TODO: should be black, not grey (fix this when the background isnt black)
+				r: 0.03,
+				g: 0.03,
+				b: 0.03,
 				a: 1.0,
 			})
 			.with(
 				state::Flag::Active.into(),
 				Color {
-					r: 1.0,
-					g: 1.0,
-					b: 1.0,
+					r: 0.7,
+					g: 0.7,
+					b: 0.7,
 					a: 1.0,
 				},
 			),
 			inner_color_top_left: state::Var::<Color>::new(Color {
-				r: 1.0,
-				g: 1.0,
-				b: 1.0,
-				a: 0.28,
+				r: 0.8,
+				g: 0.8,
+				b: 0.8,
+				a: 0.5,
 			})
 			.with(
 				state::Flag::Disabled.into(),
 				Color {
-					r: 1.0,
-					g: 1.0,
-					b: 1.0,
+					r: 0.0,
+					g: 0.0,
+					b: 0.0,
 					a: 0.0,
 				},
 			)
@@ -63,14 +63,14 @@ impl Default for Style {
 					r: 1.0,
 					g: 1.0,
 					b: 1.0,
-					a: 0.62,
+					a: 0.8,
 				},
 			),
 			inner_color_bottom_right: state::Var::<Color>::new(Color {
 				r: 0.0,
 				g: 0.0,
 				b: 0.0,
-				a: 0.40,
+				a: 0.7,
 			})
 			.with(
 				state::Flag::Disabled.into(),
@@ -87,7 +87,7 @@ impl Default for Style {
 					r: 0.0,
 					g: 0.0,
 					b: 0.0,
-					a: 0.66,
+					a: 0.8,
 				},
 			),
 		}
@@ -99,6 +99,7 @@ impl Default for Style {
 pub fn widget(mut ctx: WidgetContext) -> WidgetNode {
 	let style = ctx.props.read_cloned_or_default::<Style>();
 	let flags = state::Flag::from_ctx(&ctx);
+	unpack_named_slots!(ctx.named_slots => { content });
 
 	let border_size = Rect {
 		left: 5.0,
@@ -188,7 +189,8 @@ pub fn widget(mut ctx: WidgetContext) -> WidgetNode {
 						})
 						.listed_slot(background)
 						.listed_slot(inner_highlight_top_left)
-						.listed_slot(inner_highlight_bottom_right),
+						.listed_slot(inner_highlight_bottom_right)
+						.listed_slot(content),
 				),
 			),
 	)

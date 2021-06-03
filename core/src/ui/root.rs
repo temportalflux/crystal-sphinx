@@ -1,4 +1,7 @@
-use crate::{engine::ui::*, ui};
+use crate::{
+	engine::{asset::statics, ui::*},
+	ui,
+};
 
 pub fn root(mut _context: WidgetContext) -> WidgetNode {
 	WidgetNode::Component(
@@ -20,7 +23,28 @@ pub fn root(mut _context: WidgetContext) -> WidgetNode {
 					height: SizeBoxSizeValue::Exact(150.0),
 					..Default::default()
 				})
-				.named_slot("content", make_widget!(ui::button::styled::widget)),
+				.named_slot(
+					"content",
+					make_widget!(ui::button::styled::widget).named_slot(
+						"content",
+						make_widget!(text_box)
+							.with_props(TextBoxProps {
+								text: "Button!".to_owned(),
+								font: statics::font::unispace::REGULAR.at_size(30.0),
+								color: Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+								..Default::default()
+							})
+							.with_props(ContentBoxItemLayout {
+								anchors: Rect {
+									left: 0.2,
+									right: 0.5,
+									top: 0.2,
+									bottom: 0.5,
+								},
+								..Default::default()
+							}),
+					),
+				),
 		),
 	)
 }
