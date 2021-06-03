@@ -25,6 +25,9 @@
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
 
+#[path = "ui/_.rs"]
+pub mod ui;
+
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
 	fn name() -> &'static str {
@@ -65,7 +68,7 @@ pub fn run() -> VoidResult {
 	engine::ui::System::new(&chain)?
 		.with_engine_shaders()?
 		.with_all_fonts()?
-		.with_tree_root(engine::ui::make_widget!(crate::engine::ui::content_box))
+		.with_tree_root(engine::ui::make_widget!(ui::root::root))
 		.attach_system(
 			&mut engine,
 			&chain,
