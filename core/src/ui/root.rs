@@ -31,7 +31,12 @@ pub fn root(mut _context: WidgetContext) -> WidgetNode {
 							.with_props(TextBoxProps {
 								text: "Button!".to_owned(),
 								font: statics::font::unispace::REGULAR.at_size(30.0),
-								color: Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+								color: Color {
+									r: 0.0,
+									g: 0.0,
+									b: 0.0,
+									a: 1.0,
+								},
 								..Default::default()
 							})
 							.with_props(ContentBoxItemLayout {
