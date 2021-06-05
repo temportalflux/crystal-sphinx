@@ -49,7 +49,7 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run() -> VoidResult {
-	let mut engine = engine::Engine::new::<CrystalSphinx>()?;
+	let mut engine = engine::Engine::new::<CrystalSphinx>(None)?;
 
 	let mut window = engine::window::Window::builder()
 		.with_title(CrystalSphinx::display_name())

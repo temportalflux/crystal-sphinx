@@ -1,4 +1,5 @@
 use crystal_sphinx;
+use crystal_sphinx::CrystalSphinx;
 use engine::utility::VoidResult;
 use temportal_engine as engine;
 use temportal_engine_editor as editor;
@@ -9,21 +10,28 @@ fn main() -> VoidResult {
 		engine::profiling::optick::start_capture();
 	}
 
-	let editor = editor::Editor::new::<crystal_sphinx::CrystalSphinx>()?;
-	if editor.borrow().run_commandlets()? {
+	let mut engine = engine::Engine::new::<CrystalSphinx>(Some("_editor"))?;
+
+	editor::Editor::initialize::<CrystalSphinx>()?;
+	if editor::Editor::read().run_commandlets()? {
 		return Ok(());
 	}
 
-	let mut display = engine::display::Manager::new()?;
-	let mut ui = editor::ui::Ui::new(&display, "Crystal Sphinx Editor", 1280, 720)?;
+	let mut window = engine::window::Window::builder()
+		.with_title("Crystal Sphinx Editor")
+		.with_size(1280.0, 720.0)
+		.with_resizable(true)
+		.with_application::<CrystalSphinx>()
+		.with_clear_color([0.02, 0.02, 0.02, 1.0].into())
+		.build(&engine)?;
 
-	let workspace = editor::ui::Workspace::new(&editor.borrow());
-	ui.add_element(&workspace);
+	let chain = window.create_render_chain(engine::graphics::renderpass::Info::default())?;
+	let ui = editor::ui::Ui::create(&window, &mut engine, &chain)?;
 
-	while !display.should_quit() {
-		display.poll_all_events()?;
-		ui.render_frame(&mut editor.borrow_mut(), display.event_pump()?)?;
-	}
+	let workspace = editor::ui::Workspace::new();
+	ui.write().unwrap().add_element(&workspace);
+
+	engine.run(chain.clone());
 
 	#[cfg(feature = "profile")]
 	{
