@@ -10,7 +10,8 @@ fn main() -> VoidResult {
 		engine::profiling::optick::start_capture();
 	}
 
-	let mut engine = engine::Engine::new::<CrystalSphinx>(Some("_editor"))?;
+	engine::logging::init::<CrystalSphinx>(Some("_editor"))?;
+	let mut engine = engine::Engine::new()?;
 
 	editor::Editor::initialize::<CrystalSphinx>()?;
 	if editor::Editor::read().run_commandlets()? {
@@ -36,7 +37,7 @@ fn main() -> VoidResult {
 	#[cfg(feature = "profile")]
 	{
 		use engine::Application;
-		engine::profiling::optick::stop_capture(crystal_sphinx::CrystalSphinx::name());
+		engine::profiling::optick::stop_capture(CrystalSphinx::name());
 	}
 	Ok(())
 }

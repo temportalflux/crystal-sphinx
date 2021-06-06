@@ -45,7 +45,9 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run() -> VoidResult {
-	let mut engine = engine::Engine::new::<CrystalSphinx>(None)?;
+	engine::logging::init::<CrystalSphinx>(None)?;
+	let mut engine = engine::Engine::new()?;
+	engine.scan_paks(vec![CrystalSphinx::pak_name()])?;
 
 	let mut window = engine::window::Window::builder()
 		.with_title(CrystalSphinx::display_name())
