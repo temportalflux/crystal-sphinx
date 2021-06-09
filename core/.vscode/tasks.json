@@ -15,7 +15,7 @@
 				"env": {
 					"RUST_BACKTRACE": "1"
 				},
-				"cwd": "../run/core"
+				"cwd": "../../run/core"
 			},
 			"problemMatcher": []
 		},
@@ -32,7 +32,7 @@
 				"env": {
 					"RUST_BACKTRACE": "1"
 				},
-				"cwd": "../run/core"
+				"cwd": "../../run/core"
 			},
 			"problemMatcher": []
 		}
