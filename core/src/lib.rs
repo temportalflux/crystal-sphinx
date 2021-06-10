@@ -24,6 +24,9 @@ pub use temportal_engine as engine;
 #[path = "ui/_.rs"]
 pub mod ui;
 
+#[path = "plugin/mod.rs"]
+pub mod plugin;
+
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
 	fn name() -> &'static str {
@@ -48,6 +51,8 @@ pub fn run() -> VoidResult {
 	engine::logging::init::<CrystalSphinx>(None)?;
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
+
+	let _ = plugin::Module::load(std::path::PathBuf::from("vanilla.dll").as_path())?;
 
 	let mut window = engine::window::Window::builder()
 		.with_title(CrystalSphinx::display_name())
