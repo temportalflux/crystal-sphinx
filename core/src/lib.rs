@@ -21,7 +21,7 @@
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
 
-#[path = "ui/_.rs"]
+#[path = "ui/mod.rs"]
 pub mod ui;
 
 #[path = "plugin/mod.rs"]
