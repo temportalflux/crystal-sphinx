@@ -52,6 +52,8 @@ pub fn run() -> VoidResult {
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 
+	// TODO: Scan all plugins in a specific directory (always_loaded vs plugins for a specific save)
+	// TODO: Scan any pak files which exist for each plugin
 	let _ = plugin::Module::load(std::path::PathBuf::from("vanilla.dll").as_path())?;
 
 	let mut window = engine::window::Window::builder()
