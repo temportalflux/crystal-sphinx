@@ -88,7 +88,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	if let Ok(manager) = plugin::Manager::read() {
 		manager.register_main_menu_music(&mut main_menu_music);
 	}
-	log::debug!("{:?}", main_menu_music);
 
 	let _source = {
 		use rand::Rng;
