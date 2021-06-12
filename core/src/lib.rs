@@ -47,7 +47,7 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 	{
 		engine::profiling::optick::start_capture();
 	}
-	engine::logging::init::<CrystalSphinx>(None)?;
+	engine::logging::init(CrystalSphinx::name(), None)?;
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 

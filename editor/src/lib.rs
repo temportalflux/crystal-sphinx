@@ -1,5 +1,5 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::utility::VoidResult;
+use engine::{utility::VoidResult, Application};
 use temportal_engine as engine;
 use temportal_engine_editor as editor;
 
@@ -9,7 +9,7 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 		engine::profiling::optick::start_capture();
 	}
 
-	engine::logging::init::<CrystalSphinx>(Some("_editor"))?;
+	engine::logging::init(CrystalSphinx::name(), Some("_editor"))?;
 	let mut engine = engine::Engine::new()?;
 
 	editor::Editor::initialize::<CrystalSphinx>()?;
@@ -35,7 +35,6 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 
 	#[cfg(feature = "profile")]
 	{
-		use engine::Application;
 		engine::profiling::optick::stop_capture(CrystalSphinx::name());
 	}
 	Ok(())
