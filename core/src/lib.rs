@@ -17,6 +17,12 @@
 //! - [specs](https://crates.io/crates/specs) [book](https://specs.amethyst.rs/docs/tutorials)
 //! - [anymap](https://crates.io/crates/anymap)
 //!
+//! Rust's support for dyynamically-loaded plugins (*.dll, etc) is not great yet. As such, plugins cannot be loaded at runtime without increasing the complexity for plugin creators by orders of magnitude. Therefore, the game and editor must be compiled with all desired plugins/crates ahead of time. This offloads some overhead to plugin-pack creators, but can be supplemented by better tooling on that end of the toolchain.
+//! Links for reference on DLLs:
+//! - https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html
+//! - https://github.com/rust-lang/log/issues/66
+//! - https://github.com/rust-lang/log/issues/421
+//!
 
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
@@ -24,7 +30,6 @@ pub use temportal_engine as engine;
 #[path = "ui/mod.rs"]
 pub mod ui;
 
-#[path = "plugin/mod.rs"]
 pub mod plugin;
 
 pub struct CrystalSphinx();
@@ -47,14 +52,16 @@ impl Application for CrystalSphinx {
 	}
 }
 
-pub fn run() -> VoidResult {
+pub fn run(_config: plugin::Config) -> VoidResult {
+	#[cfg(feature = "profile")]
+	{
+		engine::profiling::optick::start_capture();
+	}
 	engine::logging::init::<CrystalSphinx>(None)?;
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 
-	// TODO: Scan all plugins in a specific directory (always_loaded vs plugins for a specific save)
-	// TODO: Scan any pak files which exist for each plugin
-	let _ = plugin::Module::load(std::path::PathBuf::from("vanilla.dll").as_path())?;
+	log::debug!("{:?}", _config);
 
 	let mut window = engine::window::Window::builder()
 		.with_title(CrystalSphinx::display_name())
@@ -82,5 +89,9 @@ pub fn run() -> VoidResult {
 		)?;
 
 	engine.run(chain.clone());
+	#[cfg(feature = "profile")]
+	{
+		engine::profiling::optick::stop_capture(CrystalSphinx::name());
+	}
 	Ok(())
 }

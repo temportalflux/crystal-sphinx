@@ -1,10 +1,9 @@
-use crystal_sphinx;
-use crystal_sphinx::CrystalSphinx;
+use crystal_sphinx::{plugin, CrystalSphinx};
 use engine::utility::VoidResult;
 use temportal_engine as engine;
 use temportal_engine_editor as editor;
 
-fn main() -> VoidResult {
+pub fn run(_config: plugin::Config) -> VoidResult {
 	#[cfg(feature = "profile")]
 	{
 		engine::profiling::optick::start_capture();
