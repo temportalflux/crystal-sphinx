@@ -23,6 +23,8 @@
 //! - https://github.com/rust-lang/log/issues/66
 //! - https://github.com/rust-lang/log/issues/421
 //!
+//! https://grafana.com/ could be neat for monitoring server usage
+//!
 
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
@@ -42,16 +44,20 @@ impl Application for CrystalSphinx {
 	}
 }
 
-pub fn run(_config: plugin::Config) -> VoidResult {
+pub fn run(config: plugin::Config) -> VoidResult {
 	#[cfg(feature = "profile")]
 	{
 		engine::profiling::optick::start_capture();
 	}
 	engine::logging::init(CrystalSphinx::name(), None)?;
+
+	// Load bundled plugins so they can be used throughout the instance
+	if let Ok(mut manager) = plugin::Manager::write() {
+		manager.load(config);
+	}
+
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
-
-	log::debug!("{:?}", _config);
 
 	let mut window = engine::window::Window::builder()
 		.with_title("Crystal Sphinx")
@@ -77,6 +83,33 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 			&chain,
 			Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
 		)?;
+
+	let mut main_menu_music = engine::asset::WeightedIdList::default();
+	if let Ok(manager) = plugin::Manager::read() {
+		manager.register_main_menu_music(&mut main_menu_music);
+	}
+	log::debug!("{:?}", main_menu_music);
+
+	let _source = {
+		use rand::Rng;
+		let mut rng = rand::thread_rng();
+		match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
+			Some(id) => match engine::audio::System::write()?.create_sound(id) {
+				Ok(source) => {
+					source.play();
+					Some(source)
+				}
+				Err(e) => {
+					log::error!("Failed to load sound {}: {}", id, e);
+					None
+				}
+			},
+			None => {
+				log::warn!("Failed to find any main menu music");
+				None
+			}
+		}
+	};
 
 	engine.run(chain.clone());
 	#[cfg(feature = "profile")]
