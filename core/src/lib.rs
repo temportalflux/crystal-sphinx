@@ -95,7 +95,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
 			Some(id) => {
 				let mut audio_system = engine::audio::System::write()?;
-				audio_system.start()?;
 				match audio_system.create_sound(id) {
 					Ok(source) => {
 						let handle = source.play(&mut audio_system);
