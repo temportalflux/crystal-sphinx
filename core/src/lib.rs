@@ -93,16 +93,20 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		use rand::Rng;
 		let mut rng = rand::thread_rng();
 		match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
-			Some(id) => match engine::audio::System::write()?.create_sound(id) {
-				Ok(source) => {
-					source.play();
-					Some(source)
+			Some(id) => {
+				let mut audio_system = engine::audio::System::write()?;
+				audio_system.start()?;
+				match audio_system.create_sound(id) {
+					Ok(source) => {
+						let handle = source.play(&mut audio_system);
+						Some(handle)
+					}
+					Err(e) => {
+						log::error!("Failed to load sound {}: {}", id, e);
+						None
+					}
 				}
-				Err(e) => {
-					log::error!("Failed to load sound {}: {}", id, e);
-					None
-				}
-			},
+			}
 			None => {
 				log::warn!("Failed to find any main menu music");
 				None
