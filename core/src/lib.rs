@@ -16,6 +16,7 @@
 //! - [noise](https://crates.io/crates/noise) for randomization and noise in chunk generation
 //! - [specs](https://crates.io/crates/specs) [book](https://specs.amethyst.rs/docs/tutorials)
 //! - [anymap](https://crates.io/crates/anymap)
+//! - [gltf](https://crates.io/crates/gltf) for loading scenes/rigs/animations (replacement for assimp)
 //!
 //! Rust's support for dyynamically-loaded plugins (*.dll, etc) is not great yet. As such, plugins cannot be loaded at runtime without increasing the complexity for plugin creators by orders of magnitude. Therefore, the game and editor must be compiled with all desired plugins/crates ahead of time. This offloads some overhead to plugin-pack creators, but can be supplemented by better tooling on that end of the toolchain.
 //! Links for reference on DLLs:
@@ -96,9 +97,9 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			Some(id) => {
 				let mut audio_system = engine::audio::System::write()?;
 				match audio_system.create_sound(id) {
-					Ok(source) => {
-						let handle = source.play(&mut audio_system);
-						Some(handle)
+					Ok(mut source) => {
+						source.play(None);
+						Some(source)
 					}
 					Err(e) => {
 						log::error!("Failed to load sound {}: {}", id, e);
