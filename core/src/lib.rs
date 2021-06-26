@@ -46,11 +46,12 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run(config: plugin::Config) -> VoidResult {
+	engine::logging::init(CrystalSphinx::name(), None)?;
 	#[cfg(feature = "profile")]
 	{
+		log::info!(target: "profile", "Starting profiling capture");
 		engine::profiling::optick::start_capture();
 	}
-	engine::logging::init(CrystalSphinx::name(), None)?;
 
 	// Load bundled plugins so they can be used throughout the instance
 	if let Ok(mut manager) = plugin::Manager::write() {
@@ -126,10 +127,12 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	};
 	*/
 
-	engine.run(chain.clone());
-	#[cfg(feature = "profile")]
-	{
-		engine::profiling::optick::stop_capture(CrystalSphinx::name());
-	}
+	engine.run(chain.clone(), || {
+		#[cfg(feature = "profile")]
+		{
+			log::info!(target: "profile", "Stopping profiling capture");
+			engine::profiling::optick::stop_capture(CrystalSphinx::name());
+		}
+	});
 	Ok(())
 }

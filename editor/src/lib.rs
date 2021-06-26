@@ -31,11 +31,11 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 	let workspace = editor::ui::Workspace::new();
 	ui.write().unwrap().add_element(&workspace);
 
-	engine.run(chain.clone());
-
-	#[cfg(feature = "profile")]
-	{
-		engine::profiling::optick::stop_capture(CrystalSphinx::name());
-	}
+	engine.run(chain.clone(), || {
+		#[cfg(feature = "profile")]
+		{
+			engine::profiling::optick::stop_capture(CrystalSphinx::name());
+		}
+	});
 	Ok(())
 }
