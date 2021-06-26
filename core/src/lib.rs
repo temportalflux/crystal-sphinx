@@ -90,6 +90,17 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		manager.register_main_menu_music(&mut main_menu_music);
 	}
 
+	{
+		use engine::audio::source::Source;
+		main_menu_music
+			.iter()
+			.map(|(_, id)| id.clone())
+			.collect::<engine::audio::source::Sequence>()
+			.and_play(None)
+			.register_to(&mut engine);
+	}
+
+	/*
 	let _source = {
 		use rand::Rng;
 		let mut rng = rand::thread_rng();
@@ -113,6 +124,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			}
 		}
 	};
+	*/
 
 	engine.run(chain.clone());
 	#[cfg(feature = "profile")]
