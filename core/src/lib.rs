@@ -61,28 +61,26 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 
-	let mut window = engine::window::Window::builder()
+	engine::window::Window::builder()
 		.with_title("Crystal Sphinx")
 		.with_size(1280.0, 720.0)
 		.with_resizable(true)
 		.with_application::<CrystalSphinx>()
 		.with_clear_color([0.0, 0.05, 0.1, 1.0].into())
-		.build(&engine)?;
-
-	let chain = window.create_render_chain({
+		.build(&mut engine)?;
+	engine.render_chain_write().unwrap().set_render_pass_info(
 		engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
 			.downcast::<engine::graphics::render_pass::Pass>()
 			.unwrap()
-			.as_graphics()?
-	})?;
+			.as_graphics()?,
+	);
 
-	engine::ui::System::new(&chain)?
+	engine::ui::System::new(engine.render_chain().unwrap())?
 		.with_engine_shaders()?
 		.with_all_fonts()?
 		.with_tree_root(engine::ui::make_widget!(ui::root::root))
 		.attach_system(
 			&mut engine,
-			&chain,
 			Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
 		)?;
 
@@ -127,12 +125,12 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	};
 	*/
 
-	engine.run(chain.clone(), || {
+	let engine = engine.make_threadsafe();
+	engine::Engine::run(engine.clone(), || {
 		#[cfg(feature = "profile")]
 		{
 			log::info!(target: "profile", "Stopping profiling capture");
 			engine::profiling::optick::stop_capture(CrystalSphinx::name());
 		}
-	});
-	Ok(())
+	})
 }
