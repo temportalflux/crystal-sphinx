@@ -30,7 +30,7 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 	let workspace = editor::ui::Workspace::new();
 	ui.write().unwrap().add_element(&workspace);
 
-	let engine = engine.make_threadsafe();
+	let engine = engine.into_arclock();
 	engine::Engine::run(engine.clone(), || {
 		#[cfg(feature = "profile")]
 		{

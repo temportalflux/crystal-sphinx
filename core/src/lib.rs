@@ -125,7 +125,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	};
 	*/
 
-	let engine = engine.make_threadsafe();
+	let engine = engine.into_arclock();
 	engine::Engine::run(engine.clone(), || {
 		#[cfg(feature = "profile")]
 		{
