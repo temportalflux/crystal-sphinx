@@ -17,6 +17,9 @@
 //! - [specs](https://crates.io/crates/specs) [book](https://specs.amethyst.rs/docs/tutorials)
 //! - [anymap](https://crates.io/crates/anymap)
 //! - [gltf](https://crates.io/crates/gltf) for loading scenes/rigs/animations (replacement for assimp)
+//! - [asset_manager](https://github.com/a1phyr/assets_manager) for inspiration on hot-reloading assets
+//! - hecs to potentially replace specs
+//! - wgpu to replace vulkan-rs as the rendering backend
 //!
 //! Rust's support for dyynamically-loaded plugins (*.dll, etc) is not great yet. As such, plugins cannot be loaded at runtime without increasing the complexity for plugin creators by orders of magnitude. Therefore, the game and editor must be compiled with all desired plugins/crates ahead of time. This offloads some overhead to plugin-pack creators, but can be supplemented by better tooling on that end of the toolchain.
 //! Links for reference on DLLs:
