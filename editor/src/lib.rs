@@ -9,7 +9,10 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 		engine::profiling::optick::start_capture();
 	}
 
-	engine::logging::init(CrystalSphinx::name(), Some("_editor"))?;
+	engine::logging::init(&engine::logging::default_path(
+		CrystalSphinx::name(),
+		Some("_editor"),
+	))?;
 	let mut engine = engine::Engine::new()?;
 
 	editor::Editor::initialize::<CrystalSphinx>()?;

@@ -49,7 +49,7 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run(config: plugin::Config) -> VoidResult {
-	engine::logging::init(CrystalSphinx::name(), None)?;
+	engine::logging::init(&engine::logging::default_path(CrystalSphinx::name(), None))?;
 	#[cfg(feature = "profile")]
 	{
 		log::info!(target: "profile", "Starting profiling capture");
