@@ -1,3 +1,8 @@
 use crate::engine::network;
 
-pub fn register_types(builder: &mut network::Builder) {}
+mod handshake;
+pub use handshake::*;
+
+pub fn register_types(builder: &mut network::Builder) {
+	Handshake::register(builder);
+}

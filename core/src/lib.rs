@@ -155,6 +155,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			}
 		};
 		*/
+
+		network::packet::Handshake::connect_to_server()?;
 	}
 
 	let engine = engine.into_arclock();

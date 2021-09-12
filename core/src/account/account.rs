@@ -11,7 +11,7 @@ pub struct Account {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
-	pub id: String,
+	pub id: super::Id,
 	pub display_name: String,
 }
 
@@ -110,8 +110,12 @@ impl Account {
 		path
 	}
 
-	pub fn id(&self) -> &String {
+	pub fn id(&self) -> &super::Id {
 		&self.meta.id
+	}
+
+	pub fn public_key(&self) -> Key {
+		self.key.public()
 	}
 
 	pub fn save(&self) -> VoidResult {
