@@ -33,10 +33,10 @@
 use engine::{utility::VoidResult, Application};
 pub use temportal_engine as engine;
 
-#[path = "ui/mod.rs"]
-pub mod ui;
-
+pub mod account;
+pub mod network;
 pub mod plugin;
+pub mod ui;
 
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
@@ -49,7 +49,19 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run(config: plugin::Config) -> VoidResult {
-	engine::logging::init(&engine::logging::default_path(CrystalSphinx::name(), None))?;
+	let user_id = std::env::args()
+		.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
+		.unwrap();
+	let logid = std::env::args()
+		.find_map(|arg| arg.strip_prefix("-logid=").map(|s| s.to_owned()))
+		.unwrap();
+	let log_path = {
+		let mut log_path = std::env::current_dir().unwrap().to_path_buf();
+		log_path.push(format!("{}_{}.log", CrystalSphinx::name(), logid));
+		log_path
+	};
+	engine::logging::init(&log_path)?;
+
 	#[cfg(feature = "profile")]
 	{
 		log::info!(target: "profile", "Starting profiling capture");
@@ -64,72 +76,92 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 
-	engine::window::Window::builder()
-		.with_title("Crystal Sphinx")
-		.with_size(1280.0, 720.0)
-		.with_resizable(true)
-		.with_application::<CrystalSphinx>()
-		.with_clear_color([0.0, 0.05, 0.1, 1.0].into())
-		.build(&mut engine)?;
-	engine.render_chain_write().unwrap().set_render_pass_info(
-		engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
-			.downcast::<engine::graphics::render_pass::Pass>()
-			.unwrap()
-			.as_graphics()?,
-	);
-
-	engine::ui::System::new(engine.render_chain().unwrap())?
-		.with_engine_shaders()?
-		.with_all_fonts()?
-		.with_tree_root(engine::ui::make_widget!(ui::root::root))
-		.attach_system(
-			&mut engine,
-			Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
-		)?;
-
-	let mut main_menu_music = engine::asset::WeightedIdList::default();
-	if let Ok(manager) = plugin::Manager::read() {
-		manager.register_main_menu_music(&mut main_menu_music);
+	if let Ok(mut guard) = account::ClientRegistry::write() {
+		(*guard).scan_accounts()?;
+		let _account = (*guard).login_as(&user_id);
 	}
 
-	{
-		use engine::audio::source::Source;
-		main_menu_music
-			.iter()
-			.map(|(_, id)| id.clone())
-			.collect::<engine::audio::source::Sequence>()
-			.and_play(None)
-			.register_to(&mut engine);
-	}
+	engine::network::Builder::default()
+		.with_port(25565)
+		.with_args()
+		.with_registrations_in(network::packet::register_types)
+		.spawn()?;
 
-	/*
-	let _source = {
-		use rand::Rng;
-		let mut rng = rand::thread_rng();
-		match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
-			Some(id) => {
-				let mut audio_system = engine::audio::System::write()?;
-				match audio_system.create_sound(id) {
-					Ok(mut source) => {
-						source.play(None);
-						Some(source)
-					}
-					Err(e) => {
-						log::error!("Failed to load sound {}: {}", id, e);
-						None
+	if engine::network::Network::local_data().is_client() {
+		engine::window::Window::builder()
+			.with_title("Crystal Sphinx")
+			.with_size(1280.0, 720.0)
+			.with_resizable(true)
+			.with_application::<CrystalSphinx>()
+			.with_clear_color([0.0, 0.05, 0.1, 1.0].into())
+			.build(&mut engine)?;
+		engine.render_chain_write().unwrap().set_render_pass_info(
+			engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
+				.downcast::<engine::graphics::render_pass::Pass>()
+				.unwrap()
+				.as_graphics()?,
+		);
+
+		/*
+		engine::ui::System::new(engine.render_chain().unwrap())?
+			.with_engine_shaders()?
+			.with_all_fonts()?
+			.with_tree_root(engine::ui::make_widget!(ui::root::root))
+			.attach_system(
+				&mut engine,
+				Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
+			)?;
+		*/
+
+		/*
+		let mut main_menu_music = engine::asset::WeightedIdList::default();
+		if let Ok(manager) = plugin::Manager::read() {
+			manager.register_main_menu_music(&mut main_menu_music);
+		}
+
+		{
+			use engine::audio::source::Source;
+			main_menu_music
+				.iter()
+				.map(|(_, id)| id.clone())
+				.collect::<engine::audio::source::Sequence>()
+				.and_play(None)
+				.register_to(&mut engine);
+		}
+		*/
+
+		/*
+		let _source = {
+			use rand::Rng;
+			let mut rng = rand::thread_rng();
+			match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
+				Some(id) => {
+					let mut audio_system = engine::audio::System::write()?;
+					match audio_system.create_sound(id) {
+						Ok(mut source) => {
+							source.play(None);
+							Some(source)
+						}
+						Err(e) => {
+							log::error!("Failed to load sound {}: {}", id, e);
+							None
+						}
 					}
 				}
+				None => {
+					log::warn!("Failed to find any main menu music");
+					None
+				}
 			}
-			None => {
-				log::warn!("Failed to find any main menu music");
-				None
-			}
-		}
-	};
-	*/
+		};
+		*/
+	}
 
 	let engine = engine.into_arclock();
 	engine::Engine::run(engine.clone(), || {
+		if let Ok(mut guard) = account::ClientRegistry::write() {
+			(*guard).logout();
+		}
 		#[cfg(feature = "profile")]
 		{
 			log::info!(target: "profile", "Stopping profiling capture");

@@ -29,7 +29,7 @@ pub fn root(mut _context: WidgetContext) -> WidgetNode {
 						"content",
 						make_widget!(text_box)
 							.with_props(TextBoxProps {
-								text: "Button!".to_owned(),
+								text: "Connect to Server".to_owned(),
 								font: statics::font::unispace::REGULAR.at_size(30.0),
 								color: Color {
 									r: 0.0,
