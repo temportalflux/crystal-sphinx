@@ -1,4 +1,5 @@
 use crate::{
+	account,
 	engine::{
 		network::{
 			self,
@@ -10,7 +11,7 @@ use crate::{
 			LocalData, Network,
 		},
 		utility::VoidResult,
-	}, account
+	},
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +22,10 @@ pub struct Handshake(Request);
 #[derive(Serialize, Deserialize)]
 enum Request {
 	Login(account::Id, /*public key*/ String),
-	AuthTokenForClient(/*encrypted auth token*/ String, /*server public key*/ String),
+	AuthTokenForClient(
+		/*encrypted auth token*/ String,
+		/*server public key*/ String,
+	),
 	AuthTokenForServer(/*re-encrypted auth token*/ String),
 }
 
@@ -39,10 +43,9 @@ impl Handshake {
 	pub fn connect_to_server() -> VoidResult {
 		use network::packet::{DeliveryGuarantee::*, OrderGuarantee::*};
 		let request = match account::ClientRegistry::read()?.active_account() {
-			Some(account) => Request::Login(
-				account.id().clone(),
-				account.public_key().as_string()?,
-			),
+			Some(account) => {
+				Request::Login(account.id().clone(), account.public_key().as_string()?)
+			}
 			None => return Ok(()),
 		};
 		Network::send(
@@ -78,7 +81,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 		local_data: &LocalData,
 	) -> VoidResult {
 		match &data.0 {
-			Request::Login(_account_id, public_key) => {
+			Request::Login(_account_id, _public_key) => {
 				// Requirements:
 				// - server has a private (and therefore public) key
 				// - server has a save game (so the saved-accounts can be checked/stored to)
@@ -105,7 +108,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						.build(),
 				)?;
 			}
-			Request::AuthTokenForServer(reencrypted_token) => {
+			Request::AuthTokenForServer(_reencrypted_token) => {
 				// TODO: decrypt token, and if it matches, load the player into the server.
 				// if it doesnt match, the client isnt who they say they are,
 				// so they should be kicked from the server (technically they've already connected).
@@ -138,7 +141,7 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 		guarantee: &Guarantee,
 		local_data: &LocalData,
 	) -> VoidResult {
-		if let Request::AuthTokenForClient(token, server_public_key) = &data.0 {
+		if let Request::AuthTokenForClient(token, _server_public_key) = &data.0 {
 			// TODO: decrypt token with my private key, and re-encrypt with the server_public_key,
 			// then send back to the server.
 			// Technically we will have "connected" by the end of this,

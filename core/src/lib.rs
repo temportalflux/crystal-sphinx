@@ -38,6 +38,9 @@ pub mod network;
 pub mod plugin;
 pub mod ui;
 
+mod server;
+pub use server::*;
+
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
 	fn name() -> &'static str {
@@ -86,6 +89,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		.with_args()
 		.with_registrations_in(network::packet::register_types)
 		.spawn()?;
+
+	if engine::network::Network::local_data().is_server() {
+		let mut server_save_path = std::env::current_dir().unwrap();
+		server_save_path.push("saves");
+		server_save_path.push("tmp");
+		if let Ok(mut guard) = Server::write() {
+			(*guard) = Some(Server::load(&server_save_path)?);
+		}
+	}
 
 	if engine::network::Network::local_data().is_client() {
 		engine::window::Window::builder()

@@ -71,6 +71,17 @@ impl Key {
 			Ok(Self::Public(rsa::RsaPublicKey::from_public_key_pem(s)?))
 		}
 	}
+
+	pub fn load(path: &Path) -> Result<Self, AnyError> {
+		let key_string = std::fs::read_to_string(path)?;
+		let key = Key::from_string(&key_string)?;
+		Ok(key)
+	}
+
+	pub fn save(&self, path: &Path) -> VoidResult {
+		std::fs::write(path, self.as_string()?)?;
+		Ok(())
+	}
 }
 
 impl std::fmt::Display for Account {
@@ -121,15 +132,14 @@ impl Account {
 	pub fn save(&self) -> VoidResult {
 		std::fs::create_dir_all(&self.root)?;
 		std::fs::write(&Self::meta_path(self.root.clone()), self.meta.to_json()?)?;
-		std::fs::write(&Self::key_path(self.root.clone()), self.key.as_string()?)?;
+		self.key.save(&Self::key_path(self.root.clone()))?;
 		Ok(())
 	}
 
 	pub fn load(path: &Path) -> Result<Self, AnyError> {
 		let meta_string = std::fs::read_to_string(&Self::meta_path(path.to_owned()))?;
 		let meta = Meta::from_json(&meta_string)?;
-		let key_string = std::fs::read_to_string(&Self::key_path(path.to_owned()))?;
-		let key = Key::from_string(&key_string)?;
+		let key = Key::load(&Self::key_path(path.to_owned()))?;
 		Ok(Account {
 			root: path.to_owned(),
 			meta,
