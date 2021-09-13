@@ -1,6 +1,6 @@
 pub static LOG: &'static str = "account";
 
-pub type Id = String;
+pub type Id = uuid::Uuid;
 
 mod account;
 pub use account::*;

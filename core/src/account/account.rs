@@ -98,14 +98,15 @@ impl std::fmt::Display for Account {
 
 impl Account {
 	/// Creates a new account, complete with a generated RSA key.
-	pub fn new(parent_dir: &Path, id: &String) -> Self {
+	pub fn new(parent_dir: &Path, name: &String) -> Self {
+		let id = uuid::Uuid::new_v4();
 		let mut root = parent_dir.to_owned();
-		root.push(id.clone());
+		root.push(id.to_string());
 		Self {
 			root,
 			meta: Meta {
-				id: id.clone(),
-				display_name: id.clone(),
+				id,
+				display_name: name.clone(),
 			},
 			key: Key::new(),
 		}
@@ -127,6 +128,10 @@ impl Account {
 
 	pub fn public_key(&self) -> Key {
 		self.key.public()
+	}
+
+	pub fn display_name(&self) -> &String {
+		&self.meta.display_name
 	}
 
 	pub fn save(&self) -> VoidResult {

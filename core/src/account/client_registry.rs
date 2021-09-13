@@ -1,10 +1,10 @@
 use super::{Account, Manager, LOG};
-use crate::engine::utility::VoidResult;
+use crate::engine::utility::{AnyError, VoidResult};
 
 /// The registry of all accounts on a client.
 /// Is not applicable for querying the accounts that have logged into a game save.
 pub struct ClientRegistry {
-	active_account_id: Option<String>,
+	active_account_id: Option<super::Id>,
 	manager: Manager,
 }
 
@@ -38,14 +38,22 @@ impl ClientRegistry {
 		self.manager.scan_accounts()
 	}
 
-	pub fn login_as(&mut self, account_id: &String) -> VoidResult {
+	pub fn ensure_account(&mut self, name: &String) -> Result<super::Id, AnyError> {
+		match self.manager.find_id(name) {
+			Some(account_id) => Ok(account_id),
+			None => Ok(self.manager.create_account(name)?),
+		}
+	}
+
+	pub fn login_as(&mut self, id: &super::Id) -> VoidResult {
+		if !self.manager.contains(id) {
+			log::error!(target: LOG, "No account with id {}", id);
+			return Ok(());
+		}
 		if self.active_account_id.is_some() {
 			self.logout();
 		}
-		if !self.manager.contains(account_id) {
-			self.manager.create_account(account_id)?;
-		}
-		self.active_account_id = Some(account_id.clone());
+		self.active_account_id = Some(id.clone());
 		log::info!(
 			target: LOG,
 			"Logged in as {}",

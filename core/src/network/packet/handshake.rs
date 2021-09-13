@@ -12,8 +12,11 @@ use crate::{
 		},
 		utility::VoidResult,
 	},
+	server,
 };
 use serde::{Deserialize, Serialize};
+
+type ArcLockAuthCache = server::user::pending::ArcLockAuthCache;
 
 #[packet_kind(crate::engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -30,12 +33,22 @@ enum Request {
 }
 
 impl Handshake {
-	pub fn register(builder: &mut network::Builder) {
+	pub fn register(builder: &mut network::Builder, auth_cache: &ArcLockAuthCache) {
 		use mode::Kind::*;
 		builder.register_bundle::<Handshake>(
 			EventProcessors::default()
-				.with(Server, ProcessAuthRequest())
-				.with(mode::Set::all(), ProcessAuthRequest())
+				.with(
+					Server,
+					ProcessAuthRequest {
+						auth_cache: auth_cache.clone(),
+					},
+				)
+				.with(
+					mode::Set::all(),
+					ProcessAuthRequest {
+						auth_cache: auth_cache.clone(),
+					},
+				)
 				.with(Client, ReEncryptAuthToken()),
 		);
 	}
@@ -58,7 +71,9 @@ impl Handshake {
 	}
 }
 
-struct ProcessAuthRequest();
+struct ProcessAuthRequest {
+	auth_cache: ArcLockAuthCache,
+}
 
 impl Processor for ProcessAuthRequest {
 	fn process(
@@ -88,6 +103,23 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				//   - this needs some understanding of how save games will be stored for both servers and clients
 				// - need to create a pending-login manager
 				// - need to add connect and disconnection protocols (maybe replace the existing ones so that connections are not formed until after auth?)
+
+				let server_auth_key = match server::Server::read() {
+					Ok(guard) => match &*guard {
+						Some(server) => server.auth_key().clone(),
+						None => {
+							log::error!(
+								target: network::LOG,
+								"Cannot process handshake login, not a server."
+							);
+							return Ok(());
+						}
+					},
+					Err(_) => {
+						log::error!(target: network::LOG, "Cannot read from server data.");
+						return Ok(());
+					}
+				};
 
 				// TODO: Check if the current save game has a user with the same id.
 				// Add a pending request with the client's net address, account id, and public key.

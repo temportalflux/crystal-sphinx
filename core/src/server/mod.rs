@@ -1,16 +1,21 @@
+use super::user::saved;
 use crate::{
 	account,
 	engine::utility::{singleton, AnyError, VoidResult},
 };
 use std::{
+	collections::HashMap,
 	path::{Path, PathBuf},
 	sync::{LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 static LOG: &'static str = "server";
 
+pub mod user;
+
 pub struct Server {
 	auth_key: account::Key,
+	saved_users: HashMap<account::Id, saved::User>,
 }
 
 impl Server {
@@ -36,6 +41,7 @@ impl Server {
 		log::info!(target: LOG, "Loading data");
 		Ok(Self {
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
+			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned())),
 		})
 	}
 
@@ -54,5 +60,13 @@ impl Server {
 	pub fn auth_key(&self) -> &account::Key {
 		&self.auth_key
 	}
-	
+
+	fn players_dir_path(mut savegame_path: PathBuf) -> PathBuf {
+		savegame_path.push("players");
+		savegame_path
+	}
+
+	fn load_saved_users(path: &Path) -> HashMap<account::Id, saved::User> {
+		HashMap::new() // TODO: Load from disk
+	}
 }

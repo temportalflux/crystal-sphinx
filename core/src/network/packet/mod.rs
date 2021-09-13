@@ -4,5 +4,7 @@ mod handshake;
 pub use handshake::*;
 
 pub fn register_types(builder: &mut network::Builder) {
-	Handshake::register(builder);
+	use crate::server::user;
+	let auth_cache = user::pending::AuthCache::default().arclocked();
+	Handshake::register(builder, &auth_cache);
 }

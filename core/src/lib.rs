@@ -36,10 +36,8 @@ pub use temportal_engine as engine;
 pub mod account;
 pub mod network;
 pub mod plugin;
+pub mod server;
 pub mod ui;
-
-mod server;
-pub use server::*;
 
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
@@ -52,9 +50,6 @@ impl Application for CrystalSphinx {
 }
 
 pub fn run(config: plugin::Config) -> VoidResult {
-	let user_id = std::env::args()
-		.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
-		.unwrap();
 	let logid = std::env::args()
 		.find_map(|arg| arg.strip_prefix("-logid=").map(|s| s.to_owned()))
 		.unwrap();
@@ -81,6 +76,10 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	if let Ok(mut guard) = account::ClientRegistry::write() {
 		(*guard).scan_accounts()?;
+		let user_name = std::env::args()
+			.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
+			.unwrap();
+		let user_id = (*guard).ensure_account(&user_name)?;
 		let _account = (*guard).login_as(&user_id);
 	}
 
@@ -94,8 +93,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		let mut server_save_path = std::env::current_dir().unwrap();
 		server_save_path.push("saves");
 		server_save_path.push("tmp");
-		if let Ok(mut guard) = Server::write() {
-			(*guard) = Some(Server::load(&server_save_path)?);
+		if let Ok(mut guard) = server::Server::write() {
+			(*guard) = Some(server::Server::load(&server_save_path)?);
 		}
 	}
 

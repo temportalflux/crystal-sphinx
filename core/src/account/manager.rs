@@ -1,5 +1,5 @@
 use super::{Account, LOG};
-use crate::engine::utility::VoidResult;
+use crate::engine::utility::{AnyError, VoidResult};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -7,7 +7,7 @@ use std::{
 
 pub struct Manager {
 	root: PathBuf,
-	accounts: HashMap<String, Account>,
+	accounts: HashMap<super::Id, Account>,
 }
 
 impl Manager {
@@ -32,19 +32,29 @@ impl Manager {
 		Ok(())
 	}
 
-	pub fn create_account(&mut self, account_id: &String) -> VoidResult {
-		let account = Account::new(&self.root, account_id);
-		log::info!(target: LOG, "Created account {}", account);
-		account.save()?;
-		self.accounts.insert(account_id.clone(), account);
-		Ok(())
+	pub fn find_id(&self, name: &String) -> Option<super::Id> {
+		for (id, account) in self.accounts.iter() {
+			if account.display_name() == name {
+				return Some(id.clone());
+			}
+		}
+		None
 	}
 
-	pub fn contains(&self, account_id: &String) -> bool {
+	pub fn create_account(&mut self, name: &String) -> Result<super::Id, AnyError> {
+		let account = Account::new(&self.root, name);
+		log::info!(target: LOG, "Created account {}", account);
+		account.save()?;
+		let id = account.id().clone();
+		self.accounts.insert(account.id().clone(), account);
+		Ok(id)
+	}
+
+	pub fn contains(&self, account_id: &super::Id) -> bool {
 		self.accounts.contains_key(account_id)
 	}
 
-	pub fn get(&self, account_id: &String) -> Option<&Account> {
+	pub fn get(&self, account_id: &super::Id) -> Option<&Account> {
 		self.accounts.get(account_id)
 	}
 }
