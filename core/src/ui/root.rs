@@ -1,7 +1,5 @@
-use crate::{
-	engine::{asset::statics, ui::*},
-	ui,
-};
+use crate::ui;
+use engine::{asset::statics, ui::*};
 
 pub fn root(mut _context: WidgetContext) -> WidgetNode {
 	WidgetNode::Component(

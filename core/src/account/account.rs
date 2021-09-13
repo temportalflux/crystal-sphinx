@@ -1,4 +1,4 @@
-use crate::engine::utility::{AnyError, VoidResult};
+use engine::utility::{AnyError, VoidResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -15,11 +15,29 @@ pub struct Meta {
 	pub display_name: String,
 }
 
+impl std::fmt::Display for Meta {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "AccountId(name={}, id={})", self.display_name, self.id)
+	}
+}
+
 impl Meta {
+	pub fn make_path(parent_dir: &Path) -> PathBuf {
+		let mut path = parent_dir.to_owned();
+		path.push("meta.json");
+		path
+	}
+
+	pub fn load(path: &Path) -> Result<Self, AnyError> {
+		let raw = std::fs::read_to_string(path)?;
+		Ok(Meta::from_json(&raw)?)
+	}
+
 	fn from_json(json: &str) -> Result<Self, AnyError> {
 		let value: Self = serde_json::from_str(json)?;
 		Ok(value)
 	}
+
 	fn to_json(&self) -> Result<String, AnyError> {
 		let mut json = serde_json::to_string_pretty(self)?;
 		json = json.replace("  ", "\t");
@@ -39,6 +57,12 @@ impl Key {
 		let mut rng = OsRng;
 		let bits = 2048;
 		Self::Private(rsa::RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key"))
+	}
+
+	pub fn make_path(parent_dir: &Path) -> PathBuf {
+		let mut path = parent_dir.to_owned();
+		path.push("key.txt");
+		path
 	}
 
 	pub fn kind_str(&self) -> &'static str {
@@ -112,16 +136,6 @@ impl Account {
 		}
 	}
 
-	fn meta_path(mut path: PathBuf) -> PathBuf {
-		path.push("meta.json");
-		path
-	}
-
-	fn key_path(mut path: PathBuf) -> PathBuf {
-		path.push("key.txt");
-		path
-	}
-
 	pub fn id(&self) -> &super::Id {
 		&self.meta.id
 	}
@@ -136,15 +150,14 @@ impl Account {
 
 	pub fn save(&self) -> VoidResult {
 		std::fs::create_dir_all(&self.root)?;
-		std::fs::write(&Self::meta_path(self.root.clone()), self.meta.to_json()?)?;
-		self.key.save(&Self::key_path(self.root.clone()))?;
+		std::fs::write(&Meta::make_path(&self.root), self.meta.to_json()?)?;
+		self.key.save(&Key::make_path(&self.root))?;
 		Ok(())
 	}
 
 	pub fn load(path: &Path) -> Result<Self, AnyError> {
-		let meta_string = std::fs::read_to_string(&Self::meta_path(path.to_owned()))?;
-		let meta = Meta::from_json(&meta_string)?;
-		let key = Key::load(&Self::key_path(path.to_owned()))?;
+		let meta = Meta::load(&Meta::make_path(path))?;
+		let key = Key::load(&Key::make_path(path))?;
 		Ok(Account {
 			root: path.to_owned(),
 			meta,

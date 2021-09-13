@@ -1,12 +1,9 @@
-use super::user::saved;
-use crate::{
-	account,
-	engine::utility::{singleton, AnyError, VoidResult},
-};
+use crate::account;
+use engine::utility::{singleton, AnyError, VoidResult};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
+	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 static LOG: &'static str = "server";
@@ -15,7 +12,7 @@ pub mod user;
 
 pub struct Server {
 	auth_key: account::Key,
-	saved_users: HashMap<account::Id, saved::User>,
+	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 }
 
 impl Server {
@@ -41,7 +38,7 @@ impl Server {
 		log::info!(target: LOG, "Loading data");
 		Ok(Self {
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
-			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned())),
+			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
 		})
 	}
 
@@ -66,7 +63,34 @@ impl Server {
 		savegame_path
 	}
 
-	fn load_saved_users(path: &Path) -> HashMap<account::Id, saved::User> {
-		HashMap::new() // TODO: Load from disk
+	fn load_saved_users(
+		path: &Path,
+	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>, AnyError> {
+		std::fs::create_dir_all(path)?;
+		let mut users = HashMap::new();
+		for entry in std::fs::read_dir(path)? {
+			let user_path = entry?.path();
+			if user_path.is_dir() {
+				match user::saved::User::from(&user_path) {
+					Ok(user) => {
+						log::info!(target: LOG, "Loaded user {}", user.id());
+						users.insert(user.id().clone(), Arc::new(RwLock::new(user)));
+					}
+					Err(err) => {
+						log::warn!(
+							target: LOG,
+							"Failed to load user {}: {}",
+							user_path.display(),
+							err
+						);
+					}
+				}
+			}
+		}
+		Ok(users)
+	}
+
+	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {
+		self.saved_users.get(id)
 	}
 }

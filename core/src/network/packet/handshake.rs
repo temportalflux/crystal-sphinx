@@ -1,24 +1,22 @@
-use crate::{
-	account,
-	engine::{
-		network::{
-			self,
-			connection::Connection,
-			event, mode,
-			packet::{Guarantee, Packet},
-			packet_kind,
-			processor::{EventProcessors, PacketProcessor, Processor},
-			LocalData, Network,
-		},
-		utility::VoidResult,
+use crate::{account, server};
+use engine::{
+	network::{
+		self,
+		connection::Connection,
+		event, mode,
+		packet::{Guarantee, Packet},
+		packet_kind,
+		processor::{EventProcessors, PacketProcessor, Processor},
+		LocalData, Network, LOG,
 	},
-	server,
+	utility::VoidResult,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-type ArcLockAuthCache = server::user::pending::ArcLockAuthCache;
+use crate::server::user::pending::ArcLockAuthCache;
 
-#[packet_kind(crate::engine::network)]
+#[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
 pub struct Handshake(Request);
 
@@ -26,10 +24,10 @@ pub struct Handshake(Request);
 enum Request {
 	Login(account::Id, /*public key*/ String),
 	AuthTokenForClient(
-		/*encrypted auth token*/ String,
+		/*encrypted auth token*/ Vec<u8>,
 		/*server public key*/ String,
 	),
-	AuthTokenForServer(/*re-encrypted auth token*/ String),
+	AuthTokenForServer(/*re-encrypted auth token*/ Vec<u8>),
 }
 
 impl Handshake {
@@ -96,17 +94,13 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 		local_data: &LocalData,
 	) -> VoidResult {
 		match &data.0 {
-			Request::Login(_account_id, _public_key) => {
-				// Requirements:
-				// - server has a private (and therefore public) key
-				// - server has a save game (so the saved-accounts can be checked/stored to)
-				//   - this needs some understanding of how save games will be stored for both servers and clients
-				// - need to create a pending-login manager
-				// - need to add connect and disconnection protocols (maybe replace the existing ones so that connections are not formed until after auth?)
-
-				let server_auth_key = match server::Server::read() {
+			Request::Login(account_id, public_key) => {
+				let (server_auth_key, user) = match server::Server::read() {
 					Ok(guard) => match &*guard {
-						Some(server) => server.auth_key().clone(),
+						Some(server) => (
+							server.auth_key().clone(),
+							server.find_user(&account_id).cloned(),
+						),
 						None => {
 							log::error!(
 								target: network::LOG,
@@ -121,17 +115,48 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 					}
 				};
 
-				// TODO: Check if the current save game has a user with the same id.
-				// Add a pending request with the client's net address, account id, and public key.
-				// If the id HAS logged in before, then compare the public keys. If they are not the same, don't respond (they will auto disconnect).
-				// If they are the same (or there was no save data), then generate a random token encrypted with the client's public key.
-				// By sending this packet back, we are allowing them to "connect" without auth,
-				// so we can also clear the pending request if they disconnect.
-				// Need to have some shared info for between the disconnect processor and this processor to contain this pending queue.
-				// Also the server needs a public and private key.
-				let token = "TODO: some random string".to_owned();
-				let server_public_key = "TODO: server's public key".to_owned();
-				data.0 = Request::AuthTokenForClient(token, server_public_key);
+				// Auto-deny the logic in the public key stored locally doesnt match the provided one.
+				if let Some(arclock_user) = user {
+					if let Ok(saved_user_guard) = arclock_user.read() {
+						if *public_key != saved_user_guard.public_key().as_string()? {
+							// The server intentionally does not respond, which will cause the client to timeout.
+							log::info!(target: LOG, "Client {} tried to authenticate, but their public key did not match a previous login.", account_id);
+							return Ok(());
+						}
+					}
+				}
+
+				let token: String = rand::thread_rng()
+					.sample_iter(&rand::distributions::Alphanumeric)
+					.take(64)
+					.map(char::from)
+					.collect();
+
+				let server_public_key = server_auth_key.public();
+				let encrypted_bytes = if let account::Key::Public(rsa_public) = &server_public_key {
+					use rand::rngs::OsRng;
+					use rsa::PublicKey;
+					let mut rng = OsRng;
+					let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
+					rsa_public.encrypt(&mut rng, padding, token.as_bytes())?
+				} else {
+					// This should never happen, because we requested the public key from the auth key.
+					log::error!(target: LOG, "FATAL: Server's auth key could not become a public key... something blew up... X_X");
+					return Ok(());
+				};
+
+				let pending_user = server::user::pending::User::new(
+					connection.address,
+					account_id.clone(),
+					account::Key::from_string(&public_key)?,
+					token,
+				);
+
+				// NOTE: By sending this to the client, they will become connected (thats just how the network system works).
+				// So if they fail auth, we need to kick them from the server.
+				// If they disconnect (on their end or from getting kicked), we need to clear the pending request.
+				data.0 =
+					Request::AuthTokenForClient(encrypted_bytes, server_public_key.as_string()?);
 				Network::send(
 					Packet::builder()
 						.with_address(connection.address)?
@@ -139,13 +164,25 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						.with_payload(data)
 						.build(),
 				)?;
+
+				// It is impossible to receive a response from the client since sending the packet
+				// (execution of this process is blocking further packets being processsed),
+				// so its safe to add to the cache after sending the packet.
+				// We need to execute after packet send so that if there are any errors in sending the packet,
+				// we dont have a lingering pending entry.
+				if let Ok(mut auth_cache) = self.auth_cache.write() {
+					auth_cache.add_pending_user(pending_user);
+				}
 			}
 			Request::AuthTokenForServer(_reencrypted_token) => {
 				// TODO: decrypt token, and if it matches, load the player into the server.
 				// if it doesnt match, the client isnt who they say they are,
 				// so they should be kicked from the server (technically they've already connected).
+
+				// TODO: If this request isn't received for x time after sending the AuthTokenForClient,
+				// then the client needs to be kicked.
 			}
-			_ => {} // error
+			_ => {} // TODO: error invalid request
 		}
 		Ok(())
 	}
@@ -173,12 +210,12 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 		guarantee: &Guarantee,
 		local_data: &LocalData,
 	) -> VoidResult {
-		if let Request::AuthTokenForClient(token, _server_public_key) = &data.0 {
+		if let Request::AuthTokenForClient(encrypted_bytes, _server_public_key) = &data.0 {
 			// TODO: decrypt token with my private key, and re-encrypt with the server_public_key,
 			// then send back to the server.
 			// Technically we will have "connected" by the end of this,
 			// but not really connected until the server validates the token.
-			data.0 = Request::AuthTokenForServer(token.clone());
+			data.0 = Request::AuthTokenForServer(encrypted_bytes.clone());
 			Network::send(
 				Packet::builder()
 					.with_address(connection.address)?

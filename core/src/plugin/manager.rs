@@ -8,7 +8,7 @@ pub struct Manager {
 
 impl Manager {
 	fn get() -> &'static RwLock<Self> {
-		use temportal_engine::utility::singleton::*;
+		use engine::utility::singleton::*;
 		static mut INSTANCE: Singleton<Manager> = Singleton::uninit();
 		unsafe { INSTANCE.get_or_default() }
 	}
@@ -30,7 +30,7 @@ impl Manager {
 		}
 	}
 
-	pub fn register_main_menu_music(&self, list: &mut crate::engine::asset::WeightedIdList) {
+	pub fn register_main_menu_music(&self, list: &mut engine::asset::WeightedIdList) {
 		for plugin in self.plugins.iter() {
 			plugin.register_main_menu_music(list);
 		}

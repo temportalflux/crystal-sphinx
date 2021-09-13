@@ -1,5 +1,5 @@
 use super::{Account, Manager, LOG};
-use crate::engine::utility::{AnyError, VoidResult};
+use engine::utility::{AnyError, VoidResult};
 
 /// The registry of all accounts on a client.
 /// Is not applicable for querying the accounts that have logged into a game save.
@@ -19,7 +19,7 @@ impl Default for ClientRegistry {
 
 impl ClientRegistry {
 	fn get() -> &'static std::sync::RwLock<Self> {
-		use crate::engine::utility::singleton::*;
+		use engine::utility::singleton::*;
 		static mut INSTANCE: Singleton<ClientRegistry> = Singleton::uninit();
 		unsafe { INSTANCE.get_or_default() }
 	}

@@ -31,7 +31,6 @@
 //!
 
 use engine::{utility::VoidResult, Application};
-pub use temportal_engine as engine;
 
 pub mod account;
 pub mod network;
@@ -74,15 +73,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
 
-	if let Ok(mut guard) = account::ClientRegistry::write() {
-		(*guard).scan_accounts()?;
-		let user_name = std::env::args()
-			.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
-			.unwrap();
-		let user_id = (*guard).ensure_account(&user_name)?;
-		let _account = (*guard).login_as(&user_id);
-	}
-
 	engine::network::Builder::default()
 		.with_port(25565)
 		.with_args()
@@ -99,6 +89,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	}
 
 	if engine::network::Network::local_data().is_client() {
+		if let Ok(mut guard) = account::ClientRegistry::write() {
+			(*guard).scan_accounts()?;
+			let user_name = std::env::args()
+				.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
+				.unwrap();
+			let user_id = (*guard).ensure_account(&user_name)?;
+			let _account = (*guard).login_as(&user_id);
+		}
+
 		engine::window::Window::builder()
 			.with_title("Crystal Sphinx")
 			.with_size(1280.0, 720.0)
