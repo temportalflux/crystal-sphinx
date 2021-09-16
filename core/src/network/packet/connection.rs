@@ -34,7 +34,7 @@ impl Processor for RemovePendingUser {
 	) -> VoidResult {
 		if let Some(event::Data::Connection(connection)) = data {
 			if let Ok(mut auth_cache) = self.auth_cache.write() {
-				auth_cache.remove_pending_user(&connection.address);
+				let _ = auth_cache.remove_pending_user(&connection.address);
 			}
 		}
 		Ok(())

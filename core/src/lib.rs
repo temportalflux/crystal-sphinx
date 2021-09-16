@@ -169,6 +169,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		network::packet::Handshake::connect_to_server()?;
 	}
 
+	log::info!(target: CrystalSphinx::name(), "Initialization finished");
 	let engine = engine.into_arclock();
 	engine::Engine::run(engine.clone(), || {
 		if let Ok(mut guard) = account::ClientRegistry::write() {
