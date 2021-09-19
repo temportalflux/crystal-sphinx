@@ -1,31 +1,32 @@
-use crate::server::user::pending::ArcLockAuthCache;
+use crate::server::user;
 use engine::{
-	network::{
-		self, event, mode,
-		packet::{DeliveryGuarantee::*, OrderGuarantee::*, Packet},
-		processor::Processor,
-		LocalData, Network,
-	},
+	network::{self, event, mode, processor::Processor, LocalData},
 	utility::VoidResult,
 };
 
-pub fn register_bonus_processors(builder: &mut network::Builder, auth_cache: &ArcLockAuthCache) {
+pub fn register_bonus_processors(
+	builder: &mut network::Builder,
+	auth_cache: &user::pending::ArcLockCache,
+	active_cache: &user::active::ArcLockCache,
+) {
 	use event::Kind::*;
 	builder.add_processor(
 		Disconnected,
 		mode::all().into_iter(),
-		RemovePendingUser {
+		RemoveUser {
 			auth_cache: auth_cache.clone(),
+			active_cache: active_cache.clone(),
 		},
 	);
 }
 
 #[derive(Clone)]
-struct RemovePendingUser {
-	auth_cache: ArcLockAuthCache,
+struct RemoveUser {
+	auth_cache: user::pending::ArcLockCache,
+	active_cache: user::active::ArcLockCache,
 }
 
-impl Processor for RemovePendingUser {
+impl Processor for RemoveUser {
 	fn process(
 		&self,
 		_kind: &event::Kind,
@@ -34,7 +35,10 @@ impl Processor for RemovePendingUser {
 	) -> VoidResult {
 		if let Some(event::Data::Connection(connection)) = data {
 			if let Ok(mut auth_cache) = self.auth_cache.write() {
-				let _ = auth_cache.remove_pending_user(&connection.address);
+				let _ = auth_cache.remove(&connection.address);
+			}
+			if let Ok(mut active_cache) = self.active_cache.write() {
+				let _ = active_cache.remove(&connection.address);
 			}
 		}
 		Ok(())

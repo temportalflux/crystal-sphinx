@@ -1,6 +1,5 @@
 use crate::account;
 use std::{
-	collections::HashMap,
 	net::SocketAddr,
 	sync::{
 		atomic::{self, AtomicBool},
@@ -14,8 +13,6 @@ use std::{
 static USER_TIMEOUT_TOTAL_MS: Duration = Duration::from_millis(10 * 1000);
 // Check the timeout of a pending user every half second
 static USER_TIMEOUT_CYCLE_MS: Duration = Duration::from_millis(500);
-
-pub type ArcLockAuthCache = Arc<RwLock<AuthCache>>;
 
 /// A user whose authentication is pending.
 pub struct User {
@@ -50,7 +47,7 @@ impl User {
 		&self.token
 	}
 
-	pub fn start_timeout(&mut self, cache: &ArcLockAuthCache) {
+	pub fn start_timeout(&mut self, cache: &ArcLockCache) {
 		let auth_cache = cache.clone();
 		let address = self.address.clone();
 		let exit_flag = self.timeout_exit.clone();
@@ -70,7 +67,7 @@ impl User {
 								address
 							);
 							if let Ok(mut auth_cache) = auth_cache.write() {
-								let _ = auth_cache.remove_pending_user(&address);
+								let _ = auth_cache.remove(&address);
 								let _ = engine::network::Network::kick(&address);
 							}
 							return;
@@ -92,6 +89,12 @@ impl User {
 	}
 }
 
+impl super::NetAddressable for User {
+	fn address(&self) -> &SocketAddr {
+		&self.address
+	}
+}
+
 impl Drop for User {
 	fn drop(&mut self) {
 		self.stop_timeout();
@@ -99,29 +102,5 @@ impl Drop for User {
 }
 
 /// Caches pending users and their auth tokens until the users are authenticated or disconnected.
-pub struct AuthCache {
-	pending_users: HashMap<SocketAddr, User>,
-}
-
-impl Default for AuthCache {
-	fn default() -> Self {
-		Self {
-			pending_users: HashMap::new(),
-		}
-	}
-}
-
-impl AuthCache {
-	pub fn arclocked(self) -> ArcLockAuthCache {
-		Arc::new(RwLock::new(self))
-	}
-
-	pub fn add_pending_user(&mut self, mut pending: User, cache: &ArcLockAuthCache) {
-		pending.start_timeout(cache);
-		self.pending_users.insert(pending.address.clone(), pending);
-	}
-
-	pub fn remove_pending_user(&mut self, address: &SocketAddr) -> Option<User> {
-		self.pending_users.remove(address)
-	}
-}
+pub type Cache = super::Cache<User>;
+pub type ArcLockCache = Arc<RwLock<Cache>>;

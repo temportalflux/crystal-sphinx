@@ -14,7 +14,7 @@ use engine::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::server::user::pending::ArcLockAuthCache;
+use crate::server::user;
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -60,7 +60,11 @@ impl std::fmt::Display for Error {
 }
 
 impl Handshake {
-	pub fn register(builder: &mut network::Builder, auth_cache: &ArcLockAuthCache) {
+	pub fn register(
+		builder: &mut network::Builder,
+		auth_cache: &user::pending::ArcLockCache,
+		active_cache: &user::active::ArcLockCache,
+	) {
 		use mode::Kind::*;
 		builder.register_bundle::<Handshake>(
 			EventProcessors::default()
@@ -68,12 +72,14 @@ impl Handshake {
 					Server,
 					ProcessAuthRequest {
 						auth_cache: auth_cache.clone(),
+						active_cache: active_cache.clone(),
 					},
 				)
 				.with(
 					mode::Set::all(),
 					ProcessAuthRequest {
 						auth_cache: auth_cache.clone(),
+						active_cache: active_cache.clone(),
 					},
 				)
 				.with(Client, ReEncryptAuthToken()),
@@ -81,25 +87,25 @@ impl Handshake {
 	}
 
 	pub fn connect_to_server() -> VoidResult {
-		use network::packet::{DeliveryGuarantee::*, OrderGuarantee::*};
+		use network::prelude::*;
 		let request = match account::ClientRegistry::read()?.active_account() {
 			Some(account) => {
 				Request::Login(account.id().clone(), account.public_key().as_string()?)
 			}
 			None => return Ok(()),
 		};
-		Network::send(
+		Network::send_packets(
 			Packet::builder()
 				.with_address("127.0.0.1:25565")?
 				.with_guarantee(Reliable + Unordered)
-				.with_payload(&Handshake(request))
-				.build(),
+				.with_payload(&Handshake(request)),
 		)
 	}
 }
 
 struct ProcessAuthRequest {
-	auth_cache: ArcLockAuthCache,
+	auth_cache: user::pending::ArcLockCache,
+	active_cache: user::active::ArcLockCache,
 }
 
 impl Processor for ProcessAuthRequest {
@@ -174,8 +180,8 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 					return Err(Box::new(Error::ServerKeyCannotEncrypt));
 				};
 
-				let pending_user =
-					server::user::pending::User::new(connection.address, account_id.clone(), token);
+				let mut pending_user =
+					user::pending::User::new(connection.address, account_id.clone(), token);
 
 				// NOTE: By sending this to the client, they will become connected (thats just how the network system works).
 				// So if they fail auth, we need to kick them from the server.
@@ -183,12 +189,11 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				let server_public_key = server_auth_key.public();
 				data.0 =
 					Request::AuthTokenForClient(encrypted_bytes, server_public_key.as_string()?);
-				Network::send(
+				Network::send_packets(
 					Packet::builder()
 						.with_address(connection.address)?
 						.with_guarantee(*guarantee)
-						.with_payload(data)
-						.build(),
+						.with_payload(data),
 				)?;
 
 				// It is impossible to receive a response from the client since sending the packet
@@ -197,7 +202,8 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				// We need to execute after packet send so that if there are any errors in sending the packet,
 				// we dont have a lingering pending entry.
 				if let Ok(mut auth_cache) = self.auth_cache.write() {
-					auth_cache.add_pending_user(pending_user, &self.auth_cache);
+					pending_user.start_timeout(&self.auth_cache);
+					auth_cache.insert(pending_user);
 				}
 
 				Ok(())
@@ -250,8 +256,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				// or kick the user if none exits or the lock failed.
 				let pending_user = match self.auth_cache.write() {
 					// Remove the user from the cache (both on successful or failed auth cases).
-					Ok(mut auth_cache) => match auth_cache.remove_pending_user(&connection.address)
-					{
+					Ok(mut auth_cache) => match auth_cache.remove(&connection.address) {
 						Some(pending_user) => pending_user,
 						None => {
 							// User may be missing if they've timed out.
@@ -292,8 +297,10 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						// If there is not a race-condition, this will prevent the timeout from happening in the near future
 						pending_user.stop_timeout();
 
-						// TODO: Convert pending user into an active user
-						// TODO: Remove active users on disconnect
+						if let Ok(mut active_cache) = self.active_cache.write() {
+							let active_user = pending_user.into();
+							active_cache.insert(active_user);
+						}
 					}
 					Err(err) => {
 						// if it doesnt match, the client isnt who they say they are,
@@ -361,12 +368,11 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 			};
 
 			data.0 = Request::AuthTokenForServer(reencrypted_bytes);
-			Network::send(
+			Network::send_packets(
 				Packet::builder()
 					.with_address(connection.address)?
 					.with_guarantee(*guarantee)
-					.with_payload(data)
-					.build(),
+					.with_payload(data),
 			)?;
 
 			return Ok(());
