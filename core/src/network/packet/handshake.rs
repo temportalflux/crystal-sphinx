@@ -3,10 +3,11 @@ use engine::{
 	network::{
 		self,
 		connection::Connection,
+		enums::*,
 		event, mode,
 		packet::{Guarantee, Packet},
 		packet_kind,
-		processor::{EventProcessors, PacketProcessor, Processor},
+		processor::{AnyProcessor, EventProcessors, PacketProcessor, Processor},
 		LocalData, Network, LOG,
 	},
 	utility::VoidResult,
@@ -20,7 +21,7 @@ use crate::server::user;
 #[derive(Serialize, Deserialize)]
 pub struct Handshake(Request);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum Request {
 	Login(account::Id, /*public key*/ String),
 	AuthTokenForClient(
@@ -28,11 +29,22 @@ enum Request {
 		/*server public key*/ String,
 	),
 	AuthTokenForServer(/*re-encrypted auth token*/ Vec<u8>),
+	ClientAuthenticated(account::Id),
+}
+impl std::fmt::Display for Request {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match self {
+			Self::Login(account_id, _client_key) => write!(f, "Login(id={})", account_id),
+			Self::AuthTokenForClient(_bytes, _server_key) => write!(f, "AuthTokenForClient"),
+			Self::AuthTokenForServer(_bytes) => write!(f, "AuthTokenForServer"),
+			Self::ClientAuthenticated(account_id) => write!(f, "Authenticated(id={})", account_id),
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
 enum Error {
-	InvalidRequest,
+	InvalidRequest(Request),
 	NoServerData,
 	CannotReadServerData,
 	ClientKeyDoesntMatch(account::Id),
@@ -46,7 +58,7 @@ impl std::error::Error for Error {}
 impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
-			Self::InvalidRequest => write!(f, "Invalid handshake request"),
+			Self::InvalidRequest(request) => write!(f, "Invalid handshake request: {}", request),
 			Self::NoServerData => write!(f, "Cannot process handshake, no server data."),
 			Self::CannotReadServerData => write!(f, "Cannot read from server data."),
 			Self::ClientKeyDoesntMatch(account_id) => write!(f, "Client {} tried to authenticate, but their public key did not match a previous login.", account_id),
@@ -75,14 +87,17 @@ impl Handshake {
 						active_cache: active_cache.clone(),
 					},
 				)
+				.with(Client, ReEncryptAuthToken())
 				.with(
 					mode::Set::all(),
-					ProcessAuthRequest {
-						auth_cache: auth_cache.clone(),
-						active_cache: active_cache.clone(),
-					},
-				)
-				.with(Client, ReEncryptAuthToken()),
+					AnyProcessor::new(vec![
+						ProcessAuthRequest {
+							auth_cache: auth_cache.clone(),
+							active_cache: active_cache.clone(),
+						}.boxed(),
+						ReEncryptAuthToken().boxed(),
+					]),
+				),
 		);
 	}
 
@@ -297,6 +312,15 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						// If there is not a race-condition, this will prevent the timeout from happening in the near future
 						pending_user.stop_timeout();
 
+						Network::send_packets(
+							Packet::builder()
+								.with_mode(Broadcast)
+								.with_guarantee(Reliable + Unordered)
+								.with_payload(&Handshake(Request::ClientAuthenticated(
+									pending_user.id().clone(),
+								))),
+						)?;
+
 						if let Ok(mut active_cache) = self.active_cache.write() {
 							let active_user = pending_user.into();
 							active_cache.insert(active_user);
@@ -312,7 +336,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 
 				Ok(())
 			}
-			_ => Err(Box::new(Error::InvalidRequest)),
+			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),
 		}
 	}
 }
@@ -339,45 +363,59 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 		guarantee: &Guarantee,
 		_local_data: &LocalData,
 	) -> VoidResult {
-		if let Request::AuthTokenForClient(encrypted_bytes, server_public_key) = &data.0 {
-			log::info!(target: LOG, "Received auth token from server");
-			// Technically we will have "connected" by the end of this request,
-			// but not really connected until the server validates the token.
-			let reencrypted_bytes = if let Some(account::Account { key, .. }) =
-				account::ClientRegistry::read()?.active_account()
-			{
-				use rand::rngs::OsRng;
-				use rsa::PublicKey;
-				match (key, account::Key::from_string(&server_public_key)?) {
-					(account::Key::Private(rsa_private), account::Key::Public(rsa_public)) => {
-						let mut rng = OsRng;
-						let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-						let raw_token_bytes = rsa_private.decrypt(padding, &encrypted_bytes)?;
-						let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-						rsa_public.encrypt(&mut rng, padding, &raw_token_bytes)?
+		match &data.0 {
+			Request::AuthTokenForClient(encrypted_bytes, server_public_key) => {
+				log::info!(target: LOG, "Received auth token from server");
+				// Technically we will have "connected" by the end of this request,
+				// but not really connected until the server validates the token.
+				let reencrypted_bytes = if let Some(account::Account { key, .. }) =
+					account::ClientRegistry::read()?.active_account()
+				{
+					use rand::rngs::OsRng;
+					use rsa::PublicKey;
+					match (key, account::Key::from_string(&server_public_key)?) {
+						(account::Key::Private(rsa_private), account::Key::Public(rsa_public)) => {
+							let mut rng = OsRng;
+							let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
+							let raw_token_bytes = rsa_private.decrypt(padding, &encrypted_bytes)?;
+							let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
+							rsa_public.encrypt(&mut rng, padding, &raw_token_bytes)?
+						}
+						(client_key, server_key) => {
+							return Err(Box::new(Error::InvalidKeyTypes(
+								client_key.kind_str().to_owned(),
+								server_key.kind_str().to_owned(),
+							)));
+						}
 					}
-					(client_key, server_key) => {
-						return Err(Box::new(Error::InvalidKeyTypes(
-							client_key.kind_str().to_owned(),
-							server_key.kind_str().to_owned(),
-						)));
-					}
-				}
-			} else {
-				return Err(Box::new(Error::NoActiveAccount));
-			};
+				} else {
+					return Err(Box::new(Error::NoActiveAccount));
+				};
 
-			data.0 = Request::AuthTokenForServer(reencrypted_bytes);
-			Network::send_packets(
-				Packet::builder()
-					.with_address(connection.address)?
-					.with_guarantee(*guarantee)
-					.with_payload(data),
-			)?;
+				data.0 = Request::AuthTokenForServer(reencrypted_bytes);
+				Network::send_packets(
+					Packet::builder()
+						.with_address(connection.address)?
+						.with_guarantee(*guarantee)
+						.with_payload(data),
+				)?;
 
-			return Ok(());
+				Ok(())
+			}
+			Request::ClientAuthenticated(account_id) => {
+				let authenticated_self = account::ClientRegistry::read()?
+					.active_account()
+					.map(|account| account.meta.id == *account_id)
+					.unwrap_or(true);
+				log::debug!(
+					target: LOG,
+					"Client authenticated, authenticated_self:{} id:{}",
+					authenticated_self,
+					account_id
+				);
+				Ok(())
+			}
+			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),
 		}
-
-		Err(Box::new(Error::InvalidRequest))
 	}
 }
