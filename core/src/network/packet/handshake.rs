@@ -10,7 +10,7 @@ use engine::{
 		processor::{AnyProcessor, EventProcessors, PacketProcessor, Processor},
 		LocalData, Network, LOG,
 	},
-	utility::VoidResult,
+	utility::{AnyError, VoidResult},
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ pub struct Handshake(Request);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Request {
-	Login(account::Id, /*public key*/ String),
+	Login(account::Meta, /*public key*/ String),
 	AuthTokenForClient(
 		/*encrypted auth token*/ Vec<u8>,
 		/*server public key*/ String,
@@ -34,7 +34,7 @@ enum Request {
 impl std::fmt::Display for Request {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
-			Self::Login(account_id, _client_key) => write!(f, "Login(id={})", account_id),
+			Self::Login(account_meta, _client_key) => write!(f, "Login(id={})", account_meta.id),
 			Self::AuthTokenForClient(_bytes, _server_key) => write!(f, "AuthTokenForClient"),
 			Self::AuthTokenForServer(_bytes) => write!(f, "AuthTokenForServer"),
 			Self::ClientAuthenticated(account_id) => write!(f, "Authenticated(id={})", account_id),
@@ -49,9 +49,7 @@ enum Error {
 	CannotReadServerData,
 	ClientKeyDoesntMatch(account::Id),
 	ServerKeyCannotEncrypt,
-	ServerKeyCannotDecrypt,
 	ClientTokenUnparsable,
-	InvalidKeyTypes(String, String),
 	NoActiveAccount,
 }
 impl std::error::Error for Error {}
@@ -63,9 +61,7 @@ impl std::fmt::Display for Error {
 			Self::CannotReadServerData => write!(f, "Cannot read from server data."),
 			Self::ClientKeyDoesntMatch(account_id) => write!(f, "Client {} tried to authenticate, but their public key did not match a previous login.", account_id),
 			Self::ServerKeyCannotEncrypt => write!(f, "Server's auth key could not become a public key... something blew up... X_X"),
-			Self::ServerKeyCannotDecrypt => write!(f, "Failed to decrypt token, server auth key is not private"),
 			Self::ClientTokenUnparsable => write!(f, "Failed to parse decrypted token as a string."),
-			Self::InvalidKeyTypes(client_key, server_key) => write!(f, "Failed to process auth-token with {} client key and {} server key", client_key, server_key),
 			Self::NoActiveAccount => write!(f, "Cannot authenticate client, no active account."),
 		}
 	}
@@ -94,7 +90,8 @@ impl Handshake {
 						ProcessAuthRequest {
 							auth_cache: auth_cache.clone(),
 							active_cache: active_cache.clone(),
-						}.boxed(),
+						}
+						.boxed(),
 						ReEncryptAuthToken().boxed(),
 					]),
 				),
@@ -105,7 +102,7 @@ impl Handshake {
 		use network::prelude::*;
 		let request = match account::ClientRegistry::read()?.active_account() {
 			Some(account) => {
-				Request::Login(account.id().clone(), account.public_key().as_string()?)
+				Request::Login(account.meta.clone(), account.public_key().as_string()?)
 			}
 			None => return Ok(()),
 		};
@@ -144,18 +141,18 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 		_local_data: &LocalData,
 	) -> VoidResult {
 		match &data.0 {
-			Request::Login(account_id, public_key) => {
+			Request::Login(account_meta, public_key) => {
 				log::info!(
 					target: LOG,
 					"Received login request from {}({})",
 					connection.address,
-					account_id
+					account_meta.id
 				);
 				let (server_auth_key, user) = match server::Server::read() {
 					Ok(guard) => match &*guard {
 						Some(server) => (
 							server.auth_key().clone(),
-							server.find_user(&account_id).cloned(),
+							server.find_user(&account_meta.id).cloned(),
 						),
 						None => {
 							return Err(Box::new(Error::NoServerData));
@@ -171,7 +168,9 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 					if let Ok(saved_user_guard) = arclock_user.read() {
 						if *public_key != saved_user_guard.public_key().as_string()? {
 							// The server intentionally does not respond, which will cause the client to timeout.
-							return Err(Box::new(Error::ClientKeyDoesntMatch(account_id.clone())));
+							return Err(Box::new(Error::ClientKeyDoesntMatch(
+								account_meta.id.clone(),
+							)));
 						}
 					}
 				}
@@ -195,8 +194,12 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 					return Err(Box::new(Error::ServerKeyCannotEncrypt));
 				};
 
-				let mut pending_user =
-					user::pending::User::new(connection.address, account_id.clone(), token);
+				let mut pending_user = user::pending::User::new(
+					connection.address,
+					account_meta.clone(),
+					client_public_key,
+					token,
+				);
 
 				// NOTE: By sending this to the client, they will become connected (thats just how the network system works).
 				// So if they fail auth, we need to kick them from the server.
@@ -233,36 +236,28 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				// Wrapper function to try to decrypt an auth token,
 				// so that the error can be handled gracefully
 				// without sacrificing readability.
-				fn decrypt_token(bytes: &[u8]) -> Result<String, Error> {
+				fn decrypt_token(bytes: &[u8]) -> Result<String, AnyError> {
 					let server_auth_key = match server::Server::read() {
 						Ok(guard) => match &*guard {
 							Some(server) => server.auth_key().clone(),
 							None => {
-								return Err(Error::NoServerData);
+								return Err(Box::new(Error::NoServerData));
 							}
 						},
 						Err(_) => {
-							return Err(Error::CannotReadServerData);
+							return Err(Box::new(Error::CannotReadServerData));
 						}
 					};
 
-					match server_auth_key {
-						account::Key::Private(rsa_private) => {
-							let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-							match rsa_private.decrypt(padding, &bytes) {
-								Ok(token_bytes) => match String::from_utf8(token_bytes) {
-									Ok(token) => return Ok(token),
-									Err(_) => {
-										return Err(Error::ClientTokenUnparsable);
-									}
-								},
-								Err(_) => {
-									return Err(Error::ClientTokenUnparsable);
-								}
+					match server_auth_key.decrypt(&bytes)? {
+						Ok(token_bytes) => match String::from_utf8(token_bytes) {
+							Ok(token) => return Ok(token),
+							Err(_) => {
+								return Err(Box::new(Error::ClientTokenUnparsable));
 							}
-						}
-						_ => {
-							return Err(Error::ServerKeyCannotDecrypt);
+						},
+						Err(_) => {
+							return Err(Box::new(Error::ClientTokenUnparsable));
 						}
 					}
 				}
@@ -312,6 +307,21 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						// If there is not a race-condition, this will prevent the timeout from happening in the near future
 						pending_user.stop_timeout();
 
+						if let Ok(mut guard) = server::Server::write() {
+							if let Some(server) = &mut *guard {
+								if server.find_user(&pending_user.id()).is_none() {
+									server.add_user(user::saved::User::new(
+										&pending_user,
+										server.get_players_dir_path(),
+									));
+								}
+							} else {
+								return Err(Box::new(Error::NoServerData));
+							}
+						} else {
+							return Err(Box::new(Error::CannotReadServerData));
+						}
+
 						Network::send_packets(
 							Packet::builder()
 								.with_mode(Broadcast)
@@ -330,7 +340,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						// if it doesnt match, the client isnt who they say they are,
 						// so they should be kicked from the server (technically they've already connected).
 						Network::kick(&pending_user.address())?;
-						return Err(Box::new(err));
+						return Err(err);
 					}
 				}
 
@@ -371,21 +381,11 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				let reencrypted_bytes = if let Some(account::Account { key, .. }) =
 					account::ClientRegistry::read()?.active_account()
 				{
-					use rand::rngs::OsRng;
-					use rsa::PublicKey;
-					match (key, account::Key::from_string(&server_public_key)?) {
-						(account::Key::Private(rsa_private), account::Key::Public(rsa_public)) => {
-							let mut rng = OsRng;
-							let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-							let raw_token_bytes = rsa_private.decrypt(padding, &encrypted_bytes)?;
-							let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-							rsa_public.encrypt(&mut rng, padding, &raw_token_bytes)?
-						}
-						(client_key, server_key) => {
-							return Err(Box::new(Error::InvalidKeyTypes(
-								client_key.kind_str().to_owned(),
-								server_key.kind_str().to_owned(),
-							)));
+					let server_key = account::Key::from_string(&server_public_key)?;
+					match key.decrypt(&encrypted_bytes)? {
+						Ok(raw_token_bytes) => server_key.encrypt(&raw_token_bytes)?,
+						Err(_) => {
+							return Err(Box::new(Error::ClientTokenUnparsable));
 						}
 					}
 				} else {
@@ -406,7 +406,7 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				let authenticated_self = account::ClientRegistry::read()?
 					.active_account()
 					.map(|account| account.meta.id == *account_id)
-					.unwrap_or(true);
+					.unwrap_or(false);
 				log::debug!(
 					target: LOG,
 					"Client authenticated, authenticated_self:{} id:{}",

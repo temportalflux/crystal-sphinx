@@ -11,6 +11,7 @@ static LOG: &'static str = "server";
 pub mod user;
 
 pub struct Server {
+	root_dir: PathBuf,
 	auth_key: account::Key,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 }
@@ -37,6 +38,7 @@ impl Server {
 		}
 		log::info!(target: LOG, "Loading data");
 		Ok(Self {
+			root_dir: savegame_path.to_owned(),
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
 		})
@@ -63,6 +65,10 @@ impl Server {
 		savegame_path
 	}
 
+	pub fn get_players_dir_path(&self) -> PathBuf {
+		Self::players_dir_path(self.root_dir.clone())
+	}
+
 	fn load_saved_users(
 		path: &Path,
 	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>, AnyError> {
@@ -71,7 +77,7 @@ impl Server {
 		for entry in std::fs::read_dir(path)? {
 			let user_path = entry?.path();
 			if user_path.is_dir() {
-				match user::saved::User::from(&user_path) {
+				match user::saved::User::load(&user_path) {
 					Ok(user) => {
 						log::info!(target: LOG, "Loaded user {}", user.id());
 						users.insert(user.id().clone(), Arc::new(RwLock::new(user)));
@@ -88,6 +94,18 @@ impl Server {
 			}
 		}
 		Ok(users)
+	}
+
+	pub fn add_user(&mut self, user: user::saved::User) {
+		let id = user.id().clone();
+		let arc_user = Arc::new(RwLock::new(user));
+		let thread_user = arc_user.clone();
+		std::thread::spawn(move || {
+			if let Ok(user) = thread_user.read() {
+				let _ = user.save();
+			}
+		});
+		self.saved_users.insert(id, arc_user);
 	}
 
 	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {

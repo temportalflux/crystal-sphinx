@@ -17,7 +17,8 @@ static USER_TIMEOUT_CYCLE_MS: Duration = Duration::from_millis(500);
 /// A user whose authentication is pending.
 pub struct User {
 	address: SocketAddr,
-	id: account::Id,
+	meta: account::Meta,
+	public_key: account::Key,
 	token: String,
 
 	timeout_thread: Option<thread::JoinHandle<()>>,
@@ -25,10 +26,16 @@ pub struct User {
 }
 
 impl User {
-	pub fn new(address: SocketAddr, id: account::Id, token: String) -> Self {
+	pub fn new(
+		address: SocketAddr,
+		meta: account::Meta,
+		public_key: account::Key,
+		token: String,
+	) -> Self {
 		Self {
 			address,
-			id,
+			meta,
+			public_key,
 			token,
 			timeout_thread: None,
 			timeout_exit: Arc::new(AtomicBool::new(false)),
@@ -39,8 +46,16 @@ impl User {
 		&self.address
 	}
 
+	pub fn meta(&self) -> &account::Meta {
+		&self.meta
+	}
+
 	pub fn id(&self) -> &account::Id {
-		&self.id
+		&self.meta.id
+	}
+
+	pub fn public_key(&self) -> &account::Key {
+		&self.public_key
 	}
 
 	pub fn token(&self) -> &String {

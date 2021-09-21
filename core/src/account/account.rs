@@ -33,6 +33,11 @@ impl Meta {
 		Ok(Meta::from_json(&raw)?)
 	}
 
+	pub fn save(&self, path: &Path) -> VoidResult {
+		std::fs::write(path, self.to_json()?)?;
+		Ok(())
+	}
+
 	fn from_json(json: &str) -> Result<Self, AnyError> {
 		let value: Self = serde_json::from_str(json)?;
 		Ok(value)
@@ -42,6 +47,19 @@ impl Meta {
 		let mut json = serde_json::to_string_pretty(self)?;
 		json = json.replace("  ", "\t");
 		Ok(json)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum KeyError {
+	InvalidKeyType(String),
+}
+impl std::error::Error for KeyError {}
+impl std::fmt::Display for KeyError {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match self {
+			Self::InvalidKeyType(key) => write!(f, "Invalid key type: {}", key),
+		}
 	}
 }
 
@@ -106,6 +124,31 @@ impl Key {
 		std::fs::write(path, self.as_string()?)?;
 		Ok(())
 	}
+
+	pub fn encrypt(&self, bytes: &[u8]) -> Result<Vec<u8>, AnyError> {
+		use rand::rngs::OsRng;
+		use rsa::PublicKey;
+		match self.public() {
+			Self::Public(rsa) => {
+				let mut rng = OsRng;
+				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
+				Ok(rsa.encrypt(&mut rng, padding, &bytes)?)
+			}
+			private => Err(Box::new(KeyError::InvalidKeyType(
+				private.kind_str().to_owned(),
+			))),
+		}
+	}
+
+	pub fn decrypt(&self, bytes: &[u8]) -> Result<Result<Vec<u8>, rsa::errors::Error>, KeyError> {
+		match self {
+			Self::Private(rsa) => {
+				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
+				Ok(rsa.decrypt(padding, &bytes))
+			}
+			public => Err(KeyError::InvalidKeyType(public.kind_str().to_owned())),
+		}
+	}
 }
 
 impl std::fmt::Display for Account {
@@ -150,7 +193,7 @@ impl Account {
 
 	pub fn save(&self) -> VoidResult {
 		std::fs::create_dir_all(&self.root)?;
-		std::fs::write(&Meta::make_path(&self.root), self.meta.to_json()?)?;
+		self.meta.save(&Meta::make_path(&self.root))?;
 		self.key.save(&Key::make_path(&self.root))?;
 		Ok(())
 	}
