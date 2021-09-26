@@ -33,6 +33,7 @@
 use engine::{utility::VoidResult, Application};
 
 pub mod account;
+pub mod app;
 pub mod network;
 pub mod plugin;
 pub mod server;
@@ -112,16 +113,17 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		/*
+		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+
 		engine::ui::System::new(engine.render_chain().unwrap())?
 			.with_engine_shaders()?
 			.with_all_fonts()?
 			.with_tree_root(engine::ui::make_widget!(ui::root::root))
+			.with_context(app_state.clone())
 			.attach_system(
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
 			)?;
-		*/
 
 		/*
 		let mut main_menu_music = engine::asset::WeightedIdList::default();

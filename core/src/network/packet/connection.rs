@@ -33,6 +33,7 @@ impl Processor for RemoveUser {
 		data: &mut Option<event::Data>,
 		_local_data: &LocalData,
 	) -> VoidResult {
+		// TODO: Also destroy the network if this is a client?
 		if let Some(event::Data::Connection(connection)) = data {
 			if let Ok(mut auth_cache) = self.auth_cache.write() {
 				let _ = auth_cache.remove(&connection.address);

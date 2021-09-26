@@ -1,7 +1,9 @@
 use crate::ui;
 use engine::{asset::statics, ui::*};
 
-pub fn root(mut _context: WidgetContext) -> WidgetNode {
+pub fn root(ctx: WidgetContext) -> WidgetNode {
+	let app_state = ctx.process_context.get::<ContextContainer>();
+	log::debug!("app_state: {}", app_state.is_some());
 	WidgetNode::Component(
 		make_widget!(nav_content_box).listed_slot(
 			make_widget!(size_box)

@@ -335,6 +335,8 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 							let active_user = pending_user.into();
 							active_cache.insert(active_user);
 						}
+
+						// TODO: Spin up a process to ship the newly-active user relevant information about the world
 					}
 					Err(err) => {
 						// if it doesnt match, the client isnt who they say they are,
@@ -413,6 +415,9 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 					authenticated_self,
 					account_id
 				);
+				// TODO: If self is now authed, display "connecting" progress screen and wait for additional info from server
+				// 				once complete, display the world and HUD ui
+				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
 				Ok(())
 			}
 			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),
