@@ -1,5 +1,8 @@
 use crate::ui;
-use engine::{asset::statics, ui::{raui::*, ContextContainer}};
+use engine::{
+	asset::statics,
+	ui::{raui::*, ContextContainer},
+};
 
 pub fn root(ctx: WidgetContext) -> WidgetNode {
 	let app_state = ctx.process_context.get::<ContextContainer>();
@@ -25,7 +28,7 @@ pub fn root(ctx: WidgetContext) -> WidgetNode {
 				})
 				.named_slot(
 					"content",
-					make_widget!(ui::button::styled::widget).named_slot(
+					make_widget!(ui::common::button::styled::widget).named_slot(
 						"content",
 						make_widget!(text_box)
 							.with_props(TextBoxProps {

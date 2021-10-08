@@ -12,7 +12,7 @@ pub enum Flag {
 
 impl Flag {
 	pub fn from_ctx(ctx: &WidgetContext) -> EnumSet<Flag> {
-		use crate::ui::state::Props as StateProps;
+		use super::super::state::Props as StateProps;
 		let ButtonProps {
 			// if the button is hovered via mouse or navigated to view gamepad/keyboard
 			selected: is_hovered,

@@ -1,4 +1,4 @@
-use crate::ui::state::Flag;
+use super::super::state::Flag;
 use enumset::EnumSet;
 use serde::{Deserialize, Serialize};
 

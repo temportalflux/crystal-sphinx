@@ -9,14 +9,14 @@ pub type ArcLockCache = Arc<RwLock<Cache>>;
 
 pub struct User {
 	address: SocketAddr,
-	id: account::Id,
+	_id: account::Id,
 }
 
 impl From<super::pending::User> for User {
 	fn from(pending: super::pending::User) -> Self {
 		Self {
 			address: pending.address().clone(),
-			id: pending.id().clone(),
+			_id: pending.id().clone(),
 		}
 	}
 }

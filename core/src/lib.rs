@@ -104,7 +104,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			.with_size(1280.0, 720.0)
 			.with_resizable(true)
 			.with_application::<CrystalSphinx>()
-			.with_clear_color([0.0, 0.05, 0.1, 1.0].into())
+			.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 			.build(&mut engine)?;
 		engine.render_chain_write().unwrap().set_render_pass_info(
 			engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
@@ -113,13 +113,23 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+		use engine::ui::{
+			oui::{viewport, Widget},
+			raui::make_widget,
+		};
+
+		//let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+		let launch_screen = crate::ui::launch::Launch::new().arclocked();
+		let viewport = viewport::Viewport::new()
+			.with_root(launch_screen)
+			.arclocked();
 
 		engine::ui::System::new(engine.render_chain().unwrap())?
 			.with_engine_shaders()?
 			.with_all_fonts()?
-			.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
-			.with_context(app_state.clone())
+			//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
+			.with_tree_root(make_widget!(viewport::widget))
+			.with_context(viewport.clone())
 			.attach_system(
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
