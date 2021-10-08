@@ -121,7 +121,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		//let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
 		let launch_screen = crate::ui::launch::Launch::new().arclocked();
 		let viewport = viewport::Viewport::new()
-			.with_root(launch_screen)
+			.with_root(crate::ui::home::Home::new().arclocked())
 			.arclocked();
 
 		engine::ui::System::new(engine.render_chain().unwrap())?
@@ -130,6 +130,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
 			.with_tree_root(make_widget!(viewport::widget))
 			.with_context(viewport.clone())
+			.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
 			.attach_system(
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
