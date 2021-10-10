@@ -1,35 +1,27 @@
-use engine::{
-	asset::statics,
-	ui::{
-		oui::{widget, *},
-		raui::*,
+use engine::ui::{
+	oui::{
+		widget::{container::content_box, ImageBox, SizeBox},
+		AsRAUI, Widget,
 	},
+	raui::*,
 };
 
-pub struct Home {}
+pub struct Home {
+	root: content_box::Container,
+}
 
 impl Home {
 	pub fn new() -> Self {
-		Self {}
-	}
-}
-
-impl Widget for Home {}
-
-impl AsRAUI for Home {
-	fn as_raui(&self) -> WidgetComponent {
-		make_widget!(nav_content_box).listed_slot(
-			make_widget!(image_box)
-				.with_props(ImageBoxProps {
-					width: ImageBoxSizeValue::Exact(400.0),
-					height: ImageBoxSizeValue::Exact(100.0),
-					material: ImageBoxMaterial::Image(ImageBoxImage {
-						id: "textures/ui/title".to_owned(),
-						..Default::default()
-					}),
-					..Default::default()
-				})
-				.with_props(ContentBoxItemLayout {
+		let root = content_box::Container::new()
+			.with_slot(
+				content_box::Slot::from(
+					ImageBox::new()
+						.with_width(ImageBoxSizeValue::Exact(400.0))
+						.with_height(ImageBoxSizeValue::Exact(100.0))
+						.with_texture("textures/ui/title".to_owned())
+						.arclocked(),
+				)
+				.with_layout(ContentBoxItemLayout {
 					anchors: Rect {
 						left: 0.3,
 						right: 0.5,
@@ -38,6 +30,16 @@ impl AsRAUI for Home {
 					},
 					..Default::default()
 				}),
-		)
+			)
+			.with_slot(SizeBox::new().with_navicability().arclocked());
+		Self { root }
+	}
+}
+
+impl Widget for Home {}
+
+impl AsRAUI for Home {
+	fn as_raui(&self) -> WidgetComponent {
+		self.root.as_raui()
 	}
 }

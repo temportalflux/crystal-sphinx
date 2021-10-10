@@ -119,7 +119,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		};
 
 		//let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
-		let launch_screen = crate::ui::launch::Launch::new().arclocked();
+		//let launch_screen = crate::ui::launch::Launch::new().arclocked();
 		let viewport = viewport::Viewport::new()
 			.with_root(crate::ui::home::Home::new().arclocked())
 			.arclocked();
