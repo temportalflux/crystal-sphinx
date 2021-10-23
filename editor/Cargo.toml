@@ -13,5 +13,4 @@ profile = []
 temportal-engine = { path = "../temportal-engine/engine" }
 temportal-engine-editor = { path = "../temportal-engine/editor" }
 crystal-sphinx = { path = "../core" }
-imgui = "0.7"
 log = "0.4.14"
