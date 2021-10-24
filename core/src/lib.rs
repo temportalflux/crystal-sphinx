@@ -113,6 +113,13 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
+		#[cfg(feature = "debug")]
+		{
+			use engine::ui::egui::{Ui, window::OpenWindowList};
+			let ui = Ui::create(&mut engine)?;
+			ui.write().unwrap().add_owned_element(OpenWindowList::new());
+		}
+
 		use engine::ui::{
 			oui::{viewport, Widget},
 			raui::make_widget,

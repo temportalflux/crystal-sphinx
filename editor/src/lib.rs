@@ -28,7 +28,7 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 		.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 		.build(&mut engine)?;
 
-	let ui = editor::ui::Ui::create(&mut engine)?;
+	let ui = engine::ui::egui::Ui::create(&mut engine)?;
 
 	let workspace = editor::ui::Workspace::new();
 	ui.write().unwrap().add_element(&workspace);

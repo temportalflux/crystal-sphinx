@@ -8,6 +8,7 @@ edition = "2018"
 
 [features]
 profile = []
+debug = []
 
 [dependencies]
 engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
