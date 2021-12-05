@@ -34,10 +34,14 @@ use engine::{utility::VoidResult, Application};
 
 pub mod account;
 pub mod app;
+mod debug_commands;
+pub mod input;
 pub mod network;
 pub mod plugin;
 pub mod server;
 pub mod ui;
+
+use std::sync::{Arc, RwLock};
 
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
@@ -73,6 +77,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
+	input::init();
 
 	engine::network::Builder::default()
 		.with_port(25565)
@@ -113,11 +118,19 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
+		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+
+		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
-			use engine::ui::egui::{Ui, window::OpenWindowList};
-			let ui = Ui::create(&mut engine)?;
-			ui.write().unwrap().add_owned_element(OpenWindowList::new());
+			use debug_commands::*;
+			use engine::ui::egui::{window::OpenWindowList, Ui};
+			let ui = Ui::create_with_subpass(
+				&mut engine,
+				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
+			)?;
+			ui.write().unwrap().add_owned_element(DebugCommands::new(app_state));
+			_egui_ui = Some(ui);
 		}
 
 		use engine::ui::{
@@ -125,7 +138,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			raui::make_widget,
 		};
 
-		//let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
 		//let launch_screen = crate::ui::launch::Launch::new().arclocked();
 		let viewport = viewport::Viewport::new()
 			.with_root(crate::ui::home::Home::new().arclocked())

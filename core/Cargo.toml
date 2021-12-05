@@ -11,6 +11,7 @@ profile = []
 debug = []
 
 [dependencies]
+egui = "0.14"
 engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
 enumset = { version = "1.0", features = ["serde"] }
 log = "0.4"

@@ -77,6 +77,10 @@ impl Machine {
 		Arc::new(RwLock::new(self))
 	}
 
+	pub fn get(&self) -> State {
+		self.state
+	}
+
 	pub fn transition_to(&mut self, next_state: State) {
 		let prev_state = self.state;
 		self.dispatch_callback(Operation(prev_state, Transition::Exit, next_state));

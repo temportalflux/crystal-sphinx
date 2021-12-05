@@ -2,7 +2,8 @@
 	"asset_type": "render-pass",
 	"subpass_order": [
 		"crystal-sphinx:render_pass/world_subpass",
-		"crystal-sphinx:render_pass/ui_subpass"
+		"crystal-sphinx:render_pass/ui_subpass",
+		"crystal-sphinx:render_pass/egui_subpass"
 	],
 	"dependencies": [
 		{
@@ -33,6 +34,26 @@
 			},
 			"then": {
 				"subpass": "crystal-sphinx:render_pass/ui_subpass",
+				"stage": [
+					"ColorAttachmentOutput"
+				],
+				"access": [
+					"ColorAttachmentWrite"
+				]
+			}
+		},
+		{
+			"first": {
+				"subpass": "crystal-sphinx:render_pass/ui_subpass",
+				"stage": [
+					"ColorAttachmentOutput"
+				],
+				"access": [
+					"ColorAttachmentWrite"
+				]
+			},
+			"then": {
+				"subpass": "crystal-sphinx:render_pass/egui_subpass",
 				"stage": [
 					"ColorAttachmentOutput"
 				],
