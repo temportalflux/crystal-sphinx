@@ -1,0 +1,88 @@
+use crate::app;
+use futures::future::Future;
+use std::sync::{Arc, Mutex, RwLock};
+
+#[derive(Clone)]
+pub enum Instruction {
+	Create(/*seed*/ String),
+	Load(/*path*/ String),
+}
+
+struct State {
+	is_complete: bool,
+	waker: Option<std::task::Waker>,
+}
+
+pub struct TaskLoadWorld {
+	app_state: Arc<RwLock<app::state::Machine>>,
+	/// Indicates if the task is complete and how to tell the futures package when the task wakes up.
+	state: Arc<Mutex<State>>,
+}
+
+impl Future for TaskLoadWorld {
+	type Output = ();
+	fn poll(
+		self: std::pin::Pin<&mut Self>,
+		ctx: &mut std::task::Context<'_>,
+	) -> std::task::Poll<Self::Output> {
+		use std::task::Poll;
+		let mut state = self.state.lock().unwrap();
+		if !state.is_complete {
+			state.waker = Some(ctx.waker().clone());
+			Poll::Pending
+		} else {
+			self.on_complete();
+			Poll::Ready(())
+		}
+	}
+}
+
+impl TaskLoadWorld {
+	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
+		let state = Arc::new(Mutex::new(State {
+			is_complete: false,
+			waker: None,
+		}));
+
+		Self { app_state, state }
+	}
+
+	pub fn instruct(self, instruction: Instruction) -> Self {
+		let thread_state = self.state.clone();
+		std::thread::spawn(move || {
+			// TODO: Kick off a loading task, once data is saved to disk
+			match instruction {
+				Instruction::Create(seed) => {
+					log::warn!(target: "world-loader", "Creating world with seed({})", seed);
+				}
+				Instruction::Load(path) => {
+					log::warn!(target: "world-loader", "Loading world at \"{}\"", path);
+				}
+			}
+			std::thread::sleep(std::time::Duration::from_secs(3));
+
+			let mut state = thread_state.lock().unwrap();
+			state.is_complete = true;
+			if let Some(waker) = state.waker.take() {
+				waker.wake();
+			}
+		});
+		self
+	}
+
+	/// Sends the task to the engine task management,
+	/// where it will run until the operation is complete,
+	/// and then be dropped (thereby dropping all of its contents).
+	pub fn send_to(self, spawner: &Arc<engine::task::Sender>) {
+		spawner.spawn(self)
+	}
+
+	fn on_complete(&self) {}
+}
+
+impl Drop for TaskLoadWorld {
+	fn drop(&mut self) {
+		use app::state::State::InGame;
+		self.app_state.write().unwrap().transition_to(InGame, None);
+	}
+}

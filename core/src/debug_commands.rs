@@ -1,6 +1,6 @@
 use crate::app;
 use engine::{input, ui::egui::Element};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 trait Command {
 	fn is_allowed(&self) -> bool;
@@ -18,9 +18,7 @@ impl DebugCommands {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
 		Self {
 			is_open: false,
-			commands: vec![
-				Arc::new(Mutex::new(LoadWorldCommand::new(app_state)))
-			],
+			commands: vec![Arc::new(Mutex::new(LoadWorldCommand::new(app_state)))],
 		}
 	}
 }
@@ -58,11 +56,25 @@ enum WorldOption {
 	Path(String),
 }
 
+impl WorldOption {
+	fn to_transition_data(&self) -> app::state::TransitionData {
+		Some(Box::new(match self {
+			Self::New => {
+				let seed = chrono::prelude::Utc::now()
+					.format("%Y%m%d%H%M%S")
+					.to_string();
+				crate::loading::Instruction::Create(seed)
+			}
+			Self::Path(path) => crate::loading::Instruction::Load(path.clone()),
+		}))
+	}
+}
+
 impl std::fmt::Display for WorldOption {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
 			Self::New => write!(f, "New World"),
-			Self::Path(path) => write!(f, "{}", path.to_string())
+			Self::Path(path) => write!(f, "{}", path.to_string()),
 		}
 	}
 }
@@ -84,13 +96,11 @@ impl LoadWorldCommand {
 	}
 
 	fn load_world(&self, world: &WorldOption) {
-		log::debug!("Load \"{}\"", world);
 		self.app_state
 			.write()
 			.unwrap()
-			.transition_to(app::state::State::LoadingWorld);
+			.transition_to(app::state::State::LoadingWorld, world.to_transition_data());
 	}
-
 }
 
 impl Command for LoadWorldCommand {

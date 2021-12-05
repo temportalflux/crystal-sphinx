@@ -34,12 +34,14 @@ use engine::{utility::VoidResult, Application};
 
 pub mod account;
 pub mod app;
-mod debug_commands;
 pub mod input;
 pub mod network;
 pub mod plugin;
 pub mod server;
 pub mod ui;
+
+mod debug_commands;
+mod loading;
 
 use std::sync::{Arc, RwLock};
 
@@ -118,7 +120,29 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+		let app_state = {
+			use app::state::{State::*, Transition::*, *};
+			let app_state = Machine::new(MainMenu).arclocked();
+
+			let app_state_for_loader = app_state.clone();
+			app_state.write().unwrap().add_callback(
+				OperationKey(None, Some(Enter), Some(LoadingWorld)),
+				move |operation| {
+					let instruction = operation
+						.data()
+						.as_ref()
+						.unwrap()
+						.downcast_ref::<loading::Instruction>()
+						.unwrap()
+						.clone();
+					loading::TaskLoadWorld::new(app_state_for_loader.clone())
+						.instruct(instruction)
+						.send_to(engine::task::sender());
+				},
+			);
+
+			app_state
+		};
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
