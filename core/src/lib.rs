@@ -129,7 +129,9 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
 			)?;
-			ui.write().unwrap().add_owned_element(DebugCommands::new(app_state));
+			ui.write()
+				.unwrap()
+				.add_owned_element(DebugCommands::new(app_state));
 			_egui_ui = Some(ui);
 		}
 

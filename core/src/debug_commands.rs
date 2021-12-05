@@ -1,6 +1,6 @@
+use crate::app;
 use engine::{input, ui::egui::Element};
 use std::sync::{Arc, RwLock};
-use crate::app;
 
 pub struct DebugCommands {
 	is_open: bool,
@@ -9,7 +9,10 @@ pub struct DebugCommands {
 
 impl DebugCommands {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
-		Self { is_open: false, app_state }
+		Self {
+			is_open: false,
+			app_state,
+		}
 	}
 }
 
@@ -33,7 +36,10 @@ impl Element for DebugCommands {
 			.show(ctx, move |ui| {
 				if current_state == app::state::State::MainMenu {
 					if ui.button("Load World").clicked() {
-						app_state_ref.write().unwrap().transition_to(app::state::State::LoadingWorld);
+						app_state_ref
+							.write()
+							.unwrap()
+							.transition_to(app::state::State::LoadingWorld);
 					}
 				}
 			});
