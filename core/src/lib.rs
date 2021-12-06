@@ -81,11 +81,17 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	engine.scan_paks()?;
 	input::init();
 
-	engine::network::Builder::default()
-		.with_port(25565)
-		.with_args()
-		.with_registrations_in(network::packet::register_types)
-		.spawn()?;
+	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+	loading::TaskLoadWorld::add_state_listener(&app_state);
+	loading::TaskUnloadWorld::add_state_listener(&app_state);
+
+	{
+		let mut net_builder = engine::network::Builder::default()
+			.with_port(25565)
+			.with_args();
+		network::packet::register_types(&mut net_builder, &app_state);
+		net_builder.spawn()?;
+	}
 
 	if engine::network::Network::local_data().is_server() {
 		let mut server_save_path = std::env::current_dir().unwrap();
@@ -120,10 +126,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
-		loading::TaskLoadWorld::add_state_listener(&app_state);
-		loading::TaskUnloadWorld::add_state_listener(&app_state);
-		
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
@@ -216,8 +218,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			}
 		};
 		*/
-
-		network::packet::Handshake::connect_to_server()?;
 	}
 
 	log::info!(target: CrystalSphinx::name(), "Initialization finished");

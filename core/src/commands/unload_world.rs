@@ -1,5 +1,5 @@
-use crate::app;
 use super::Command;
+use crate::app;
 use std::sync::{Arc, RwLock};
 
 pub struct UnloadWorld {
@@ -8,9 +8,7 @@ pub struct UnloadWorld {
 
 impl UnloadWorld {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
-		Self {
-			app_state,
-		}
+		Self { app_state }
 	}
 }
 

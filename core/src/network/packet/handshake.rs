@@ -72,6 +72,7 @@ impl Handshake {
 		builder: &mut network::Builder,
 		auth_cache: &user::pending::ArcLockCache,
 		active_cache: &user::active::ArcLockCache,
+		app_state: &crate::app::state::ArcLockMachine,
 	) {
 		use mode::Kind::*;
 		builder.register_bundle::<Handshake>(
@@ -83,7 +84,7 @@ impl Handshake {
 						active_cache: active_cache.clone(),
 					},
 				)
-				.with(Client, ReEncryptAuthToken())
+				.with(Client, ReEncryptAuthToken(app_state.clone()))
 				.with(
 					mode::Set::all(),
 					AnyProcessor::new(vec![
@@ -92,13 +93,13 @@ impl Handshake {
 							active_cache: active_cache.clone(),
 						}
 						.boxed(),
-						ReEncryptAuthToken().boxed(),
+						ReEncryptAuthToken(app_state.clone()).boxed(),
 					]),
 				),
 		);
 	}
 
-	pub fn connect_to_server() -> VoidResult {
+	pub fn connect_to_server(address: &str) -> VoidResult {
 		use network::prelude::*;
 		let request = match account::ClientRegistry::read()?.active_account() {
 			Some(account) => {
@@ -108,7 +109,7 @@ impl Handshake {
 		};
 		Network::send_packets(
 			Packet::builder()
-				.with_address("127.0.0.1:25565")?
+				.with_address(address)?
 				.with_guarantee(Reliable + Unordered)
 				.with_payload(&Handshake(request)),
 		)
@@ -353,7 +354,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 	}
 }
 
-struct ReEncryptAuthToken();
+struct ReEncryptAuthToken(crate::app::state::ArcLockMachine);
 
 impl Processor for ReEncryptAuthToken {
 	fn process(
@@ -418,6 +419,10 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				// TODO: If self is now authed, display "connecting" progress screen and wait for additional info from server
 				// 				once complete, display the world and HUD ui
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
+				self.0
+					.write()
+					.unwrap()
+					.transition_to(crate::app::state::State::LoadingWorld, None);
 				Ok(())
 			}
 			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),

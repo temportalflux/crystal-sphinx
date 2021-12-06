@@ -135,8 +135,7 @@ impl TaskUnloadWorld {
 		app_state.write().unwrap().add_callback(
 			OperationKey(None, Some(Enter), Some(Unloading)),
 			move |_operation| {
-				Self::new(app_state_for_loader.clone())
-					.send_to(engine::task::sender());
+				Self::new(app_state_for_loader.clone()).send_to(engine::task::sender());
 			},
 		);
 	}
@@ -173,6 +172,9 @@ impl TaskUnloadWorld {
 impl Drop for TaskUnloadWorld {
 	fn drop(&mut self) {
 		use app::state::State::MainMenu;
-		self.app_state.write().unwrap().transition_to(MainMenu, None);
+		self.app_state
+			.write()
+			.unwrap()
+			.transition_to(MainMenu, None);
 	}
 }

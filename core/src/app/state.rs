@@ -76,6 +76,7 @@ impl<'transition> Operation<'transition> {
 	}
 }
 
+pub type ArcLockMachine = Arc<RwLock<Machine>>;
 pub struct Machine {
 	state: State,
 	callbacks: HashMap<OperationKey, Vec<FnOperation>>,

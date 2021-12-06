@@ -8,8 +8,16 @@ pub fn register_bonus_processors(
 	builder: &mut network::Builder,
 	auth_cache: &user::pending::ArcLockCache,
 	active_cache: &user::active::ArcLockCache,
+	app_state: &crate::app::state::ArcLockMachine,
 ) {
 	use event::Kind::*;
+	builder.add_processor(
+		Timeout,
+		vec![mode::Kind::Client].into_iter(),
+		ClientTimeout {
+			app_state: app_state.clone(),
+		},
+	);
 	builder.add_processor(
 		Disconnected,
 		mode::all().into_iter(),
@@ -18,6 +26,27 @@ pub fn register_bonus_processors(
 			active_cache: active_cache.clone(),
 		},
 	);
+}
+
+#[derive(Clone)]
+struct ClientTimeout {
+	app_state: crate::app::state::ArcLockMachine,
+}
+
+impl Processor for ClientTimeout {
+	fn process(
+		&self,
+		kind: &event::Kind,
+		_data: &mut Option<event::Data>,
+		_local_data: &LocalData,
+	) -> VoidResult {
+		if *kind == event::Kind::Timeout {
+			if let Ok(mut app_state) = self.app_state.write() {
+				app_state.transition_to(crate::app::state::State::MainMenu, None);
+			}
+		}
+		Ok(())
+	}
 }
 
 #[derive(Clone)]

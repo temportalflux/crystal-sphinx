@@ -1,6 +1,9 @@
 mod debug_window;
 pub use debug_window::*;
 
+mod connect;
+pub use connect::*;
+
 mod load_world;
 pub use load_world::*;
 
@@ -15,5 +18,6 @@ pub fn create_list(app_state: &Arc<RwLock<crate::app::state::Machine>>) -> Comma
 	let mut cmds: Vec<ArctexCommand> = vec![];
 	cmds.push(LoadWorld::new(app_state.clone()).as_arctex());
 	cmds.push(UnloadWorld::new(app_state.clone()).as_arctex());
+	cmds.push(Connect::new(app_state.clone()).as_arctex());
 	Arc::new(Mutex::new(cmds))
 }

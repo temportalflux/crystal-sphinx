@@ -67,6 +67,7 @@ impl AppStateViewport {
 		vec![
 			init_view_state!(Launching, Launch::new()),
 			init_view_state!(MainMenu, Home::new()),
+			init_view_state!(Connecting, Loading::new()),
 			init_view_state!(LoadingWorld, Loading::new()),
 			init_view_state!(InGame, Hud::new()),
 			init_view_state!(Unloading, Loading::new()),
