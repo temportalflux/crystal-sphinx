@@ -40,6 +40,7 @@ pub mod network;
 pub mod plugin;
 pub mod server;
 pub mod ui;
+pub mod world;
 
 mod loading;
 
@@ -86,19 +87,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	loading::TaskUnloadWorld::add_state_listener(&app_state);
 
 	{
-		let mut net_builder = engine::network::Builder::default()
-			.with_port(25565)
-			.with_args();
-		network::packet::register_types(&mut net_builder, &app_state);
-		net_builder.spawn()?;
-	}
-
-	if engine::network::Network::local_data().is_server() {
-		let mut server_save_path = std::env::current_dir().unwrap();
-		server_save_path.push("saves");
-		server_save_path.push("tmp");
-		if let Ok(mut guard) = server::Server::write() {
-			(*guard) = Some(server::Server::load(&server_save_path)?);
+		use engine::network::mode::Kind;
+		let net_builder = network::create_builder(&app_state);
+		if net_builder.data().is_dedicated(Kind::Server) {
+			net_builder.spawn()?;
+			if let Ok(mut guard) = server::Server::write() {
+				let mut server = server::Server::load("tmp")?;
+				server.start_loading_world(None);
+				(*guard) = Some(server);
+			}
 		}
 	}
 

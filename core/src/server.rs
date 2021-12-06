@@ -32,9 +32,13 @@ impl Server {
 }
 
 impl Server {
-	pub fn load(savegame_path: &Path) -> Result<Self, AnyError> {
+	pub fn load(save_name: &str) -> Result<Self, AnyError> {
+		let mut savegame_path = std::env::current_dir().unwrap();
+		savegame_path.push("saves");
+		savegame_path.push(save_name);
+
 		if !savegame_path.exists() {
-			Self::create(savegame_path)?;
+			Self::create(&savegame_path)?;
 		}
 		log::info!(target: LOG, "Loading data");
 		Ok(Self {
@@ -111,4 +115,9 @@ impl Server {
 	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {
 		self.saved_users.get(id)
 	}
+
+	pub fn start_loading_world(&mut self, seed: Option<&String>) {
+
+	}
+
 }

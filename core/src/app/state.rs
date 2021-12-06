@@ -109,7 +109,7 @@ impl Machine {
 	pub fn transition_to(&mut self, next_state: State, data: TransitionData) {
 		assert!(!self.has_next_transition());
 		if self.pending_transition.is_some() {
-			log::info!(target: "app-state", "Enqueuing transition to {:?} for after the current transition", next_state);
+			log::info!(target: "app-state", "Enqueuing next state {:?}", next_state);
 			self.next_transition = Some((next_state, data));
 		} else {
 			self.perform_transition((next_state, data));
@@ -122,7 +122,7 @@ impl Machine {
 		self.pending_transition = Some(next_state);
 
 		let prev_state = self.state;
-		log::info!(target: "app-state", "Transitioning from {:?} to {:?}", prev_state, next_state);
+		log::info!(target: "app-state", "Transition: {:?} -> {:?}", prev_state, next_state);
 		self.dispatch_callback(Operation(
 			Some(prev_state),
 			Transition::Exit,

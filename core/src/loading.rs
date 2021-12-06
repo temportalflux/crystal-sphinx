@@ -4,8 +4,23 @@ use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Clone)]
 pub enum Instruction {
-	Create(/*seed*/ String),
-	Load(/*path*/ String),
+	Create(/*name*/ String, /*seed*/ String),
+	Load(/*name*/ String),
+}
+
+impl Instruction {
+	pub fn name(&self) -> &String {
+		match self {
+			Self::Create(ref name, _) => &name,
+			Self::Load(ref name) => &name,
+		}
+	}
+	pub fn seed(&self) -> Option<&String> {
+		match self {
+			Self::Create(_, ref seed) => Some(&seed),
+			Self::Load(_) => None,
+		}
+	}
 }
 
 struct State {
@@ -68,18 +83,31 @@ impl TaskLoadWorld {
 
 	pub fn instruct(self, instruction: Instruction) -> Self {
 		match instruction {
-			Instruction::Create(seed) => {
-				log::warn!(target: "world-loader", "Creating world with seed({})", seed);
+			Instruction::Create(ref name, ref seed) => {
+				log::warn!(target: "world-loader", "Creating world named \"{}\" with seed({})", name, seed);
 			}
-			Instruction::Load(path) => {
-				log::warn!(target: "world-loader", "Loading world at \"{}\"", path);
+			Instruction::Load(ref name) => {
+				log::warn!(target: "world-loader", "Loading world at \"{}\"", name);
 			}
 		}
 
 		let thread_state = self.state.clone();
+		let thread_app_state = self.app_state.clone();
 		std::thread::spawn(move || {
+			use crate::server::Server;
+			
 			// TODO: Kick off a loading task, once data is saved to disk
 			std::thread::sleep(std::time::Duration::from_secs(3));
+			
+			let net_builder = crate::network::create_builder(&thread_app_state);
+			assert!(net_builder.data().is_server());
+			let _ = net_builder.spawn();
+			if let Ok(mut server) = Server::load(instruction.name()) {
+				server.start_loading_world(instruction.seed());
+				if let Ok(mut guard) = Server::write() {
+					(*guard) = Some(server);
+				}
+			}
 
 			let mut state = thread_state.lock().unwrap();
 			state.is_complete = true;
