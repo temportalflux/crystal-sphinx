@@ -30,6 +30,16 @@ impl Manager {
 		}
 	}
 
+	pub fn register_state_background(
+		&self,
+		state: crate::app::state::State,
+		list: &mut Vec<engine::asset::Id>,
+	) {
+		for plugin in self.plugins.iter() {
+			plugin.register_state_background(state, list);
+		}
+	}
+
 	pub fn register_main_menu_music(&self, list: &mut engine::asset::WeightedIdList) {
 		for plugin in self.plugins.iter() {
 			plugin.register_main_menu_music(list);

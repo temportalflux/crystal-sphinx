@@ -34,13 +34,13 @@ use engine::{utility::VoidResult, Application};
 
 pub mod account;
 pub mod app;
+pub mod commands;
 pub mod input;
 pub mod network;
 pub mod plugin;
 pub mod server;
 pub mod ui;
 
-mod debug_commands;
 mod loading;
 
 use std::sync::{Arc, RwLock};
@@ -122,48 +122,56 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 		let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
 		loading::TaskLoadWorld::add_state_listener(&app_state);
-
+		loading::TaskUnloadWorld::add_state_listener(&app_state);
+		
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
-			use debug_commands::*;
-			use engine::ui::egui::{window::OpenWindowList, Ui};
+			use commands::DebugWindow;
+			use engine::ui::egui::Ui;
+			let command_list = commands::create_list(&app_state);
 			let ui = Ui::create_with_subpass(
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
 			)?;
 			ui.write()
 				.unwrap()
-				.add_owned_element(DebugCommands::new(app_state.clone()));
+				.add_owned_element(DebugWindow::new(command_list.clone()));
 			_egui_ui = Some(ui);
 		}
 
 		let viewport = ui::AppStateViewport::new().arclocked();
 		// initial UI is added when a callback matching the initial state is added to the app-state-machine
 		ui::AppStateViewport::add_state_listener(&viewport, &app_state);
-		
+
 		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
 		{
 			let thread_app_state = app_state.clone();
 			std::thread::spawn(move || {
 				std::thread::sleep(std::time::Duration::from_secs(3));
-				thread_app_state.write().unwrap().transition_to(app::state::State::MainMenu, None);
+				thread_app_state
+					.write()
+					.unwrap()
+					.transition_to(app::state::State::MainMenu, None);
 			});
 		}
 
 		{
-			use engine::ui::{oui::viewport, raui::make_widget};
-			engine::ui::System::new(engine.render_chain().unwrap())?
-				.with_engine_shaders()?
-				.with_all_fonts()?
-				//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
-				.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
-				.with_context(viewport.clone())
-				.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
-				.attach_system(
-					&mut engine,
-					Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
-				)?;
+			let ui_system = {
+				use engine::ui::{oui::viewport, raui::make_widget};
+				engine::ui::System::new(engine.render_chain().unwrap())?
+					.with_engine_shaders()?
+					.with_all_fonts()?
+					//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
+					.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
+					.with_context(viewport.clone())
+					.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
+					.attach_system(
+						&mut engine,
+						Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
+					)?
+			};
+			viewport.write().unwrap().set_system(&ui_system);
 		}
 
 		/*
