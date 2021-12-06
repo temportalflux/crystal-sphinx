@@ -31,13 +31,32 @@ impl Future for TaskLoadWorld {
 			state.waker = Some(ctx.waker().clone());
 			Poll::Pending
 		} else {
-			self.on_complete();
 			Poll::Ready(())
 		}
 	}
 }
 
 impl TaskLoadWorld {
+	pub fn add_state_listener(app_state: &Arc<RwLock<app::state::Machine>>) {
+		use app::state::{State::*, Transition::*, *};
+		let app_state_for_loader = app_state.clone();
+		app_state.write().unwrap().add_callback(
+			OperationKey(None, Some(Enter), Some(LoadingWorld)),
+			move |operation| {
+				let instruction = operation
+					.data()
+					.as_ref()
+					.unwrap()
+					.downcast_ref::<Instruction>()
+					.unwrap()
+					.clone();
+				Self::new(app_state_for_loader.clone())
+					.instruct(instruction)
+					.send_to(engine::task::sender());
+			},
+		);
+	}
+
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
 		let state = Arc::new(Mutex::new(State {
 			is_complete: false,
@@ -48,17 +67,18 @@ impl TaskLoadWorld {
 	}
 
 	pub fn instruct(self, instruction: Instruction) -> Self {
+		match instruction {
+			Instruction::Create(seed) => {
+				log::warn!(target: "world-loader", "Creating world with seed({})", seed);
+			}
+			Instruction::Load(path) => {
+				log::warn!(target: "world-loader", "Loading world at \"{}\"", path);
+			}
+		}
+
 		let thread_state = self.state.clone();
 		std::thread::spawn(move || {
 			// TODO: Kick off a loading task, once data is saved to disk
-			match instruction {
-				Instruction::Create(seed) => {
-					log::warn!(target: "world-loader", "Creating world with seed({})", seed);
-				}
-				Instruction::Load(path) => {
-					log::warn!(target: "world-loader", "Loading world at \"{}\"", path);
-				}
-			}
 			std::thread::sleep(std::time::Duration::from_secs(3));
 
 			let mut state = thread_state.lock().unwrap();
@@ -76,8 +96,6 @@ impl TaskLoadWorld {
 	pub fn send_to(self, spawner: &Arc<engine::task::Sender>) {
 		spawner.spawn(self)
 	}
-
-	fn on_complete(&self) {}
 }
 
 impl Drop for TaskLoadWorld {

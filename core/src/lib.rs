@@ -120,29 +120,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		let app_state = {
-			use app::state::{State::*, Transition::*, *};
-			let app_state = Machine::new(MainMenu).arclocked();
-
-			let app_state_for_loader = app_state.clone();
-			app_state.write().unwrap().add_callback(
-				OperationKey(None, Some(Enter), Some(LoadingWorld)),
-				move |operation| {
-					let instruction = operation
-						.data()
-						.as_ref()
-						.unwrap()
-						.downcast_ref::<loading::Instruction>()
-						.unwrap()
-						.clone();
-					loading::TaskLoadWorld::new(app_state_for_loader.clone())
-						.instruct(instruction)
-						.send_to(engine::task::sender());
-				},
-			);
-
-			app_state
-		};
+		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+		loading::TaskLoadWorld::add_state_listener(&app_state);
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
@@ -155,31 +134,35 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			)?;
 			ui.write()
 				.unwrap()
-				.add_owned_element(DebugCommands::new(app_state));
+				.add_owned_element(DebugCommands::new(app_state.clone()));
 			_egui_ui = Some(ui);
 		}
 
-		use engine::ui::{
-			oui::{viewport, Widget},
-			raui::make_widget,
+		let viewport = {
+			use engine::ui::oui::Widget;
+			use ui::AppStateView;
+			//let launch_screen = crate::ui::launch::Launch::new().arclocked();
+			let viewport = ui::AppStateViewport::new()
+				.with_root(crate::ui::home::Home::new().arclocked())
+				.arclocked();
+			ui::AppStateViewport::add_state_listener(&viewport, &app_state);
+			viewport
 		};
 
-		//let launch_screen = crate::ui::launch::Launch::new().arclocked();
-		let viewport = viewport::Viewport::new()
-			.with_root(crate::ui::home::Home::new().arclocked())
-			.arclocked();
-
-		engine::ui::System::new(engine.render_chain().unwrap())?
-			.with_engine_shaders()?
-			.with_all_fonts()?
-			//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
-			.with_tree_root(make_widget!(viewport::widget))
-			.with_context(viewport.clone())
-			.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
-			.attach_system(
-				&mut engine,
-				Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
-			)?;
+		{
+			use engine::ui::{oui::viewport, raui::make_widget};
+			engine::ui::System::new(engine.render_chain().unwrap())?
+				.with_engine_shaders()?
+				.with_all_fonts()?
+				//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
+				.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
+				.with_context(viewport.clone())
+				.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
+				.attach_system(
+					&mut engine,
+					Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
+				)?;
+		}
 
 		/*
 		let mut main_menu_music = engine::asset::WeightedIdList::default();

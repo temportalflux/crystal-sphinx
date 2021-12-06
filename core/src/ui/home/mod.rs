@@ -1,3 +1,4 @@
+use super::AppStateView;
 use engine::ui::{
 	oui::{
 		widget::{container::content_box, ImageBox, SizeBox},
@@ -10,8 +11,8 @@ pub struct Home {
 	root: content_box::Container,
 }
 
-impl Home {
-	pub fn new() -> Self {
+impl AppStateView for Home {
+	fn new() -> Self {
 		let root = content_box::Container::new()
 			.with_slot(
 				content_box::Slot::from(
