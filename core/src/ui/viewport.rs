@@ -56,6 +56,7 @@ impl AppStateViewport {
 			(state, Box::new(|| TWidget::new().arclocked()))
 		}
 		vec![
+			wrap_state::<crate::ui::launch::Launch>(Launching),
 			wrap_state::<crate::ui::home::Home>(MainMenu),
 			wrap_state::<crate::ui::loading::Loading>(LoadingWorld),
 		]
@@ -70,9 +71,14 @@ impl AppStateViewport {
 			for presentation in Self::presentation_list().into_iter() {
 				let callback_viewport = viewport.clone();
 				let ui_instantiator = presentation.1;
+				log::debug!(
+					"Adding viewport callback for transition into {:?}",
+					presentation.0
+				);
 				app_state.add_callback(
 					OperationKey(None, Some(Enter), Some(presentation.0)),
 					move |_operation| {
+						log::debug!("Instinating ui root for {:?}", _operation.next());
 						if let Ok(mut viewport) = callback_viewport.write() {
 							viewport.set_root(ui_instantiator());
 						}

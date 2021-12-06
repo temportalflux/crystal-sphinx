@@ -120,7 +120,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				.as_graphics()?,
 		);
 
-		let app_state = app::state::Machine::new(app::state::State::MainMenu).arclocked();
+		let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
 		loading::TaskLoadWorld::add_state_listener(&app_state);
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
@@ -138,16 +138,18 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			_egui_ui = Some(ui);
 		}
 
-		let viewport = {
-			use engine::ui::oui::Widget;
-			use ui::AppStateView;
-			//let launch_screen = crate::ui::launch::Launch::new().arclocked();
-			let viewport = ui::AppStateViewport::new()
-				.with_root(crate::ui::home::Home::new().arclocked())
-				.arclocked();
-			ui::AppStateViewport::add_state_listener(&viewport, &app_state);
-			viewport
-		};
+		let viewport = ui::AppStateViewport::new().arclocked();
+		// initial UI is added when a callback matching the initial state is added to the app-state-machine
+		ui::AppStateViewport::add_state_listener(&viewport, &app_state);
+		
+		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
+		{
+			let thread_app_state = app_state.clone();
+			std::thread::spawn(move || {
+				std::thread::sleep(std::time::Duration::from_secs(3));
+				thread_app_state.write().unwrap().transition_to(app::state::State::MainMenu, None);
+			});
+		}
 
 		{
 			use engine::ui::{oui::viewport, raui::make_widget};

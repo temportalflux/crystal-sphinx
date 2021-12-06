@@ -5,6 +5,7 @@ use std::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum State {
+	Launching,
 	/// In the out-of-game main menus.
 	MainMenu,
 	/// Loading or creating a local world.
@@ -33,11 +34,16 @@ pub type TransitionData = Option<Box<dyn std::any::Any + Send + Sync>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OperationKey(pub Option<State>, pub Option<Transition>, pub Option<State>);
-pub struct Operation<'transition>(State, Transition, State, &'transition TransitionData);
+pub struct Operation<'transition>(
+	Option<State>,
+	Transition,
+	State,
+	&'transition TransitionData,
+);
 pub type FnOperation = Box<dyn Fn(&Operation) + Send + Sync>;
 
 impl<'transition> Operation<'transition> {
-	pub fn prev(&self) -> &State {
+	pub fn prev(&self) -> &Option<State> {
 		&self.0
 	}
 
@@ -55,8 +61,12 @@ impl<'transition> Operation<'transition> {
 
 	fn all_keys(&self) -> Vec<OperationKey> {
 		let mut keys = Vec::new();
-		for transition in [None, Some(*self.transition())] {
-			for prev in [None, Some(*self.prev())] {
+		let mut prev_list = vec![None];
+		if self.prev().is_some() {
+			prev_list.push(*self.prev());
+		}
+		for prev in prev_list.into_iter() {
+			for transition in [None, Some(*self.transition())] {
 				for next in [None, Some(*self.next())] {
 					keys.push(OperationKey(prev, transition, next));
 				}
@@ -112,9 +122,19 @@ impl Machine {
 
 		let prev_state = self.state;
 		log::info!(target: "app-state", "Transitioning from {:?} to {:?}", prev_state, next_state);
-		self.dispatch_callback(Operation(prev_state, Transition::Exit, next_state, &data));
+		self.dispatch_callback(Operation(
+			Some(prev_state),
+			Transition::Exit,
+			next_state,
+			&data,
+		));
 		self.state = next_state;
-		self.dispatch_callback(Operation(prev_state, Transition::Enter, next_state, &data));
+		self.dispatch_callback(Operation(
+			Some(prev_state),
+			Transition::Enter,
+			next_state,
+			&data,
+		));
 
 		let _completed_transition = self.pending_transition.take();
 
@@ -127,6 +147,10 @@ impl Machine {
 	where
 		F: Fn(&Operation) + Send + Sync + 'static,
 	{
+		if key.2 == Some(self.state) && key.1 == Some(Transition::Enter) {
+			callback(&Operation(None, Transition::Enter, self.state, &None));
+		}
+
 		if !self.callbacks.contains_key(&key) {
 			self.callbacks.insert(key.clone(), Vec::new());
 		}

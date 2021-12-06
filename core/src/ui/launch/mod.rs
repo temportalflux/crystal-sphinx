@@ -1,3 +1,4 @@
+use super::AppStateView;
 use engine::{
 	asset::statics,
 	ui::{
@@ -10,8 +11,8 @@ pub struct Launch {
 	text: widget::Text,
 }
 
-impl Launch {
-	pub fn new() -> Self {
+impl AppStateView for Launch {
+	fn new() -> Self {
 		Self {
 			text: widget::Text::new()
 				.with_text("Loading...".to_owned())
