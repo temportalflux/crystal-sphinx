@@ -9,7 +9,10 @@ pub struct Connect {
 
 impl Connect {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
-		Self { app_state, url: "127.0.0.1:25565".to_string() }
+		Self {
+			app_state,
+			url: "127.0.0.1:25565".to_string(),
+		}
 	}
 }
 

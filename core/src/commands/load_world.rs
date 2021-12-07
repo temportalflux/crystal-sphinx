@@ -15,9 +15,17 @@ impl WorldOption {
 				let seed = chrono::prelude::Utc::now()
 					.format("%Y%m%d%H%M%S")
 					.to_string();
-				crate::loading::Instruction::Create("tmp".to_string(), seed)
+				crate::loading::Instruction {
+					name: seed.to_owned(),
+					seed: Some(seed),
+					mode: engine::network::mode::Set::all(),
+				}
 			}
-			Self::Path(path) => crate::loading::Instruction::Load(path.clone()),
+			Self::Path(path) => crate::loading::Instruction {
+				name: path.clone(),
+				seed: None,
+				mode: engine::network::mode::Set::all(),
+			},
 		}))
 	}
 }

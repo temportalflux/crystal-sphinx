@@ -5,7 +5,10 @@ pub use handshake::*;
 
 mod connection;
 
-pub fn register_types(builder: &mut network::Builder, app_state: &crate::app::state::ArcLockMachine) {
+pub fn register_types(
+	builder: &mut network::Builder,
+	app_state: &crate::app::state::ArcLockMachine,
+) {
 	use crate::server::user;
 	let auth_cache = user::pending::Cache::default().arclocked();
 	let active_cache = user::active::Cache::default().arclocked();

@@ -24,6 +24,7 @@ impl Command for UnloadWorld {
 				.write()
 				.unwrap()
 				.transition_to(app::state::State::Unloading, None);
+			let _ = engine::network::Network::stop();
 		}
 	}
 }

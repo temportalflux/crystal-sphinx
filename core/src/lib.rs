@@ -80,26 +80,20 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	let mut engine = engine::Engine::new()?;
 	engine.scan_paks()?;
-	input::init();
+
+	let is_client = std::env::args().any(|arg| arg == "-client");
+	let is_server = std::env::args().any(|arg| arg == "-server");
+	assert_ne!(is_client, is_server);
 
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
-	loading::TaskLoadWorld::add_state_listener(&app_state);
 	loading::TaskUnloadWorld::add_state_listener(&app_state);
 
-	{
-		use engine::network::mode::Kind;
-		let net_builder = network::create_builder(&app_state);
-		if net_builder.data().is_dedicated(Kind::Server) {
-			net_builder.spawn()?;
-			if let Ok(mut guard) = server::Server::write() {
-				let mut server = server::Server::load("tmp")?;
-				server.start_loading_world(None);
-				(*guard) = Some(server);
-			}
-		}
-	}
+	if is_server {
+		loading::TaskLoadWorld::load_dedicated_server(&app_state);
+	} else {
+		input::init();
+		loading::TaskLoadWorld::add_state_listener(&app_state);
 
-	if engine::network::Network::local_data().is_client() {
 		if let Ok(mut guard) = account::ClientRegistry::write() {
 			(*guard).scan_accounts()?;
 			let user_name = std::env::args()

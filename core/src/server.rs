@@ -116,8 +116,7 @@ impl Server {
 		self.saved_users.get(id)
 	}
 
-	pub fn start_loading_world(&mut self, seed: Option<&String>) {
-
+	pub fn start_loading_world(&mut self, seed: &Option<String>) {
+		log::debug!(target: "server", "TODO loading world");
 	}
-
 }

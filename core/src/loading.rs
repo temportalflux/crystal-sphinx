@@ -1,26 +1,13 @@
 use crate::app;
+use engine::network::mode;
 use futures::future::Future;
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Clone)]
-pub enum Instruction {
-	Create(/*name*/ String, /*seed*/ String),
-	Load(/*name*/ String),
-}
-
-impl Instruction {
-	pub fn name(&self) -> &String {
-		match self {
-			Self::Create(ref name, _) => &name,
-			Self::Load(ref name) => &name,
-		}
-	}
-	pub fn seed(&self) -> Option<&String> {
-		match self {
-			Self::Create(_, ref seed) => Some(&seed),
-			Self::Load(_) => None,
-		}
-	}
+pub struct Instruction {
+	pub name: String,
+	pub seed: Option<String>,
+	pub mode: mode::Set,
 }
 
 struct State {
@@ -52,6 +39,16 @@ impl Future for TaskLoadWorld {
 }
 
 impl TaskLoadWorld {
+	pub fn load_dedicated_server(app_state: &Arc<RwLock<app::state::Machine>>) {
+		Self::new(app_state.clone())
+			.instruct(Instruction {
+				name: "tmp".to_owned(),
+				seed: None,
+				mode: mode::Kind::Server.into(),
+			})
+			.send_to(engine::task::sender());
+	}
+
 	pub fn add_state_listener(app_state: &Arc<RwLock<app::state::Machine>>) {
 		use app::state::{State::*, Transition::*, *};
 		let app_state_for_loader = app_state.clone();
@@ -82,30 +79,24 @@ impl TaskLoadWorld {
 	}
 
 	pub fn instruct(self, instruction: Instruction) -> Self {
-		match instruction {
-			Instruction::Create(ref name, ref seed) => {
-				log::warn!(target: "world-loader", "Creating world named \"{}\" with seed({})", name, seed);
-			}
-			Instruction::Load(ref name) => {
-				log::warn!(target: "world-loader", "Loading world at \"{}\"", name);
-			}
-		}
+		log::warn!(target: "world-loader", "Loading world at \"{}\" with seed {:?}", instruction.name, instruction.seed);
 
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
 		std::thread::spawn(move || {
-			use crate::server::Server;
-			
+			use engine::network::Network;
+
 			// TODO: Kick off a loading task, once data is saved to disk
 			std::thread::sleep(std::time::Duration::from_secs(3));
-			
-			let net_builder = crate::network::create_builder(&thread_app_state);
-			assert!(net_builder.data().is_server());
-			let _ = net_builder.spawn();
-			if let Ok(mut server) = Server::load(instruction.name()) {
-				server.start_loading_world(instruction.seed());
-				if let Ok(mut guard) = Server::write() {
-					(*guard) = Some(server);
+
+			let _ = crate::network::create(&thread_app_state, instruction.mode).spawn();
+			if Network::local_data().is_server() {
+				use crate::server::Server;
+				if let Ok(mut server) = Server::load(&instruction.name) {
+					server.start_loading_world(&instruction.seed);
+					if let Ok(mut guard) = Server::write() {
+						(*guard) = Some(server);
+					}
 				}
 			}
 
