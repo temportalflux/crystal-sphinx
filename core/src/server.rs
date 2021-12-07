@@ -1,9 +1,9 @@
-use crate::account;
+use crate::{account, world::ArcLockDatabase};
 use engine::utility::{singleton, AnyError, VoidResult};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
+	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak},
 };
 
 static LOG: &'static str = "server";
@@ -14,6 +14,7 @@ pub struct Server {
 	root_dir: PathBuf,
 	auth_key: account::Key,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
+	world: Option<ArcLockDatabase>,
 }
 
 impl Server {
@@ -45,6 +46,7 @@ impl Server {
 			root_dir: savegame_path.to_owned(),
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
+			world: None,
 		})
 	}
 
@@ -116,7 +118,17 @@ impl Server {
 		self.saved_users.get(id)
 	}
 
-	pub fn start_loading_world(&mut self, seed: &Option<String>) {
-		log::debug!(target: "server", "TODO loading world");
+	fn world_path(mut savegame_path: PathBuf) -> PathBuf {
+		savegame_path.push("world");
+		savegame_path
+	}
+
+	pub fn start_loading_world(&mut self) -> Weak<engine::task::Task> {
+		use crate::world::Database;
+		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
+		let arc_world = Arc::new(RwLock::new(world));
+		let task = Database::start_loading(&arc_world);
+		self.world = Some(arc_world);
+		task
 	}
 }

@@ -2,17 +2,17 @@ use super::Command;
 use crate::app;
 use std::sync::{Arc, RwLock};
 
-pub struct UnloadWorld {
+pub struct UnloadNetwork {
 	app_state: Arc<RwLock<app::state::Machine>>,
 }
 
-impl UnloadWorld {
+impl UnloadNetwork {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
 		Self { app_state }
 	}
 }
 
-impl Command for UnloadWorld {
+impl Command for UnloadNetwork {
 	fn is_allowed(&self) -> bool {
 		let current_state = self.app_state.read().unwrap().get();
 		current_state == app::state::State::InGame

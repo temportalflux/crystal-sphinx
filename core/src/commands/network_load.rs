@@ -11,19 +11,12 @@ pub enum WorldOption {
 impl WorldOption {
 	fn to_transition_data(&self) -> app::state::TransitionData {
 		Some(Box::new(match self {
-			Self::New => {
-				let seed = chrono::prelude::Utc::now()
-					.format("%Y%m%d%H%M%S")
-					.to_string();
-				crate::loading::Instruction {
-					name: seed.to_owned(),
-					seed: Some(seed),
-					mode: engine::network::mode::Set::all(),
-				}
-			}
-			Self::Path(path) => crate::loading::Instruction {
+			Self::New => crate::task::network::Instruction {
+				name: "tmp".to_owned(),
+				mode: engine::network::mode::Set::all(),
+			},
+			Self::Path(path) => crate::task::network::Instruction {
 				name: path.clone(),
-				seed: None,
 				mode: engine::network::mode::Set::all(),
 			},
 		}))
@@ -39,13 +32,13 @@ impl std::fmt::Display for WorldOption {
 	}
 }
 
-pub struct LoadWorld {
+pub struct LoadNetwork {
 	app_state: Arc<RwLock<app::state::Machine>>,
 	selected_world: WorldOption,
 	options: Vec<WorldOption>,
 }
 
-impl LoadWorld {
+impl LoadNetwork {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
 		let options = vec![WorldOption::New]; // TODO: get the list of worlds from disk (saving a world isn't implemented yet)
 		Self {
@@ -63,7 +56,7 @@ impl LoadWorld {
 	}
 }
 
-impl Command for LoadWorld {
+impl Command for LoadNetwork {
 	fn is_allowed(&self) -> bool {
 		let current_state = self.app_state.read().unwrap().get();
 		current_state == app::state::State::MainMenu

@@ -39,10 +39,9 @@ pub mod input;
 pub mod network;
 pub mod plugin;
 pub mod server;
+pub mod task;
 pub mod ui;
 pub mod world;
-
-mod loading;
 
 use std::sync::{Arc, RwLock};
 
@@ -86,13 +85,13 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	assert_ne!(is_client, is_server);
 
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
-	loading::TaskUnloadWorld::add_state_listener(&app_state);
+	task::network::Unload::add_state_listener(&app_state);
 
 	if is_server {
-		loading::TaskLoadWorld::load_dedicated_server(&app_state);
+		task::network::Load::load_dedicated_server(&app_state);
 	} else {
 		input::init();
-		loading::TaskLoadWorld::add_state_listener(&app_state);
+		task::network::Load::add_state_listener(&app_state);
 
 		if let Ok(mut guard) = account::ClientRegistry::write() {
 			(*guard).scan_accounts()?;

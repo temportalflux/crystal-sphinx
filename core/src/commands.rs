@@ -4,11 +4,15 @@ pub use debug_window::*;
 mod connect;
 pub use connect::*;
 
-mod load_world;
-pub use load_world::*;
+mod network_load;
+pub use network_load::*;
+mod network_unload;
+pub use network_unload::*;
 
-mod unload_world;
-pub use unload_world::*;
+mod world_load;
+pub use world_load::*;
+mod world_unload;
+pub use world_unload::*;
 
 mod command;
 pub use command::*;
@@ -16,8 +20,8 @@ pub use command::*;
 use std::sync::{Arc, Mutex, RwLock};
 pub fn create_list(app_state: &Arc<RwLock<crate::app::state::Machine>>) -> CommandList {
 	let mut cmds: Vec<ArctexCommand> = vec![];
-	cmds.push(LoadWorld::new(app_state.clone()).as_arctex());
-	cmds.push(UnloadWorld::new(app_state.clone()).as_arctex());
+	cmds.push(LoadNetwork::new(app_state.clone()).as_arctex());
+	cmds.push(UnloadNetwork::new(app_state.clone()).as_arctex());
 	cmds.push(Connect::new(app_state.clone()).as_arctex());
 	Arc::new(Mutex::new(cmds))
 }
