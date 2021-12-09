@@ -2,7 +2,7 @@ use super::Instruction;
 use crate::app;
 use engine::{
 	network::mode,
-	task::{ArctexState, ScheduledTask, Semaphore},
+	task::{ArctexState, ScheduledTask},
 };
 use std::{
 	pin::Pin,
@@ -70,26 +70,22 @@ impl Load {
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
 		std::thread::spawn(move || {
-			use engine::{network::Network, task};
+			use engine::network::Network;
 
 			// TODO: Kick off a loading task, once data is saved to disk
 			std::thread::sleep(std::time::Duration::from_secs(3));
-
-			let mut semaphores: Vec<Semaphore> = vec![];
 
 			let _ = crate::network::create(&thread_app_state, instruction.mode).spawn();
 			if Network::local_data().is_server() {
 				use crate::server::Server;
 				if let Ok(mut server) = Server::load(&instruction.name) {
-					let world_loading_semaphore = server.start_loading_world();
-					semaphores.push(world_loading_semaphore);
+					server.start_loading_world();
 					if let Ok(mut guard) = Server::write() {
 						(*guard) = Some(server);
 					}
 				}
 			}
 
-			task::wait_for_all(&mut semaphores, std::time::Duration::from_millis(100));
 			thread_state.lock().unwrap().mark_complete();
 		});
 		self

@@ -123,12 +123,13 @@ impl Server {
 		savegame_path
 	}
 
-	pub fn start_loading_world(&mut self) -> engine::task::Semaphore {
+	pub fn start_loading_world(&mut self) {
 		use crate::world::Database;
 		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
+
 		let arc_world = Arc::new(RwLock::new(world));
-		let semaphore = Database::start_loading(&arc_world);
+		Database::load_origin_chunk(&arc_world);
+
 		self.world = Some(arc_world);
-		semaphore
 	}
 }
