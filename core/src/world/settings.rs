@@ -13,4 +13,3 @@ impl Settings {
 			.to_string()
 	}
 }
-

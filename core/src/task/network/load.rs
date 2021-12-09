@@ -2,11 +2,11 @@ use super::Instruction;
 use crate::app;
 use engine::{
 	network::mode,
-	task::{ArctexState, ScheduledTask},
+	task::{ArctexState, ScheduledTask, Semaphore},
 };
 use std::{
 	pin::Pin,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 	task::{Context, Poll},
 };
 
@@ -70,30 +70,26 @@ impl Load {
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
 		std::thread::spawn(move || {
-			use engine::network::Network;
+			use engine::{network::Network, task};
 
 			// TODO: Kick off a loading task, once data is saved to disk
 			std::thread::sleep(std::time::Duration::from_secs(3));
 
-			let mut derived_tasks: Vec<Weak<engine::task::Task>> = vec![];
+			let mut semaphores: Vec<Semaphore> = vec![];
 
 			let _ = crate::network::create(&thread_app_state, instruction.mode).spawn();
 			if Network::local_data().is_server() {
 				use crate::server::Server;
 				if let Ok(mut server) = Server::load(&instruction.name) {
-					let task_load_world = server.start_loading_world();
-					derived_tasks.push(task_load_world);
+					let world_loading_semaphore = server.start_loading_world();
+					semaphores.push(world_loading_semaphore);
 					if let Ok(mut guard) = Server::write() {
 						(*guard) = Some(server);
 					}
 				}
 			}
 
-			while !derived_tasks.is_empty() {
-				std::thread::sleep(std::time::Duration::from_millis(100));
-				derived_tasks.retain(|weak| weak.strong_count() > 0);
-			}
-
+			task::wait_for_all(&mut semaphores, std::time::Duration::from_millis(100));
 			thread_state.lock().unwrap().mark_complete();
 		});
 		self

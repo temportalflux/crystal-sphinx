@@ -3,7 +3,7 @@ use engine::utility::{singleton, AnyError, VoidResult};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak},
+	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
 static LOG: &'static str = "server";
@@ -123,12 +123,12 @@ impl Server {
 		savegame_path
 	}
 
-	pub fn start_loading_world(&mut self) -> Weak<engine::task::Task> {
+	pub fn start_loading_world(&mut self) -> engine::task::Semaphore {
 		use crate::world::Database;
 		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
 		let arc_world = Arc::new(RwLock::new(world));
-		let task = Database::start_loading(&arc_world);
+		let semaphore = Database::start_loading(&arc_world);
 		self.world = Some(arc_world);
-		task
+		semaphore
 	}
 }

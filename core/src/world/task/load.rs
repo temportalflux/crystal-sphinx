@@ -1,4 +1,4 @@
-use super::super::{ArcLockDatabase};
+use super::super::ArcLockDatabase;
 use engine::{
 	task::{ArctexState, ScheduledTask},
 	utility::{spawn_thread, VoidResult},
@@ -37,20 +37,20 @@ impl Load {
 			if !world.root_path.exists() {
 				std::fs::create_dir_all(&world.root_path)?;
 			}
-	
+
 			// Load settings from disk, if it exists
 			let settings_path = world.settings_path();
 			if settings_path.exists() {
 				let raw = std::fs::read_to_string(&settings_path)?;
 				world.settings = serde_json::from_str(&raw)?;
 			}
-			
+
 			// Auto-save loaded settings to file
 			{
 				let json = serde_json::to_string_pretty(&world.settings)?;
 				std::fs::write(&settings_path, json)?;
 			}
-	
+
 			thread_state.lock().unwrap().mark_complete();
 			Ok(())
 		});

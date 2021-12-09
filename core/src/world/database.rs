@@ -1,9 +1,9 @@
-use engine::task::{ScheduledTask, Task};
+use super::Settings;
+use engine::task::{ScheduledTask, Semaphore};
 use std::{
 	path::PathBuf,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
-use super::Settings;
 
 pub type ArcLockDatabase = Arc<RwLock<Database>>;
 
@@ -16,7 +16,10 @@ pub struct Database {
 
 impl Database {
 	pub fn new(root_path: PathBuf) -> Self {
-		Self { root_path, settings: Settings::default() }
+		Self {
+			root_path,
+			settings: Settings::default(),
+		}
 	}
 
 	pub fn settings_path(&self) -> PathBuf {
@@ -25,7 +28,7 @@ impl Database {
 		path
 	}
 
-	pub fn start_loading(arc_world: &ArcLockDatabase) -> Weak<Task> {
+	pub fn start_loading(arc_world: &ArcLockDatabase) -> Semaphore {
 		super::task::Load::new(&arc_world).send_to(engine::task::sender())
 	}
 }
