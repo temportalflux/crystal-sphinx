@@ -34,6 +34,7 @@ use engine::{utility::VoidResult, Application};
 
 pub mod account;
 pub mod app;
+pub mod block;
 pub mod commands;
 pub mod input;
 pub mod network;
@@ -53,6 +54,11 @@ impl Application for CrystalSphinx {
 	fn version() -> semver::Version {
 		semver::Version::parse(std::env!("CARGO_PKG_VERSION")).unwrap()
 	}
+}
+
+pub fn register_asset_types() {
+	let mut type_reg = engine::asset::TypeRegistry::get().write().unwrap();
+	type_reg.register::<block::Block>();
 }
 
 pub fn run(config: plugin::Config) -> VoidResult {
@@ -78,6 +84,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	}
 
 	let mut engine = engine::Engine::new()?;
+	crate::register_asset_types();
 	engine.scan_paks()?;
 
 	let is_client = std::env::args().any(|arg| arg == "-client");

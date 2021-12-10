@@ -1,7 +1,11 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
 use engine::{utility::VoidResult, Application};
-use temportal_engine as engine;
-use temportal_engine_editor as editor;
+
+pub mod block;
+
+pub fn register_asset_types(manager: &mut editor::asset::Manager) {
+	manager.register::<crystal_sphinx::block::Block, block::BlockEditorMetadata>();
+}
 
 pub fn run(_config: plugin::Config) -> VoidResult {
 	#[cfg(feature = "profile")]
@@ -14,8 +18,10 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 		Some("_editor"),
 	))?;
 	let mut engine = engine::Engine::new()?;
+	crystal_sphinx::register_asset_types();
 
 	editor::Editor::initialize::<CrystalSphinx>()?;
+	crate::register_asset_types(editor::Editor::write().asset_manager_mut());
 	if editor::Editor::read().run_commandlets()? {
 		return Ok(());
 	}

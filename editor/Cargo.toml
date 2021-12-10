@@ -10,7 +10,9 @@ edition = "2018"
 profile = []
 
 [dependencies]
-temportal-engine = { path = "../temportal-engine/engine" }
-temportal-engine-editor = { path = "../temportal-engine/editor" }
 crystal-sphinx = { path = "../core" }
+engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
+editor = { path = "../temportal-engine/editor", package = "temportal-engine-editor" }
 log = "0.4.14"
+rmp = "0.8"
+rmp-serde = "0.15"
