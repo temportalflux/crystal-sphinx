@@ -23,11 +23,11 @@
 //!
 //! Rust's support for dyynamically-loaded plugins (*.dll, etc) is not great yet. As such, plugins cannot be loaded at runtime without increasing the complexity for plugin creators by orders of magnitude. Therefore, the game and editor must be compiled with all desired plugins/crates ahead of time. This offloads some overhead to plugin-pack creators, but can be supplemented by better tooling on that end of the toolchain.
 //! Links for reference on DLLs:
-//! - https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html
-//! - https://github.com/rust-lang/log/issues/66
-//! - https://github.com/rust-lang/log/issues/421
+//! - `<https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html>`
+//! - `<https://github.com/rust-lang/log/issues/66>`
+//! - `<https://github.com/rust-lang/log/issues/421>`
 //!
-//! https://grafana.com/ could be neat for monitoring server usage
+//! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
 use engine::{utility::VoidResult, Application};

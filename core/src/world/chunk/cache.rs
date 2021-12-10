@@ -152,7 +152,11 @@ impl Cache {
 	fn sync_load_chunk(cache: &ArcLockCache, ticket: ArctexTicket) -> (bool, ArcLockChunk) {
 		let coordinate: Point3<i64> = *ticket.lock().unwrap().coordinate();
 
-		let loaded_chunk = cache.read().unwrap().find(&coordinate).map(|arc| arc.clone());
+		let loaded_chunk = cache
+			.read()
+			.unwrap()
+			.find(&coordinate)
+			.map(|arc| arc.clone());
 		let (freshly_loaded, arc_chunk) = match loaded_chunk {
 			Some(weak_chunk) => {
 				let some_arc_chunk = weak_chunk.upgrade();
