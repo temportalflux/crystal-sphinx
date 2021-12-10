@@ -1,0 +1,23 @@
+asset-type "render-pass"
+
+// An ordered list of subpasses that are processed in the render pass
+subpasses {
+	world "crystal-sphinx:render_pass/world_subpass"
+	ui "crystal-sphinx:render_pass/ui_subpass"
+	egui "crystal-sphinx:render_pass/egui_subpass"
+}
+
+dependencies {
+	link {
+		first stage=(PipelineStage)"ColorAttachmentOutput"
+		then "world" stage="ColorAttachmentOutput" access=(Access)"ColorAttachmentWrite"
+	}
+	link {
+		first "world" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+		then "ui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+	}
+	link {
+		first "ui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+		then "egui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+	}
+}
