@@ -1,7 +1,7 @@
 use super::Command;
 use crate::app;
-use std::sync::{Arc, RwLock};
 use engine::network::{mode, LocalData};
+use std::sync::{Arc, RwLock};
 
 #[derive(PartialEq, Clone)]
 pub enum WorldOption {
@@ -11,7 +11,7 @@ pub enum WorldOption {
 
 impl WorldOption {
 	fn to_transition_data(&self) -> app::state::TransitionData {
-		use crate::task::network::{Directive, Instruction};
+		use crate::network::task::{Directive, Instruction};
 		Some(Box::new(match self {
 			Self::New => Instruction {
 				mode: mode::Set::all(),

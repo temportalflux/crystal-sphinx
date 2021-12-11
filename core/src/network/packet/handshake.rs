@@ -414,7 +414,7 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				// TODO: If self is now authed, display "connecting" progress screen and wait for additional info from server
 				// 				once complete, display the world and HUD ui
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
-				
+
 				Ok(())
 			}
 			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),

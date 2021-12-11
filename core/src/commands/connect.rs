@@ -1,7 +1,7 @@
 use super::Command;
 use crate::{
 	app,
-	task::network::{Directive, Instruction},
+	network::task::{Directive, Instruction},
 };
 use engine::network::{mode, LocalData};
 use std::sync::{Arc, RwLock};

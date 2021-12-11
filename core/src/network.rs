@@ -1,5 +1,6 @@
 pub mod packet;
 pub mod storage;
+pub mod task;
 
 use crate::{app::state::ArcLockMachine, network::storage::ArcLockStorage};
 use engine::network::{mode, Builder};

@@ -41,7 +41,7 @@ impl Load {
 				port: LocalData::get_port_from_args(),
 				directive: Directive::LoadWorld("tmp".to_owned()),
 			})
-			.send_to(engine::task::sender());
+			.join(std::time::Duration::from_millis(100 * 1), None);
 	}
 
 	pub fn add_state_listener(app_state: &ArcLockMachine, storage: &ArcLockStorage) {
@@ -110,7 +110,10 @@ impl Load {
 				}
 			}
 
+			std::thread::sleep(std::time::Duration::from_millis(1000 * 2));
+
 			thread_state.lock().unwrap().mark_complete();
+			log::debug!("load network thread complete");
 		});
 		self
 	}
