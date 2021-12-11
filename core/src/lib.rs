@@ -39,7 +39,6 @@ pub mod commands;
 pub mod input;
 pub mod network;
 pub mod plugin;
-pub mod server;
 pub mod task;
 pub mod ui;
 pub mod world;
@@ -91,14 +90,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);
 
+	let network_storage = network::storage::ArcLockStorage::default();
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
 	task::network::Unload::add_state_listener(&app_state);
 
 	if is_server {
-		task::network::Load::load_dedicated_server(&app_state);
+		task::network::Load::load_dedicated_server(&app_state, &network_storage);
 	} else {
 		input::init();
-		task::network::Load::add_state_listener(&app_state);
+		task::network::Load::add_state_listener(&app_state, &network_storage);
 
 		if let Ok(mut guard) = account::ClientRegistry::write() {
 			(*guard).scan_accounts()?;

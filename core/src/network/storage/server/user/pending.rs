@@ -1,4 +1,4 @@
-use crate::account;
+use crate::{account, network::storage::server};
 use std::{
 	net::SocketAddr,
 	sync::{
@@ -77,7 +77,7 @@ impl User {
 							>= USER_TIMEOUT_TOTAL_MS
 						{
 							log::info!(
-								target: crate::server::LOG,
+								target: server::LOG,
 								"Authentication for {} has timed out",
 								address
 							);
@@ -90,7 +90,7 @@ impl User {
 						thread::sleep(USER_TIMEOUT_CYCLE_MS);
 					}
 					log::trace!(
-						target: crate::server::LOG,
+						target: server::LOG,
 						"thread \"{}\" has concluded",
 						thread_name
 					);

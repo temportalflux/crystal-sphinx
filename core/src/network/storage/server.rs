@@ -1,35 +1,21 @@
 use crate::{account, world::ArcLockDatabase};
-use engine::utility::{singleton, AnyError, VoidResult};
+use engine::utility::{AnyError, VoidResult};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
-	sync::{Arc, LockResult, RwLock, RwLockReadGuard, RwLockWriteGuard},
+	sync::{Arc, RwLock},
 };
 
 static LOG: &'static str = "server";
 
 pub mod user;
 
+pub type ArcLockServer = Arc<RwLock<Server>>;
 pub struct Server {
 	root_dir: PathBuf,
 	auth_key: account::Key,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 	world: Option<ArcLockDatabase>,
-}
-
-impl Server {
-	fn get() -> &'static RwLock<Option<Self>> {
-		static mut INSTANCE: singleton::RwOptional<Server> = singleton::RwOptional::uninit();
-		unsafe { INSTANCE.get() }
-	}
-
-	pub fn write() -> LockResult<RwLockWriteGuard<'static, Option<Self>>> {
-		Self::get().write()
-	}
-
-	pub fn read() -> LockResult<RwLockReadGuard<'static, Option<Self>>> {
-		Self::get().read()
-	}
 }
 
 impl Server {

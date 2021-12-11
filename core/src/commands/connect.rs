@@ -1,5 +1,9 @@
 use super::Command;
-use crate::{app, network};
+use crate::{
+	app,
+	task::network::{Directive, Instruction},
+};
+use engine::network::{mode, LocalData};
 use std::sync::{Arc, RwLock};
 
 pub struct Connect {
@@ -26,11 +30,14 @@ impl Command for Connect {
 		ui.horizontal(|ui| {
 			ui.text_edit_singleline(&mut self.url);
 			if ui.button("Connect").clicked() {
-				self.app_state
-					.write()
-					.unwrap()
-					.transition_to(app::state::State::Connecting, None);
-				let _ = network::packet::Handshake::connect_to_server(&self.url);
+				self.app_state.write().unwrap().transition_to(
+					app::state::State::Connecting,
+					Some(Box::new(Instruction {
+						mode: mode::Kind::Client.into(),
+						port: LocalData::get_port_from_args(),
+						directive: Directive::Connect(self.url.clone()),
+					})),
+				);
 			}
 		});
 	}

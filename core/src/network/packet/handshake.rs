@@ -1,4 +1,10 @@
-use crate::{account, server};
+use crate::{
+	account,
+	network::storage::{
+		server::{user, ArcLockServer},
+		ArcLockStorage,
+	},
+};
 use engine::{
 	network::{
 		self,
@@ -14,8 +20,6 @@ use engine::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-
-use crate::server::user;
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -45,7 +49,6 @@ impl std::fmt::Display for Request {
 #[derive(Debug, Clone)]
 enum Error {
 	InvalidRequest(Request),
-	NoServerData,
 	CannotReadServerData,
 	ClientKeyDoesntMatch(account::Id),
 	ServerKeyCannotEncrypt,
@@ -57,7 +60,6 @@ impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		match self {
 			Self::InvalidRequest(request) => write!(f, "Invalid handshake request: {}", request),
-			Self::NoServerData => write!(f, "Cannot process handshake, no server data."),
 			Self::CannotReadServerData => write!(f, "Cannot read from server data."),
 			Self::ClientKeyDoesntMatch(account_id) => write!(f, "Client {} tried to authenticate, but their public key did not match a previous login.", account_id),
 			Self::ServerKeyCannotEncrypt => write!(f, "Server's auth key could not become a public key... something blew up... X_X"),
@@ -73,26 +75,24 @@ impl Handshake {
 		auth_cache: &user::pending::ArcLockCache,
 		active_cache: &user::active::ArcLockCache,
 		app_state: &crate::app::state::ArcLockMachine,
+		storage: &ArcLockStorage,
 	) {
 		use mode::Kind::*;
+
+		let process_auth_request = ProcessAuthRequest {
+			auth_cache: auth_cache.clone(),
+			active_cache: active_cache.clone(),
+			server: storage.read().unwrap().server().cloned(),
+		};
+
 		builder.register_bundle::<Handshake>(
 			EventProcessors::default()
-				.with(
-					Server,
-					ProcessAuthRequest {
-						auth_cache: auth_cache.clone(),
-						active_cache: active_cache.clone(),
-					},
-				)
+				.with(Server, process_auth_request.clone())
 				.with(Client, ReEncryptAuthToken(app_state.clone()))
 				.with(
 					mode::Set::all(),
 					AnyProcessor::new(vec![
-						ProcessAuthRequest {
-							auth_cache: auth_cache.clone(),
-							active_cache: active_cache.clone(),
-						}
-						.boxed(),
+						process_auth_request.boxed(),
 						ReEncryptAuthToken(app_state.clone()).boxed(),
 					]),
 				),
@@ -116,9 +116,17 @@ impl Handshake {
 	}
 }
 
+#[derive(Clone)]
 struct ProcessAuthRequest {
 	auth_cache: user::pending::ArcLockCache,
 	active_cache: user::active::ArcLockCache,
+	server: Option<ArcLockServer>,
+}
+
+impl ProcessAuthRequest {
+	fn server(&self) -> &ArcLockServer {
+		self.server.as_ref().unwrap()
+	}
 }
 
 impl Processor for ProcessAuthRequest {
@@ -149,16 +157,11 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 					connection.address,
 					account_meta.id
 				);
-				let (server_auth_key, user) = match server::Server::read() {
-					Ok(guard) => match &*guard {
-						Some(server) => (
-							server.auth_key().clone(),
-							server.find_user(&account_meta.id).cloned(),
-						),
-						None => {
-							return Err(Box::new(Error::NoServerData));
-						}
-					},
+				let (server_auth_key, user) = match self.server().read() {
+					Ok(server) => (
+						server.auth_key().clone(),
+						server.find_user(&account_meta.id).cloned(),
+					),
 					Err(_) => {
 						return Err(Box::new(Error::CannotReadServerData));
 					}
@@ -237,14 +240,9 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				// Wrapper function to try to decrypt an auth token,
 				// so that the error can be handled gracefully
 				// without sacrificing readability.
-				fn decrypt_token(bytes: &[u8]) -> Result<String, AnyError> {
-					let server_auth_key = match server::Server::read() {
-						Ok(guard) => match &*guard {
-							Some(server) => server.auth_key().clone(),
-							None => {
-								return Err(Box::new(Error::NoServerData));
-							}
-						},
+				fn decrypt_token(bytes: &[u8], server: &ArcLockServer) -> Result<String, AnyError> {
+					let server_auth_key = match server.read() {
+						Ok(server) => server.auth_key().clone(),
 						Err(_) => {
 							return Err(Box::new(Error::CannotReadServerData));
 						}
@@ -284,7 +282,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 
 				// Decrypt the token bytes and try to process authentication,
 				// handling the error case for a token beind undecryptable gracefully.
-				match decrypt_token(&reencrypted_token) {
+				match decrypt_token(&reencrypted_token, self.server()) {
 					Ok(decrypted_token) => {
 						// If the decrypted token does not match our records, they must be kicked.
 						if decrypted_token != *pending_user.token() {
@@ -308,16 +306,13 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 						// If there is not a race-condition, this will prevent the timeout from happening in the near future
 						pending_user.stop_timeout();
 
-						if let Ok(mut guard) = server::Server::write() {
-							if let Some(server) = &mut *guard {
-								if server.find_user(&pending_user.id()).is_none() {
-									server.add_user(user::saved::User::new(
-										&pending_user,
-										server.get_players_dir_path(),
-									));
-								}
-							} else {
-								return Err(Box::new(Error::NoServerData));
+						if let Ok(mut server) = self.server().write() {
+							if server.find_user(&pending_user.id()).is_none() {
+								let player_dir_path = server.get_players_dir_path();
+								server.add_user(user::saved::User::new(
+									&pending_user,
+									player_dir_path,
+								));
 							}
 						} else {
 							return Err(Box::new(Error::CannotReadServerData));
@@ -419,10 +414,7 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				// TODO: If self is now authed, display "connecting" progress screen and wait for additional info from server
 				// 				once complete, display the world and HUD ui
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
-				self.0
-					.write()
-					.unwrap()
-					.transition_to(crate::app::state::State::LoadingWorld, None);
+				
 				Ok(())
 			}
 			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),

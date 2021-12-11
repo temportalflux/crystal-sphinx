@@ -1,18 +1,24 @@
-use super::Instruction;
-use crate::app;
+use super::{Directive, Instruction};
+use crate::{
+	app::{self, state::ArcLockMachine},
+	network::{
+		packet::Handshake,
+		storage::{server::Server, ArcLockStorage},
+	},
+};
 use engine::{
-	network::mode,
+	network::{mode, LocalData},
 	task::{ArctexState, ScheduledTask},
 };
 use std::{
 	pin::Pin,
-	sync::{Arc, RwLock},
 	task::{Context, Poll},
 };
 
 pub struct Load {
-	app_state: Arc<RwLock<app::state::Machine>>,
 	state: ArctexState,
+	app_state: ArcLockMachine,
+	storage: ArcLockStorage,
 }
 
 impl ScheduledTask for Load {
@@ -28,61 +34,79 @@ impl futures::future::Future for Load {
 }
 
 impl Load {
-	pub fn load_dedicated_server(app_state: &Arc<RwLock<app::state::Machine>>) {
-		Self::new(app_state.clone())
+	pub fn load_dedicated_server(app_state: &ArcLockMachine, storage: &ArcLockStorage) {
+		Self::new(app_state.clone(), storage.clone())
 			.instruct(Instruction {
-				name: "tmp".to_owned(),
 				mode: mode::Kind::Server.into(),
+				port: LocalData::get_port_from_args(),
+				directive: Directive::LoadWorld("tmp".to_owned()),
 			})
 			.send_to(engine::task::sender());
 	}
 
-	pub fn add_state_listener(app_state: &Arc<RwLock<app::state::Machine>>) {
+	pub fn add_state_listener(app_state: &ArcLockMachine, storage: &ArcLockStorage) {
 		use app::state::{State::*, Transition::*, *};
-		let app_state_for_loader = app_state.clone();
-		app_state.write().unwrap().add_callback(
-			OperationKey(None, Some(Enter), Some(LoadingWorld)),
-			move |operation| {
-				let instruction = operation
-					.data()
-					.as_ref()
-					.unwrap()
-					.downcast_ref::<Instruction>()
-					.unwrap()
-					.clone();
-				Self::new(app_state_for_loader.clone())
-					.instruct(instruction)
-					.send_to(engine::task::sender());
-			},
-		);
+		for state in [LoadingWorld, Connecting].iter() {
+			let callback_app_state = app_state.clone();
+			let callback_storage = storage.clone();
+			app_state.write().unwrap().add_callback(
+				OperationKey(None, Some(Enter), Some(*state)),
+				move |operation| {
+					let instruction = operation
+						.data()
+						.as_ref()
+						.unwrap()
+						.downcast_ref::<Instruction>()
+						.unwrap()
+						.clone();
+					Self::new(callback_app_state.clone(), callback_storage.clone())
+						.instruct(instruction)
+						.send_to(engine::task::sender());
+				},
+			);
+		}
 	}
 
-	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
+	fn new(app_state: ArcLockMachine, storage: ArcLockStorage) -> Self {
 		Self {
-			app_state,
 			state: ArctexState::default(),
+			app_state,
+			storage,
 		}
 	}
 
 	pub fn instruct(self, instruction: Instruction) -> Self {
-		log::warn!(target: "world-loader", "Loading world at \"{}\"", instruction.name);
-
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
+		let thread_storage = self.storage.clone();
 		std::thread::spawn(move || {
-			use engine::network::Network;
-
-			// TODO: Kick off a loading task, once data is saved to disk
-			std::thread::sleep(std::time::Duration::from_secs(3));
-
-			let _ = crate::network::create(&thread_app_state, instruction.mode).spawn();
-			if Network::local_data().is_server() {
-				use crate::server::Server;
-				if let Ok(mut server) = Server::load(&instruction.name) {
-					server.start_loading_world();
-					if let Ok(mut guard) = Server::write() {
-						(*guard) = Some(server);
+			if instruction.mode.contains(mode::Kind::Server) {
+				let world_name = match &instruction.directive {
+					Directive::LoadWorld(world_name) => world_name,
+					_ => unimplemented!(),
+				};
+				log::warn!(target: "world-loader", "Loading world at \"{}\"", world_name);
+				if let Ok(server) = Server::load(&world_name) {
+					if let Ok(mut storage) = thread_storage.write() {
+						storage.set_server(server);
 					}
+				}
+			}
+			if instruction.mode.contains(mode::Kind::Client) {}
+
+			let _ = crate::network::create(instruction.mode, &thread_app_state, &thread_storage)
+				.with_port(instruction.port.unwrap_or(25565))
+				.spawn();
+			if let Ok(storage) = thread_storage.read() {
+				storage.start_loading();
+			}
+			if instruction.mode.contains(mode::Kind::Client) {
+				let url = match &instruction.directive {
+					Directive::Connect(url) => url,
+					_ => unimplemented!(),
+				};
+				if let Err(err) = Handshake::connect_to_server(&url) {
+					log::error!("{}", err);
 				}
 			}
 
