@@ -89,8 +89,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);
 
-	let network_storage = network::storage::ArcLockStorage::default();
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+	let network_storage = network::storage::Storage::new(&app_state);
 	network::task::Unload::add_state_listener(&app_state);
 
 	if is_server {

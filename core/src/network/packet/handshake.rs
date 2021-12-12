@@ -82,7 +82,7 @@ impl Handshake {
 		let process_auth_request = ProcessAuthRequest {
 			auth_cache: auth_cache.clone(),
 			active_cache: active_cache.clone(),
-			server: storage.read().unwrap().server().cloned(),
+			storage: storage.clone(),
 		};
 
 		builder.register_bundle::<Handshake>(
@@ -120,12 +120,13 @@ impl Handshake {
 struct ProcessAuthRequest {
 	auth_cache: user::pending::ArcLockCache,
 	active_cache: user::active::ArcLockCache,
-	server: Option<ArcLockServer>,
+	storage: ArcLockStorage,
 }
 
 impl ProcessAuthRequest {
-	fn server(&self) -> &ArcLockServer {
-		self.server.as_ref().unwrap()
+	fn server(&self) -> ArcLockServer {
+		let storage = self.storage.read().unwrap();
+		storage.server().as_ref().unwrap().clone()
 	}
 }
 
@@ -240,7 +241,7 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 				// Wrapper function to try to decrypt an auth token,
 				// so that the error can be handled gracefully
 				// without sacrificing readability.
-				fn decrypt_token(bytes: &[u8], server: &ArcLockServer) -> Result<String, AnyError> {
+				fn decrypt_token(bytes: &[u8], server: ArcLockServer) -> Result<String, AnyError> {
 					let server_auth_key = match server.read() {
 						Ok(server) => server.auth_key().clone(),
 						Err(_) => {

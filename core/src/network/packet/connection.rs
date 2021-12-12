@@ -1,4 +1,4 @@
-use crate::network::storage::server::user;
+use crate::network::storage::{server::user, ArcLockStorage};
 use engine::{
 	network::{self, event, mode, processor::Processor, LocalData},
 	utility::VoidResult,
@@ -9,15 +9,20 @@ pub fn register_bonus_processors(
 	auth_cache: &user::pending::ArcLockCache,
 	active_cache: &user::active::ArcLockCache,
 	app_state: &crate::app::state::ArcLockMachine,
+	storage: &ArcLockStorage,
 ) {
 	use event::Kind::*;
-	builder.add_processor(
-		Timeout,
-		vec![mode::Kind::Client].into_iter(),
-		ClientTimeout {
-			app_state: app_state.clone(),
-		},
-	);
+
+	for event in [Disconnected, Stop].iter() {
+		builder.add_processor(
+			event.clone(),
+			vec![mode::Kind::Client].into_iter(),
+			CloseClient {
+				app_state: app_state.clone(),
+				storage: storage.clone(),
+			},
+		);
+	}
 	builder.add_processor(
 		Disconnected,
 		mode::all().into_iter(),
@@ -29,20 +34,22 @@ pub fn register_bonus_processors(
 }
 
 #[derive(Clone)]
-struct ClientTimeout {
+struct CloseClient {
 	app_state: crate::app::state::ArcLockMachine,
+	storage: ArcLockStorage,
 }
 
-impl Processor for ClientTimeout {
+impl Processor for CloseClient {
 	fn process(
 		&self,
 		kind: &event::Kind,
 		_data: &mut Option<event::Data>,
 		_local_data: &LocalData,
 	) -> VoidResult {
-		if *kind == event::Kind::Timeout {
+		use crate::app::state::State::*;
+		if *kind == event::Kind::Disconnected || *kind == event::Kind::Stop {
 			if let Ok(mut app_state) = self.app_state.write() {
-				app_state.transition_to(crate::app::state::State::MainMenu, None);
+				app_state.transition_to(MainMenu, None);
 			}
 		}
 		Ok(())
@@ -62,7 +69,6 @@ impl Processor for RemoveUser {
 		data: &mut Option<event::Data>,
 		_local_data: &LocalData,
 	) -> VoidResult {
-		// TODO: Also destroy the network if this is a client?
 		if let Some(event::Data::Connection(connection)) = data {
 			if let Ok(mut auth_cache) = self.auth_cache.write() {
 				let _ = auth_cache.remove(&connection.address);

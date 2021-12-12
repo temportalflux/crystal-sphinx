@@ -3,7 +3,7 @@ use crate::{
 	app::{self, state::ArcLockMachine},
 	network::{
 		packet::Handshake,
-		storage::{server::Server, ArcLockStorage},
+		storage::{client::ArcLockClient, server::Server, ArcLockStorage},
 	},
 };
 use engine::{
@@ -85,14 +85,17 @@ impl Load {
 					Directive::LoadWorld(world_name) => world_name,
 					_ => unimplemented!(),
 				};
-				log::warn!(target: "world-loader", "Loading world at \"{}\"", world_name);
 				if let Ok(server) = Server::load(&world_name) {
 					if let Ok(mut storage) = thread_storage.write() {
 						storage.set_server(server);
 					}
 				}
 			}
-			if instruction.mode.contains(mode::Kind::Client) {}
+			if instruction.mode.contains(mode::Kind::Client) {
+				if let Ok(mut storage) = thread_storage.write() {
+					storage.set_client(ArcLockClient::default());
+				}
+			}
 
 			let _ = crate::network::create(instruction.mode, &thread_app_state, &thread_storage)
 				.with_port(instruction.port.unwrap_or(25565))
@@ -100,7 +103,7 @@ impl Load {
 			if let Ok(storage) = thread_storage.read() {
 				storage.start_loading();
 			}
-			if instruction.mode.contains(mode::Kind::Client) {
+			if instruction.mode == mode::Kind::Client {
 				let url = match &instruction.directive {
 					Directive::Connect(url) => url,
 					_ => unimplemented!(),
@@ -113,7 +116,6 @@ impl Load {
 			std::thread::sleep(std::time::Duration::from_millis(1000 * 2));
 
 			thread_state.lock().unwrap().mark_complete();
-			log::debug!("load network thread complete");
 		});
 		self
 	}

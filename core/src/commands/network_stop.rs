@@ -1,5 +1,6 @@
 use super::Command;
 use crate::app;
+use engine::network::{mode, Network};
 use std::sync::{Arc, RwLock};
 
 pub struct UnloadNetwork {
@@ -10,6 +11,10 @@ impl UnloadNetwork {
 	pub fn new(app_state: Arc<RwLock<app::state::Machine>>) -> Self {
 		Self { app_state }
 	}
+
+	fn is_dedicated_client(&self) -> bool {
+		Network::local_data().is_dedicated(mode::Kind::Client)
+	}
 }
 
 impl Command for UnloadNetwork {
@@ -19,11 +24,17 @@ impl Command for UnloadNetwork {
 	}
 
 	fn render(&mut self, ui: &mut egui::Ui) {
-		if ui.button("Unload World").clicked() {
+		use app::state::State::*;
+		let is_client = self.is_dedicated_client();
+		let (label, next_state) = match is_client {
+			true => ("Disconnect", Disconnecting),
+			false => ("Unload World", Unloading),
+		};
+		if ui.button(label).clicked() {
 			self.app_state
 				.write()
 				.unwrap()
-				.transition_to(app::state::State::Unloading, None);
+				.transition_to(next_state, None);
 			let _ = engine::network::Network::stop();
 		}
 	}

@@ -1,13 +1,12 @@
 mod debug_window;
 pub use debug_window::*;
 
-mod connect;
-pub use connect::*;
-
+mod network_connect;
+pub use network_connect::*;
 mod network_load;
 pub use network_load::*;
-mod network_unload;
-pub use network_unload::*;
+mod network_stop;
+pub use network_stop::*;
 
 mod world_load;
 pub use world_load::*;

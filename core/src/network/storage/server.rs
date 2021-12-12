@@ -61,6 +61,10 @@ impl Server {
 		Self::players_dir_path(self.root_dir.clone())
 	}
 
+	fn world_name(&self) -> &str {
+		self.root_dir.file_name().unwrap().to_str().unwrap()
+	}
+
 	fn load_saved_users(
 		path: &Path,
 	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>, AnyError> {
@@ -111,6 +115,8 @@ impl Server {
 
 	pub fn start_loading_world(&mut self) {
 		use crate::world::Database;
+
+		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
 		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
 
 		let arc_world = Arc::new(RwLock::new(world));

@@ -5,17 +5,25 @@ use std::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum State {
+	// Application is loading assets and systems.
 	Launching,
+
 	/// In the out-of-game main menus.
 	MainMenu,
-	/// Loading or creating a local world.
+
+	/// Loading or creating a local world (always a server, can also be a client).
 	LoadingWorld,
+	/// Player is closing a local world (always a server, can also be a client).
+	Unloading,
+
 	/// The network is connecting and waiting for world data from a server.
 	Connecting,
-	/// Player is in the world and can move at will.
+	// Player is disconnecting from (remote) a server-world (aka network is stopping).
+	Disconnecting,
+
+	/// World is active.
+	/// Can be on a dedicated server, dedicated client, or integrated client-server.
 	InGame,
-	/// Player is disconnecting from (remote) or closing (local) a world.
-	Unloading,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
