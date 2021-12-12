@@ -34,7 +34,7 @@ impl Command for Connect {
 					app::state::State::Connecting,
 					Some(Box::new(Instruction {
 						mode: mode::Kind::Client.into(),
-						port: LocalData::get_port_from_args(),
+						port: LocalData::get_named_arg("client_port"),
 						directive: Directive::Connect(self.url.clone()),
 					})),
 				);

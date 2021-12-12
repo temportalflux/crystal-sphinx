@@ -12,15 +12,18 @@ pub enum WorldOption {
 impl WorldOption {
 	fn to_transition_data(&self) -> app::state::TransitionData {
 		use crate::network::task::{Directive, Instruction};
+		let mode = mode::Set::all();
+		let port = LocalData::get_named_arg("host_port");
 		Some(Box::new(match self {
 			Self::New => Instruction {
-				mode: mode::Set::all(),
-				port: LocalData::get_port_from_args(),
+				mode,
+				port,
+				// TODO: Create a unique identifier based on a user-provided world name
 				directive: Directive::LoadWorld("tmp".to_owned()),
 			},
 			Self::Path(path) => Instruction {
-				mode: mode::Set::all(),
-				port: LocalData::get_port_from_args(),
+				mode,
+				port,
 				directive: Directive::LoadWorld(path.clone()),
 			},
 		}))

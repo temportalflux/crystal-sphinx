@@ -38,7 +38,7 @@ impl Load {
 		Self::new(app_state.clone(), storage.clone())
 			.instruct(Instruction {
 				mode: mode::Kind::Server.into(),
-				port: LocalData::get_port_from_args(),
+				port: LocalData::get_named_arg("host_port"),
 				directive: Directive::LoadWorld("tmp".to_owned()),
 			})
 			.join(std::time::Duration::from_millis(100 * 1), None);
