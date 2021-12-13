@@ -412,9 +412,15 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 					authenticated_self,
 					account_id
 				);
-				// TODO: If self is now authed, display "connecting" progress screen and wait for additional info from server
-				// 				once complete, display the world and HUD ui
+
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
+
+				if authenticated_self {
+					// TODO: Server should send a "all data is ready" signal to tell the client
+					// that it is safe to enter the game, once relevant chunks and entities have been loaded.
+					use crate::app::state::State::InGame;
+					self.0.write().unwrap().transition_to(InGame, None);
+				}
 
 				Ok(())
 			}

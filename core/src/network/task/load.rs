@@ -19,6 +19,7 @@ pub struct Load {
 	state: ArctexState,
 	app_state: ArcLockMachine,
 	storage: ArcLockStorage,
+	next_app_state: Option<app::state::State>,
 }
 
 impl ScheduledTask for Load {
@@ -72,10 +73,13 @@ impl Load {
 			state: ArctexState::default(),
 			app_state,
 			storage,
+			next_app_state: None,
 		}
 	}
 
-	pub fn instruct(self, instruction: Instruction) -> Self {
+	pub fn instruct(mut self, instruction: Instruction) -> Self {
+		self.next_app_state = instruction.get_next_app_state();
+
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
 		let thread_storage = self.storage.clone();
@@ -113,8 +117,6 @@ impl Load {
 				}
 			}
 
-			std::thread::sleep(std::time::Duration::from_millis(1000 * 2));
-
 			thread_state.lock().unwrap().mark_complete();
 		});
 		self
@@ -123,7 +125,8 @@ impl Load {
 
 impl Drop for Load {
 	fn drop(&mut self) {
-		use app::state::State::InGame;
-		self.app_state.write().unwrap().transition_to(InGame, None);
+		if let Some(state) = self.next_app_state {
+			self.app_state.write().unwrap().transition_to(state, None);
+		}
 	}
 }
