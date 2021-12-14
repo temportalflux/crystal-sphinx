@@ -9,14 +9,14 @@ pub type ArcLockCache = Arc<RwLock<Cache>>;
 
 pub struct User {
 	address: SocketAddr,
-	_id: account::Id,
+	id: account::Id,
 }
 
 impl From<super::pending::User> for User {
 	fn from(pending: super::pending::User) -> Self {
 		Self {
 			address: pending.address().clone(),
-			_id: pending.id().clone(),
+			id: pending.id().clone(),
 		}
 	}
 }
@@ -24,5 +24,11 @@ impl From<super::pending::User> for User {
 impl super::NetAddressable for User {
 	fn address(&self) -> &SocketAddr {
 		&self.address
+	}
+}
+
+impl User {
+	pub fn id(&self) -> &account::Id {
+		&self.id
 	}
 }
