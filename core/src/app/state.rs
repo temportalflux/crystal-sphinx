@@ -3,6 +3,8 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
+pub mod storage;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum State {
 	// Application is loading assets and systems.

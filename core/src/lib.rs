@@ -36,6 +36,7 @@ pub mod account;
 pub mod app;
 pub mod block;
 pub mod commands;
+pub mod graphics;
 pub mod input;
 pub mod network;
 pub mod plugin;
@@ -115,12 +116,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			.with_application::<CrystalSphinx>()
 			.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 			.build(&mut engine)?;
-		engine.render_chain_write().unwrap().set_render_pass_info(
-			engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
-				.downcast::<engine::graphics::render_pass::Pass>()
-				.unwrap()
-				.as_graphics()?,
-		);
+		if let Some(mut render_chain) = engine.render_chain_write() {
+			render_chain.set_render_pass_info(
+				engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
+					.downcast::<engine::graphics::render_pass::Pass>()
+					.unwrap()
+					.as_graphics()?,
+			);
+		}
+		graphics::RenderChunks::add_state_listener(&app_state, &engine.render_chain().unwrap());
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]

@@ -1,5 +1,5 @@
-use engine::network::mode;
 use crate::app::state::State;
+use engine::network::mode;
 
 #[derive(Clone)]
 pub struct Instruction {
