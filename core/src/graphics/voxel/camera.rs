@@ -3,7 +3,7 @@ use engine::{
 	math::nalgebra::{self, point, vector, Matrix4, Point3, UnitQuaternion, Vector2, Vector3},
 };
 
-pub use camera::{OrthographicBounds, PerspectiveProjection, Projection, Uniform};
+pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 
 pub struct Camera {
 	pub chunk_coordinate: Point3<f32>,

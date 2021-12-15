@@ -7,7 +7,7 @@ use engine::{
 	asset,
 	graphics::{
 		self, buffer, command, flags, structs, utility::NamedObject, ArcRenderChain, Drawable,
-		RenderChain, RenderChainElement,
+		RenderChain, RenderChainElement, Uniform,
 	},
 	math::nalgebra::{Point3, Translation3, UnitQuaternion, Vector2, Vector3},
 	task::{self, ScheduledTask},
@@ -26,7 +26,7 @@ pub struct RenderVoxel {
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
 	instance_buffer: Arc<buffer::Buffer>,
-	camera_uniform: camera::Uniform,
+	camera_uniform: Uniform,
 	model_cache: ArcLockModelCache,
 }
 
@@ -116,7 +116,7 @@ impl RenderVoxel {
 		)?;
 
 		let camera_uniform =
-			camera::Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
+			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
 
 		Ok(Self {
 			pending_gpu_signals: Vec::new(),
