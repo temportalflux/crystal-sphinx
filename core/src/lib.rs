@@ -130,27 +130,27 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			model_cache.insert(Model::new(std::collections::HashMap::from([
 				(
 					Face::Left,
-					AtlasTexCoord::new([0.0, 0.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 				(
 					Face::Right,
-					AtlasTexCoord::new([16.0, 0.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 				(
 					Face::Up,
-					AtlasTexCoord::new([0.0, 16.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 				(
 					Face::Down,
-					AtlasTexCoord::new([0.0, 16.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 				(
 					Face::Front,
-					AtlasTexCoord::new([32.0, 0.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 				(
 					Face::Back,
-					AtlasTexCoord::new([32.0, 16.0].into(), [16.0, 16.0].into()),
+					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
 				),
 			])));
 		}

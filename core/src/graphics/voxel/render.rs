@@ -1,15 +1,16 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
-	graphics::voxel::{Instance, ArcLockModelCache, Vertex, ViewProjection},
+	graphics::voxel::{Instance, ArcLockModelCache, InstanceFlags, Vertex, ViewProjection},
 	CrystalSphinx,
 };
+use enumset::EnumSet;
 use engine::{
 	asset,
 	graphics::{
 		self, buffer, camera, command, flags, structs, utility::NamedObject, ArcRenderChain,
 		Drawable, RenderChain, RenderChainElement,
 	},
-	math::nalgebra::{Matrix4, Point3, Translation3, Vector2, Vector3, Vector4},
+	math::nalgebra::{Matrix4, Point3, Translation3, UnitQuaternion, Vector2, Vector3},
 	task::{self, ScheduledTask},
 	utility::AnyError,
 	Application,
@@ -156,7 +157,7 @@ impl RenderChainElement for RenderVoxel {
 		let instances: Vec<Instance> = vec![Instance {
 			chunk_coordinate: Vector3::default().into(),
 			model_matrix: Translation3::new(0.0, 0.0, 0.0).to_homogeneous().into(),
-			instance_flags: Vector4::default().into(),
+			instance_flags: InstanceFlags { faces: EnumSet::all() }.into(),
 		}];
 
 		graphics::TaskGpuCopy::new(
@@ -236,11 +237,19 @@ impl RenderChainElement for RenderVoxel {
 		resolution: &Vector2<f32>,
 	) -> Result<bool, AnyError> {
 		// TEMPORARY - camera should be externally managed
-		let forward = engine::world::global_forward();
-		let up = engine::world::global_up();
-		let position = Point3::<f32>::new(0.0, 0.0, 0.0);
+		let orientation = UnitQuaternion::from_axis_angle(
+			&-engine::world::global_up(),
+			45.0f32.to_radians(),
+		);
+		//let orientation = UnitQuaternion::from_axis_angle(
+		//	&-engine::world::global_right(),
+		//	30.0f32.to_radians(),
+		//);
+		let forward = orientation * engine::world::global_forward();
+		let up = orientation * engine::world::global_up();
+		let position = Point3::<f32>::new(-3.0, 2.0, 3.0);
 		let target: Point3<f32> = position + forward.into_inner();
-		let vertical_fov = 45.0;
+		let vertical_fov = 43.0;
 		self.camera_uniform.write_data(
 			frame,
 			&super::ViewProjection {
@@ -274,7 +283,7 @@ impl RenderChainElement for RenderVoxel {
 			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
-			//buffer.draw(index_count, 0, instance_count, 0, 0);
+			buffer.draw(36, 0, 1, 0, 0);
 		}
 		buffer.end_label();
 

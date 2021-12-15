@@ -1,6 +1,6 @@
 use crate::graphics::{
 	model::Model as ModelTrait,
-	voxel::{AtlasTexCoord, Face, Vertex},
+	voxel::{AtlasTexCoord, Face, Vertex, VertexFlags},
 };
 use engine::math::nalgebra::{Matrix4x2, Vector2, Vector4};
 use std::collections::HashMap;
@@ -89,14 +89,12 @@ impl Model {
 
 impl Model {
 	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord) {
-		let mut model_flags = Vector4::default();
-		// Convert the bits of the face flag int to the f32 for the shader
-		model_flags[0] = unsafe { std::mem::transmute(face.model_bit()) };
+		let flags: Vector4<f32> = VertexFlags { face }.into();
 
-		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, model_flags);
-		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, model_flags);
-		let idx_bl = self.push_masked_vertex(face, &tex_coord, &BL_MATRIX, model_flags);
-		let idx_br = self.push_masked_vertex(face, &tex_coord, &BR_MATRIX, model_flags);
+		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, flags);
+		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, flags);
+		let idx_bl = self.push_masked_vertex(face, &tex_coord, &BL_MATRIX, flags);
+		let idx_br = self.push_masked_vertex(face, &tex_coord, &BR_MATRIX, flags);
 		self.push_tri((idx_tl, idx_tr, idx_br));
 		self.push_tri((idx_br, idx_bl, idx_tl));
 	}
