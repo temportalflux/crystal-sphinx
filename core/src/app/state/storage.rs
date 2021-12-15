@@ -30,7 +30,7 @@ where
 
 	pub fn create_callbacks<F>(self, app_state: &ArcLockMachine, create_callback: F)
 	where
-		F: Fn() -> T + 'static + Send + Sync,
+		F: Fn() -> Option<T> + 'static + Send + Sync,
 	{
 		let storage: Arc<Mutex<Option<T>>> = Default::default();
 		let creator = Arc::new(create_callback);
@@ -43,7 +43,7 @@ where
 					let callback_creator = creator.clone();
 					app_state.add_callback(operation_key, move |_operation| {
 						let mut storage = callback_storage.lock().unwrap();
-						*storage = Some(callback_creator());
+						*storage = callback_creator();
 					});
 				}
 				Event::Destroy => {

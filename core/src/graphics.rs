@@ -1,2 +1,3 @@
-mod render_chunks;
-pub use render_chunks::*;
+pub mod model;
+pub mod structs;
+pub mod voxel;

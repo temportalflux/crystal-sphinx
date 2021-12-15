@@ -124,7 +124,41 @@ pub fn run(config: plugin::Config) -> VoidResult {
 					.as_graphics()?,
 			);
 		}
-		graphics::RenderChunks::add_state_listener(&app_state, &engine.render_chain().unwrap());
+		let mut model_cache = graphics::voxel::ModelCache::new();
+		{
+			use graphics::voxel::*;
+			model_cache.insert(Model::new(std::collections::HashMap::from([
+				(
+					Face::Left,
+					AtlasTexCoord::new([0.0, 0.0].into(), [16.0, 16.0].into()),
+				),
+				(
+					Face::Right,
+					AtlasTexCoord::new([16.0, 0.0].into(), [16.0, 16.0].into()),
+				),
+				(
+					Face::Up,
+					AtlasTexCoord::new([0.0, 16.0].into(), [16.0, 16.0].into()),
+				),
+				(
+					Face::Down,
+					AtlasTexCoord::new([0.0, 16.0].into(), [16.0, 16.0].into()),
+				),
+				(
+					Face::Front,
+					AtlasTexCoord::new([32.0, 0.0].into(), [16.0, 16.0].into()),
+				),
+				(
+					Face::Back,
+					AtlasTexCoord::new([32.0, 16.0].into(), [16.0, 16.0].into()),
+				),
+			])));
+		}
+		graphics::voxel::RenderVoxel::add_state_listener(
+			&app_state,
+			&engine.render_chain().unwrap(),
+			&model_cache.arclocked(),
+		);
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
