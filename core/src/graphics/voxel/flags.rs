@@ -1,10 +1,7 @@
 use super::Face;
+use engine::graphics::types::Vec4;
 use engine::math::nalgebra::Vector4;
 use enumset::EnumSet;
-use engine::graphics::{
-	types::{Vec4},
-};
-
 
 pub struct VertexFlags {
 	pub face: Face,

@@ -1,5 +1,4 @@
-mod camera;
-pub use camera::*;
+pub mod camera;
 
 mod face;
 pub use face::*;

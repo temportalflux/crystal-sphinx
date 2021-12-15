@@ -1,20 +1,20 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
-	graphics::voxel::{Instance, ArcLockModelCache, InstanceFlags, Vertex, ViewProjection},
+	graphics::voxel::{camera, ArcLockModelCache, Instance, InstanceFlags, Vertex},
 	CrystalSphinx,
 };
-use enumset::EnumSet;
 use engine::{
 	asset,
 	graphics::{
-		self, buffer, camera, command, flags, structs, utility::NamedObject, ArcRenderChain,
-		Drawable, RenderChain, RenderChainElement,
+		self, buffer, command, flags, structs, utility::NamedObject, ArcRenderChain, Drawable,
+		RenderChain, RenderChainElement,
 	},
-	math::nalgebra::{Matrix4, Point3, Translation3, UnitQuaternion, Vector2, Vector3},
+	math::nalgebra::{Point3, Translation3, UnitQuaternion, Vector2, Vector3},
 	task::{self, ScheduledTask},
 	utility::AnyError,
 	Application,
 };
+use enumset::EnumSet;
 use std::sync::{Arc, RwLock};
 
 static ID: &'static str = "render-voxel";
@@ -85,7 +85,10 @@ impl RenderVoxel {
 		let max_instances = 1; // TODO: what to do with this?
 		let (vbuffer_size, ibuffer_size) = {
 			let model_cache = model_cache.read().unwrap();
-			(model_cache.vertex_buffer_size(), model_cache.index_buffer_size())
+			(
+				model_cache.vertex_buffer_size(),
+				model_cache.index_buffer_size(),
+			)
 		};
 
 		let vertex_buffer = buffer::Buffer::create_gpu(
@@ -113,7 +116,7 @@ impl RenderVoxel {
 		)?;
 
 		let camera_uniform =
-			camera::Uniform::new::<ViewProjection, &str>("RenderVoxel.Camera", &render_chain)?;
+			camera::Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
 
 		Ok(Self {
 			pending_gpu_signals: Vec::new(),
@@ -157,7 +160,10 @@ impl RenderChainElement for RenderVoxel {
 		let instances: Vec<Instance> = vec![Instance {
 			chunk_coordinate: Vector3::default().into(),
 			model_matrix: Translation3::new(0.0, 0.0, 0.0).to_homogeneous().into(),
-			instance_flags: InstanceFlags { faces: EnumSet::all() }.into(),
+			instance_flags: InstanceFlags {
+				faces: EnumSet::all(),
+			}
+			.into(),
 		}];
 
 		graphics::TaskGpuCopy::new(
@@ -237,36 +243,25 @@ impl RenderChainElement for RenderVoxel {
 		resolution: &Vector2<f32>,
 	) -> Result<bool, AnyError> {
 		// TEMPORARY - camera should be externally managed
-		let orientation = UnitQuaternion::from_axis_angle(
-			&-engine::world::global_up(),
-			45.0f32.to_radians(),
-		);
+		let orientation =
+			UnitQuaternion::from_axis_angle(&-engine::world::global_up(), 45.0f32.to_radians());
 		//let orientation = UnitQuaternion::from_axis_angle(
 		//	&-engine::world::global_right(),
 		//	30.0f32.to_radians(),
 		//);
-		let forward = orientation * engine::world::global_forward();
-		let up = orientation * engine::world::global_up();
-		let position = Point3::<f32>::new(-3.0, 2.0, 3.0);
-		let target: Point3<f32> = position + forward.into_inner();
-		let vertical_fov = 43.0;
-		self.camera_uniform.write_data(
-			frame,
-			&super::ViewProjection {
-				view: Matrix4::look_at_rh(&position, &target, &up),
-				projection: camera::Camera::perspective_right_hand_depth_zero_to_one(
-					camera::Camera::vertical_to_horizontal_fov(
-						vertical_fov,
-						resolution.x / resolution.y,
-					),
-					resolution.x / resolution.y,
-					0.1,
-					1000.0,
-				),
-				chunk_coordinate: Point3::<f32>::new(0.0, 0.0, 0.0),
-				chunk_size: Vector3::<f32>::new(16.0, 16.0, 16.0),
-			},
-		)?;
+		let camera = camera::Camera {
+			chunk_coordinate: Point3::<f32>::new(0.0, 0.0, 0.0),
+			position: Point3::<f32>::new(-3.0, 2.0, 3.0),
+			orientation,
+			projection: camera::Projection::Perspective(camera::PerspectiveProjection {
+				vertical_fov: 43.0,
+				near_plane: 0.1,
+				far_plane: 1000.0,
+			}),
+			chunk_size: Vector3::<f32>::new(16.0, 16.0, 16.0),
+		};
+		self.camera_uniform
+			.write_data(frame, &camera.as_uniform_data(resolution))?;
 		Ok(false)
 	}
 

@@ -41,5 +41,4 @@ impl ModelCache {
 	pub fn buffer_data(&self) -> (&Vec<Vertex>, &Vec<u32>) {
 		(&self.vertices, &self.indices)
 	}
-
 }
