@@ -1,4 +1,4 @@
-use crate::network::storage::{server::user, ArcLockStorage};
+use crate::network::storage::server::user;
 use engine::{
 	network::{self, event, mode, processor::Processor, LocalData},
 	utility::VoidResult,
@@ -9,7 +9,6 @@ pub fn register_bonus_processors(
 	auth_cache: &user::pending::ArcLockCache,
 	active_cache: &user::active::ArcLockCache,
 	app_state: &crate::app::state::ArcLockMachine,
-	storage: &ArcLockStorage,
 ) {
 	use event::Kind::*;
 
@@ -19,7 +18,6 @@ pub fn register_bonus_processors(
 			vec![mode::Kind::Client].into_iter(),
 			CloseClient {
 				app_state: app_state.clone(),
-				storage: storage.clone(),
 			},
 		);
 	}
@@ -36,7 +34,6 @@ pub fn register_bonus_processors(
 #[derive(Clone)]
 struct CloseClient {
 	app_state: crate::app::state::ArcLockMachine,
-	storage: ArcLockStorage,
 }
 
 impl Processor for CloseClient {

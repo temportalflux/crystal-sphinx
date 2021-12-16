@@ -16,7 +16,7 @@ pub type ArcLockCache = Arc<RwLock<Cache>>;
 #[derive(Clone)]
 pub struct GeneratorSettings {
 	pub(super) root_dir: PathBuf,
-	pub(super) seed: String,
+	pub(super) _seed: String,
 }
 
 pub struct Cache {
@@ -29,7 +29,7 @@ impl Cache {
 			loaded_chunks: HashMap::new(),
 			world_gen_settings: GeneratorSettings {
 				root_dir: settings.root_path().to_owned(),
-				seed: settings.seed().to_owned(),
+				_seed: settings.seed().to_owned(),
 			},
 		}
 	}
