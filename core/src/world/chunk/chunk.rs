@@ -1,3 +1,4 @@
+use super::Level;
 use engine::math::nalgebra::Point3;
 use std::{
 	path::PathBuf,
@@ -9,6 +10,7 @@ pub type WeakLockChunk = Weak<RwLock<Chunk>>;
 pub struct Chunk {
 	coordinate: Point3<i64>,
 	path_on_disk: PathBuf,
+	pub(crate) level: Level,
 }
 
 impl Chunk {
@@ -29,37 +31,40 @@ impl Chunk {
 
 	pub(super) fn load_or_generate(
 		coordinate: &Point3<i64>,
+		level: Level,
 		settings: &super::GeneratorSettings,
 	) -> ArcLockChunk {
 		let path_on_disk = Self::create_path_for(settings.root_dir.clone(), &coordinate);
 		Arc::new(RwLock::new(if path_on_disk.exists() {
-			Self::load(path_on_disk, &coordinate)
+			Self::load(path_on_disk, &coordinate, level)
 		} else {
-			Self::generate(path_on_disk, &coordinate)
+			Self::generate(path_on_disk, &coordinate, level)
 		}))
 	}
 
-	pub(super) fn generate(path_on_disk: PathBuf, coordinate: &Point3<i64>) -> Self {
+	pub(super) fn generate(path_on_disk: PathBuf, coordinate: &Point3<i64>, level: Level) -> Self {
 		// TODO: generate
-		log::debug!(target: "world", "Generating chunk {}", coordinate);
+		//log::debug!(target: "world", "Generating chunk {}", coordinate);
 		Self {
 			path_on_disk,
 			coordinate: *coordinate,
+			level,
 		}
 	}
 
-	pub(super) fn load(path_on_disk: PathBuf, coordinate: &Point3<i64>) -> Self {
+	pub(super) fn load(path_on_disk: PathBuf, coordinate: &Point3<i64>, level: Level) -> Self {
 		// TODO: Load chunk from file
-		log::debug!(target: "world", "Loading chunk {}", coordinate);
+		//log::debug!(target: "world", "Loading chunk {}", coordinate);
 		Self {
 			path_on_disk,
 			coordinate: *coordinate,
+			level,
 		}
 	}
 
 	pub(super) fn save(&self) {
 		let _path = &self.path_on_disk;
-		log::debug!(target: "world", "Saving chunk {}", self.coordinate);
+		//log::debug!(target: "world", "Saving chunk {}", self.coordinate);
 		// TODO: Save chunk to disk
 	}
 }

@@ -1,10 +1,11 @@
-use super::chunk;
-use super::Settings;
-use engine::math::nalgebra::Point3;
-use engine::utility::AnyError;
+use super::{chunk, Settings};
+use engine::{
+	math::nalgebra::Point3,
+	utility::{AnyError, VoidResult},
+};
 use std::{
 	path::PathBuf,
-	sync::{Arc, Mutex, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
 pub type ArcLockDatabase = Arc<RwLock<Database>>;
@@ -14,11 +15,11 @@ pub type ArcLockDatabase = Arc<RwLock<Database>>;
 pub struct Database {
 	_settings: Settings,
 	chunk_cache: chunk::ArcLockCache,
-	load_request_sender: chunk::LoadRequestSender,
+	_load_request_sender: Arc<chunk::LoadRequestSender>,
 	// When this is dropped, the loading thread stops.
-	_chunk_thread_handle: chunk::ThreadHandle,
+	_chunk_thread_handle: chunk::thread::Handle,
 
-	held_tickets: Vec<chunk::ArctexTicket>,
+	held_tickets: Vec<Arc<chunk::Ticket>>,
 }
 
 impl Database {
@@ -28,43 +29,65 @@ impl Database {
 		let chunk_cache = Arc::new(RwLock::new(chunk::Cache::new(&settings)));
 
 		let (load_request_sender, load_request_receiver) = crossbeam_channel::unbounded();
-		let thread_handle = chunk::Cache::start_loading_thread(load_request_receiver, &chunk_cache);
+		let thread_handle = chunk::thread::start(load_request_receiver, &chunk_cache);
+
+		let load_request_sender = Arc::new(load_request_sender);
+		*Self::ticket_sender_static() = Some(Arc::downgrade(&load_request_sender));
 
 		Self {
 			_settings: settings,
 			chunk_cache,
-			load_request_sender,
+			_load_request_sender: load_request_sender,
 			_chunk_thread_handle: thread_handle,
 
 			held_tickets: Vec::new(),
 		}
 	}
 
+	fn ticket_sender_static() -> &'static mut Option<Weak<chunk::LoadRequestSender>> {
+		static mut TICKET_SENDER: Option<Weak<chunk::LoadRequestSender>> = None;
+		unsafe { &mut TICKET_SENDER }
+	}
+
+	fn ticket_sender() -> Result<Arc<chunk::LoadRequestSender>, AnyError> {
+		Ok(Self::ticket_sender_static()
+			.as_ref()
+			.map(|weak| weak.upgrade())
+			.flatten()
+			.ok_or(NoWorldDatabase)?)
+	}
+
+	pub(crate) fn send_chunk_ticket(ticket: &Arc<chunk::Ticket>) -> VoidResult {
+		Ok(Self::ticket_sender()?.try_send(Arc::downgrade(&ticket))?)
+	}
+
 	pub fn chunk_cache(&self) -> &chunk::ArcLockCache {
 		&self.chunk_cache
 	}
 
-	pub fn load_origin_chunk(arc_world: &ArcLockDatabase) {
-		let ticket_result = arc_world
-			.read()
-			.unwrap()
-			.create_chunk_ticket(chunk::Ticket::new(Point3::new(0, 0, 0)));
-		match ticket_result {
-			Ok(arc_ticket) => {
-				arc_world.write().unwrap().held_tickets.push(arc_ticket);
+	pub fn load_origin_chunk(arc_world: &ArcLockDatabase) -> VoidResult {
+		arc_world.write().unwrap().held_tickets.push(
+			chunk::Ticket {
+				coordinate: Point3::new(0, 0, 0),
+				level: (chunk::Level::Ticking, 2).into(),
 			}
-			Err(err) => {
-				log::error!(target: "world", "Failed to load origin chunk: {}", err);
-			}
-		}
+			.submit()?,
+		);
+		Ok(())
 	}
+}
 
-	pub fn create_chunk_ticket(
-		&self,
-		ticket: chunk::Ticket,
-	) -> Result<chunk::ArctexTicket, AnyError> {
-		let arctex_ticket = Arc::new(Mutex::new(ticket));
-		self.load_request_sender.try_send(arctex_ticket.clone())?;
-		Ok(arctex_ticket)
+impl Drop for Database {
+	fn drop(&mut self) {
+		*Self::ticket_sender_static() = None;
+	}
+}
+
+#[derive(Debug)]
+struct NoWorldDatabase;
+impl std::error::Error for NoWorldDatabase {}
+impl std::fmt::Display for NoWorldDatabase {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "No world database")
 	}
 }

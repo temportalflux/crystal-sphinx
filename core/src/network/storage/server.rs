@@ -120,7 +120,8 @@ impl Server {
 		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
 
 		let arc_world = Arc::new(RwLock::new(world));
-		Database::load_origin_chunk(&arc_world);
+		let origin_res = Database::load_origin_chunk(&arc_world);
+		assert!(origin_res.is_ok());
 
 		self.world = Some(arc_world);
 	}
