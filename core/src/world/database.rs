@@ -8,6 +8,7 @@ use std::{
 	sync::{Arc, RwLock, Weak},
 };
 
+/// Alias for Arc<RwLock<[`Database`](Database)>>.
 pub type ArcLockDatabase = Arc<RwLock<Database>>;
 
 /// The data about a world (its chunks, settings, etc).
@@ -15,7 +16,7 @@ pub type ArcLockDatabase = Arc<RwLock<Database>>;
 pub struct Database {
 	_settings: Settings,
 	chunk_cache: chunk::ArcLockCache,
-	_load_request_sender: Arc<chunk::LoadRequestSender>,
+	_load_request_sender: Arc<chunk::ticket::Sender>,
 	// When this is dropped, the loading thread stops.
 	_chunk_thread_handle: chunk::thread::Handle,
 
@@ -44,12 +45,12 @@ impl Database {
 		}
 	}
 
-	fn ticket_sender_static() -> &'static mut Option<Weak<chunk::LoadRequestSender>> {
-		static mut TICKET_SENDER: Option<Weak<chunk::LoadRequestSender>> = None;
+	fn ticket_sender_static() -> &'static mut Option<Weak<chunk::ticket::Sender>> {
+		static mut TICKET_SENDER: Option<Weak<chunk::ticket::Sender>> = None;
 		unsafe { &mut TICKET_SENDER }
 	}
 
-	fn ticket_sender() -> Result<Arc<chunk::LoadRequestSender>, AnyError> {
+	fn ticket_sender() -> Result<Arc<chunk::ticket::Sender>, AnyError> {
 		Ok(Self::ticket_sender_static()
 			.as_ref()
 			.map(|weak| weak.upgrade())

@@ -7,14 +7,20 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-pub type ArcLockCache = Arc<RwLock<Cache>>;
-
 #[derive(Clone)]
 pub struct GeneratorSettings {
 	pub(super) root_dir: PathBuf,
 	pub(super) _seed: String,
 }
 
+/// Alias for Arc<RwLock<[`Cache`](Cache)>>.
+pub type ArcLockCache = Arc<RwLock<Cache>>;
+
+/// A storage bin for all the chunks which are loaded.
+/// This cache stores weak references (not strong references).
+/// 
+/// It is possible (albeit unlikely) for a chunk to be present in the cache,
+/// but be unloaded in a number of milliseconds because it has expired.
 pub struct Cache {
 	loaded_chunks: HashMap<Point3<i64>, WeakLockChunk>,
 	pub(crate) world_gen_settings: GeneratorSettings,

@@ -1,4 +1,4 @@
-use super::{ArcLockCache, ArcLockChunk, Chunk, Level, LoadRequestReceiver, Ticket};
+use super::{ArcLockCache, ArcLockChunk, Chunk, Level, ticket, Ticket};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{spawn_thread, VoidResult},
@@ -8,10 +8,13 @@ use std::{
 	sync::{Arc, Weak},
 };
 
+/// The log category for the chunk loading thread.
 static LOG: &'static str = "chunk-loading";
-pub type Handle = Arc<()>;
+/// The handle for the chunk-loading thread. Dropping the handle results in the thread ending.
+pub(crate) type Handle = Arc<()>;
 
-struct ThreadState {
+/// State data about the loading thread.
+pub(crate) struct ThreadState {
 	/// The public cache of chunks that are currently loaded.
 	/// The cache holds no ownership of chunks,
 	/// just weak references to what is loaded at any given time.
@@ -20,17 +23,24 @@ struct ThreadState {
 	/// List of inactive and recently dropped tickets (and the chunk coordinates they reference).
 	ticket_bindings: Vec<(Weak<Ticket>, Vec<Point3<i64>>)>,
 	/// Map of coordinate to chunk states (and the actual strong reference to keep the chunk loaded).
-	chunk_states: HashMap<Point3<i64>, ChunkTicketState>,
+	chunk_states: HashMap<Point3<i64>, ChunkState>,
 
-	chunk_expiration_duration: std::time::Duration,
-	first_expiration_time: Option<std::time::Instant>,
-	chunks_pending_unload: Vec<(std::time::Instant, Point3<i64>)>,
+	/// The amount of time a chunk can spend in `ticketless_chunks` before being saved to disk and dropped.
+	expiration_delay: std::time::Duration,
+	/// The earliest time in `ticketless_chunks`. Will be None if there are no chunks waiting to be unloaded.
+	earliest_expiration_timestamp: Option<std::time::Instant>,
+	/// The list of chunk coordinates without tickets, paired with the time the coordinate was added to the list.
+	/// If they remain in this list beyond `expiration_delay`, and have not been associated with
+	/// a new ticket in that time, they are unloaded (saved to disk and dropped from memory).
+	ticketless_chunks: Vec<(std::time::Instant, Point3<i64>)>,
 
-	no_incoming_request: bool,
+	/// Marked as true if/when the sender of the channel has been dropped.
 	disconnected_from_requests: bool,
 }
 
-pub fn start(incoming_requests: LoadRequestReceiver, cache: &ArcLockCache) -> Handle {
+/// Begins the chunk loading thread, returning its handle.
+/// If the handle is dropped, the thread will stop at the next loop.
+pub fn start(incoming_requests: ticket::Receiver, cache: &ArcLockCache) -> Handle {
 	let handle = Handle::new(());
 
 	let weak_handle = Arc::downgrade(&handle);
@@ -41,10 +51,9 @@ pub fn start(incoming_requests: LoadRequestReceiver, cache: &ArcLockCache) -> Ha
 			cache: cache.clone(),
 			ticket_bindings: Vec::new(),
 			chunk_states: HashMap::new(),
-			chunk_expiration_duration: std::time::Duration::from_secs(60),
-			first_expiration_time: None,
-			chunks_pending_unload: Vec::new(),
-			no_incoming_request: false,
+			expiration_delay: std::time::Duration::from_secs(60),
+			earliest_expiration_timestamp: None,
+			ticketless_chunks: Vec::new(),
 			disconnected_from_requests: false,
 		};
 
@@ -64,7 +73,7 @@ pub fn start(incoming_requests: LoadRequestReceiver, cache: &ArcLockCache) -> Ha
 }
 
 impl ThreadState {
-	fn update(&mut self, incoming_requests: &LoadRequestReceiver) {
+	fn update(&mut self, incoming_requests: &ticket::Receiver) {
 		self.process_new_tickets(&incoming_requests);
 		self.update_dropped_tickets();
 		if self.has_expired_chunks() {
@@ -73,17 +82,17 @@ impl ThreadState {
 		}
 	}
 
-	fn process_new_tickets(&mut self, incoming_requests: &LoadRequestReceiver) {
+	fn process_new_tickets(&mut self, incoming_requests: &ticket::Receiver) {
 		use crossbeam_channel::TryRecvError;
-		self.no_incoming_request = false;
-		while !self.disconnected_from_requests && !self.no_incoming_request {
+		let mut has_emptied_requests = false;
+		while !self.disconnected_from_requests && !has_emptied_requests {
 			match incoming_requests.try_recv() {
 				Ok(weak_ticket) => {
 					self.sync_process_ticket(weak_ticket);
 				}
 				// no events, continue the loop after a short nap
 				Err(TryRecvError::Empty) => {
-					self.no_incoming_request = true;
+					has_emptied_requests = true;
 				}
 				// If disconnected, then kill the thread
 				Err(TryRecvError::Disconnected) => {
@@ -163,7 +172,7 @@ impl ThreadState {
 			None => {
 				self.chunk_states.insert(
 					coordinate,
-					ChunkTicketState {
+					ChunkState {
 						chunk: arc_chunk.clone(),
 						level: level,
 						tickets: vec![weak_ticket.clone()],
@@ -193,10 +202,10 @@ impl ThreadState {
 					// then move the chunk to the list of chunks to be unloaded in the near future.
 					// This list is always sorted by timestamp such that the earliest are first.
 					if state.update() {
-						if self.first_expiration_time.is_none() {
-							self.first_expiration_time = Some(now);
+						if self.earliest_expiration_timestamp.is_none() {
+							self.earliest_expiration_timestamp = Some(now);
 						}
-						self.chunks_pending_unload.push((now, coordinate));
+						self.ticketless_chunks.push((now, coordinate));
 					}
 				}
 			} else {
@@ -206,29 +215,29 @@ impl ThreadState {
 	}
 
 	fn has_expired_chunks(&self) -> bool {
-		match self.first_expiration_time {
+		match self.earliest_expiration_timestamp {
 			Some(insertion_time) => {
 				insertion_time.duration_since(std::time::Instant::now())
-					> self.chunk_expiration_duration
+					> self.expiration_delay
 			}
 			None => false,
 		}
 	}
 
-	fn find_expired_chunks(&mut self) -> Vec<ArcLockChunk> {
+	fn find_expired_chunks(&mut self) -> Vec<(Point3<i64>, ArcLockChunk)> {
 		// Invalidate the flag indicating that there is some chunk pending expiration.
 		// We will later give it a proper value if there are still chunks in the list which will expire later.
-		self.first_expiration_time = None;
+		self.earliest_expiration_timestamp = None;
 
 		let mut chunks_for_unloading = Vec::new();
 		let now = std::time::Instant::now();
 		// Can use `Vec::drain_filter` when that api stabilizes.
 		// O(n) performance where `n` is the number of loaded chunks
 		let mut i = 0;
-		while i < self.chunks_pending_unload.len() {
-			let (insertion_time, coordinate) = self.chunks_pending_unload[i].clone();
+		while i < self.ticketless_chunks.len() {
+			let (insertion_time, coordinate) = self.ticketless_chunks[i].clone();
 			// A chunk has expired if the amount of time since insertion exceeds the maximum.
-			let has_expired = insertion_time.duration_since(now) > self.chunk_expiration_duration;
+			let has_expired = insertion_time.duration_since(now) > self.expiration_delay;
 			// If the chunk has any new tickets which reference it, it shouldnt be dropped.
 			let has_been_renewed = if let Some(state) = self.chunk_states.get(&coordinate) {
 				state.tickets.len() > 0
@@ -237,27 +246,27 @@ impl ThreadState {
 			};
 			// If any given chunk /should be dropped/ or a new ticket has referenced it, it is no longer "pending" unload.
 			if has_expired || has_been_renewed {
-				self.chunks_pending_unload.remove(i);
+				self.ticketless_chunks.remove(i);
 				// Only move the chunk to the list to be unloaded if no other tickets reference it.
 				if !has_been_renewed {
 					let state = self.chunk_states.remove(&coordinate).unwrap();
-					chunks_for_unloading.push(state.chunk);
+					chunks_for_unloading.push((coordinate, state.chunk));
 				}
 			} else {
 				i += 1;
 				// There is still an element in the list, so make sure the next time we iterate
 				// is the earliest moment of the next expiration (but no earlier).
-				if self.first_expiration_time.is_none()
-					|| insertion_time < self.first_expiration_time.unwrap()
+				if self.earliest_expiration_timestamp.is_none()
+					|| insertion_time < self.earliest_expiration_timestamp.unwrap()
 				{
-					self.first_expiration_time = Some(insertion_time);
+					self.earliest_expiration_timestamp = Some(insertion_time);
 				}
 			}
 		}
 		chunks_for_unloading
 	}
 
-	fn unload_expired_chunks(&mut self, mut chunks_for_unloading: Vec<ArcLockChunk>) {
+	fn unload_expired_chunks(&mut self, mut chunks_for_unloading: Vec<(Point3<i64>, ArcLockChunk)>) {
 		// Unload each chunk, dropping them one-after-one after each iteration
 		if !chunks_for_unloading.is_empty() {
 			log::debug!(
@@ -265,22 +274,39 @@ impl ThreadState {
 				"Unloading {} chunks",
 				chunks_for_unloading.len()
 			);
-			for arc_chunk in chunks_for_unloading.drain(..) {
+			for (coordinate, arc_chunk) in chunks_for_unloading.drain(..) {
+				assert!(Arc::strong_count(&arc_chunk) == 1);
+				// remove the chunk from cache before unloading it
+				self.cache.write().unwrap().remove(&coordinate);
+				// unload the chunk:
+				// 1. save to disk
+				// 2. drop the arc
 				let chunk = arc_chunk.read().unwrap();
-				self.cache.write().unwrap().remove(chunk.coordinate());
 				chunk.save()
 			}
 		}
 	}
 }
 
-pub(crate) struct ChunkTicketState {
-	pub(crate) chunk: ArcLockChunk,
-	pub(crate) level: Level,
-	pub(crate) tickets: Vec<Weak<Ticket>>,
+/// Data pertaining to the state of the chunk with respect to loading & tickets.
+/// Does NOT contain data pertaining to the state of the chunk in the world.
+pub struct ChunkState {
+	/// The pointer to the actual chunk world data.
+	/// If this is dropped, the chunk is discarded (regardless of if its been saved or not).
+	pub chunk: ArcLockChunk,
+	/// The ticking level of the chunk.
+	/// If this state changes during [`update`](ChunkState::update), the value in the chunk world data is updated.
+	/// This value is driven by finding the highest level in the list of associated tickets.
+	/// If this value changes, a copy is applied to the level in the chunk world data.
+	pub level: Level,
+	/// The list of tickets which keep this chunk loaded.
+	pub tickets: Vec<Weak<Ticket>>,
 }
 
-impl ChunkTicketState {
+impl ChunkState {
+
+	/// Looks at the list of tickets to determine if the chunk this state represents should remain loaded.
+	/// The level of the state is updated here, and returning true means that all associated tickets have been dropped.
 	pub fn update(&mut self) -> bool {
 		let mut i = 0;
 		let mut highest_level = None;

@@ -5,11 +5,23 @@ use std::{
 	sync::{Arc, RwLock, Weak},
 };
 
+/// Alias for Arc<RwLock<[`Chunk`](Chunk)>>.
 pub type ArcLockChunk = Arc<RwLock<Chunk>>;
+/// Alias for Weak<RwLock<[`Chunk`](Chunk)>>.
 pub type WeakLockChunk = Weak<RwLock<Chunk>>;
+
+/// A 16x16x16 chunk in the world.
+/// 
+/// Data is saved to disk at `<world root>/chunks/x.y.z.kdl`.
 pub struct Chunk {
+	/// The coordinate of the chunk in the world.
+	/// Not saved to file.
 	coordinate: Point3<i64>,
+	/// The path to the chunk on disk.
+	/// Not saved to file.
 	path_on_disk: PathBuf,
+	/// The current ticking level of the chunk.
+	/// Not saved to file.
 	pub(crate) level: Level,
 }
 
@@ -23,7 +35,7 @@ impl Chunk {
 	fn create_path_for(mut world_root: PathBuf, coordinate: &Point3<i64>) -> PathBuf {
 		world_root.push("chunks");
 		world_root.push(format!(
-			"{}x{}x{}.json",
+			"{}.{}.{}.kdl",
 			coordinate[0], coordinate[1], coordinate[2]
 		));
 		world_root

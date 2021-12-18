@@ -1,3 +1,5 @@
+
+/// The possible levels/states a chunk could be loaded as/in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Level {
 	/// Full game activity, including ticking of chunk and entities.
@@ -16,6 +18,7 @@ pub enum Level {
 }
 
 impl Level {
+	/// The list of levels which surround the current level.
 	pub fn successive_levels(&self) -> Vec<Level> {
 		match *self {
 			Self::Ticking => vec![Self::Active, Self::Minimal, Self::Loaded],

@@ -1,3 +1,5 @@
+//! Contains all world chunk structures around submitting chunk tickets, data contained in a chunk, and how chunks are loaded.
+
 mod cache;
 pub use cache::*;
 
@@ -7,10 +9,8 @@ pub use chunk::*;
 mod level;
 pub use level::*;
 
-mod ticket;
-pub use ticket::*;
+pub(crate) mod ticket;
+pub use ticket::Ticket;
 
+/// Structures & Functions used internally to handle the loading of chunks on a thread.
 pub(crate) mod thread;
-
-pub type LoadRequestSender = crossbeam_channel::Sender<std::sync::Weak<Ticket>>;
-pub type LoadRequestReceiver = crossbeam_channel::Receiver<std::sync::Weak<Ticket>>;

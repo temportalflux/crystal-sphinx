@@ -5,11 +5,16 @@ use engine::{
 };
 use std::sync::Arc;
 
+/// The channel through which chunk [tickets are sent](Ticket::submit).
+pub(crate) type Sender = crossbeam_channel::Sender<std::sync::Weak<Ticket>>;
+/// The channel through which chunk tickets are received by the [`chunk loading thread`](super::thread::start).
+pub(crate) type Receiver = crossbeam_channel::Receiver<std::sync::Weak<Ticket>>;
+
 /// A struct submitted at runtime to request that one or more chunks be loaded.
 ///
 /// To change the coordinate or level of a ticket, drop the old ticket and submit a new one.
 ///
-/// Largely inspired by https://minecraft.fandom.com/wiki/Chunk#Java_Edition.
+/// Largely inspired by <https://minecraft.fandom.com/wiki/Chunk#Java_Edition>.
 pub struct Ticket {
 	/// The coordinate of the chunk to be loaded.
 	/// This is also the center of a cuboid with a radius determined by the `level` and `radius` properties.
