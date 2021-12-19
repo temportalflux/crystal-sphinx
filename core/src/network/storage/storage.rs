@@ -63,8 +63,8 @@ impl Storage {
 		self.client = Some(client);
 	}
 
-	pub fn client(&mut self) -> &mut Option<ArcLockClient> {
-		&mut self.client
+	pub fn client(&self) -> &Option<ArcLockClient> {
+		&self.client
 	}
 
 	pub fn start_loading(&self) {

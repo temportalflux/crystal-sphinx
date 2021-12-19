@@ -18,7 +18,7 @@ pub type ArcLockCache = Arc<RwLock<Cache>>;
 
 /// A storage bin for all the chunks which are loaded.
 /// This cache stores weak references (not strong references).
-/// 
+///
 /// It is possible (albeit unlikely) for a chunk to be present in the cache,
 /// but be unloaded in a number of milliseconds because it has expired.
 pub struct Cache {

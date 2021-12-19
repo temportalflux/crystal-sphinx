@@ -1,4 +1,4 @@
-use super::{ArcLockCache, ArcLockChunk, Chunk, Level, ticket, Ticket};
+use super::{ticket, ArcLockCache, ArcLockChunk, Chunk, Level, Ticket};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{spawn_thread, VoidResult},
@@ -217,8 +217,7 @@ impl ThreadState {
 	fn has_expired_chunks(&self) -> bool {
 		match self.earliest_expiration_timestamp {
 			Some(insertion_time) => {
-				insertion_time.duration_since(std::time::Instant::now())
-					> self.expiration_delay
+				insertion_time.duration_since(std::time::Instant::now()) > self.expiration_delay
 			}
 			None => false,
 		}
@@ -266,7 +265,10 @@ impl ThreadState {
 		chunks_for_unloading
 	}
 
-	fn unload_expired_chunks(&mut self, mut chunks_for_unloading: Vec<(Point3<i64>, ArcLockChunk)>) {
+	fn unload_expired_chunks(
+		&mut self,
+		mut chunks_for_unloading: Vec<(Point3<i64>, ArcLockChunk)>,
+	) {
 		// Unload each chunk, dropping them one-after-one after each iteration
 		if !chunks_for_unloading.is_empty() {
 			log::debug!(
@@ -304,7 +306,6 @@ pub struct ChunkState {
 }
 
 impl ChunkState {
-
 	/// Looks at the list of tickets to determine if the chunk this state represents should remain loaded.
 	/// The level of the state is updated here, and returning true means that all associated tickets have been dropped.
 	pub fn update(&mut self) -> bool {

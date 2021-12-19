@@ -15,7 +15,8 @@ pub struct Server {
 	root_dir: PathBuf,
 	auth_key: account::Key,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
-	world: Option<ArcLockDatabase>,
+
+	database: Option<ArcLockDatabase>,
 }
 
 impl Server {
@@ -32,7 +33,7 @@ impl Server {
 			root_dir: savegame_path.to_owned(),
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
-			world: None,
+			database: None,
 		})
 	}
 
@@ -117,12 +118,12 @@ impl Server {
 		use crate::world::Database;
 
 		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
-		let world = Database::new(Self::world_path(self.root_dir.to_owned()));
+		let database = Database::new(Self::world_path(self.root_dir.to_owned()));
 
-		let arc_world = Arc::new(RwLock::new(world));
-		let origin_res = Database::load_origin_chunk(&arc_world);
+		let arc_database = Arc::new(RwLock::new(database));
+		let origin_res = Database::load_origin_chunk(&arc_database);
 		assert!(origin_res.is_ok());
 
-		self.world = Some(arc_world);
+		self.database = Some(arc_database);
 	}
 }

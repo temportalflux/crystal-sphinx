@@ -11,7 +11,7 @@ pub type ArcLockChunk = Arc<RwLock<Chunk>>;
 pub type WeakLockChunk = Weak<RwLock<Chunk>>;
 
 /// A 16x16x16 chunk in the world.
-/// 
+///
 /// Data is saved to disk at `<world root>/chunks/x.y.z.kdl`.
 pub struct Chunk {
 	/// The coordinate of the chunk in the world.

@@ -1,6 +1,8 @@
 use crate::{
 	account,
+	entity::{archetype, ArcLockEntityWorld},
 	network::storage::{
+		client::ArcLockClient,
 		server::{user, ArcLockServer},
 		ArcLockStorage,
 	},
@@ -33,7 +35,7 @@ enum Request {
 		/*server public key*/ String,
 	),
 	AuthTokenForServer(/*re-encrypted auth token*/ Vec<u8>),
-	ClientAuthenticated(account::Id),
+	ClientAuthenticated(account::Id, hecs::Entity),
 }
 impl std::fmt::Display for Request {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -41,7 +43,9 @@ impl std::fmt::Display for Request {
 			Self::Login(account_meta, _client_key) => write!(f, "Login(id={})", account_meta.id),
 			Self::AuthTokenForClient(_bytes, _server_key) => write!(f, "AuthTokenForClient"),
 			Self::AuthTokenForServer(_bytes) => write!(f, "AuthTokenForServer"),
-			Self::ClientAuthenticated(account_id) => write!(f, "Authenticated(id={})", account_id),
+			Self::ClientAuthenticated(account_id, entity) => {
+				write!(f, "Authenticated(id={} entity={})", account_id, entity.id())
+			}
 		}
 	}
 }
@@ -76,25 +80,28 @@ impl Handshake {
 		active_cache: &user::active::ArcLockCache,
 		app_state: &crate::app::state::ArcLockMachine,
 		storage: &ArcLockStorage,
+		entity_world: &ArcLockEntityWorld,
 	) {
 		use mode::Kind::*;
 
-		let process_auth_request = ProcessAuthRequest {
+		let server_proc = ServerProcessor {
 			auth_cache: auth_cache.clone(),
 			active_cache: active_cache.clone(),
+			storage: storage.clone(),
+			entity_world: entity_world.clone(),
+		};
+		let client_proc = ClientProcessor {
+			app_state: app_state.clone(),
 			storage: storage.clone(),
 		};
 
 		builder.register_bundle::<Handshake>(
 			EventProcessors::default()
-				.with(Server, process_auth_request.clone())
-				.with(Client, ReEncryptAuthToken(app_state.clone()))
+				.with(Server, server_proc.clone())
+				.with(Client, client_proc.clone())
 				.with(
 					mode::Set::all(),
-					AnyProcessor::new(vec![
-						process_auth_request.boxed(),
-						ReEncryptAuthToken(app_state.clone()).boxed(),
-					]),
+					AnyProcessor::new(vec![server_proc.boxed(), client_proc.boxed()]),
 				),
 		);
 	}
@@ -117,20 +124,21 @@ impl Handshake {
 }
 
 #[derive(Clone)]
-struct ProcessAuthRequest {
+struct ServerProcessor {
 	auth_cache: user::pending::ArcLockCache,
 	active_cache: user::active::ArcLockCache,
 	storage: ArcLockStorage,
+	entity_world: ArcLockEntityWorld,
 }
 
-impl ProcessAuthRequest {
+impl ServerProcessor {
 	fn server(&self) -> ArcLockServer {
 		let storage = self.storage.read().unwrap();
 		storage.server().as_ref().unwrap().clone()
 	}
 }
 
-impl Processor for ProcessAuthRequest {
+impl Processor for ServerProcessor {
 	fn process(
 		&self,
 		kind: &event::Kind,
@@ -141,7 +149,7 @@ impl Processor for ProcessAuthRequest {
 	}
 }
 
-impl PacketProcessor<Handshake> for ProcessAuthRequest {
+impl PacketProcessor<Handshake> for ServerProcessor {
 	fn process_packet(
 		&self,
 		_kind: &event::Kind,
@@ -319,12 +327,19 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 							return Err(Box::new(Error::CannotReadServerData));
 						}
 
+						let mut builder =
+							archetype::player::Server::new().with_address(*pending_user.address());
+						// TODO: Destroy the player entity when the user disconnects
+						let player_entity =
+							self.entity_world.write().unwrap().spawn(builder.build());
+
 						Network::send_packets(
 							Packet::builder()
 								.with_mode(Broadcast)
 								.with_guarantee(Reliable + Unordered)
 								.with_payload(&Handshake(Request::ClientAuthenticated(
 									pending_user.id().clone(),
+									player_entity,
 								))),
 						)?;
 
@@ -332,8 +347,6 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 							let active_user = pending_user.into();
 							active_cache.insert(active_user);
 						}
-
-						// TODO: Spin up a process to ship the newly-active user relevant information about the world
 					}
 					Err(err) => {
 						// if it doesnt match, the client isnt who they say they are,
@@ -350,9 +363,20 @@ impl PacketProcessor<Handshake> for ProcessAuthRequest {
 	}
 }
 
-struct ReEncryptAuthToken(crate::app::state::ArcLockMachine);
+#[derive(Clone)]
+struct ClientProcessor {
+	app_state: crate::app::state::ArcLockMachine,
+	storage: ArcLockStorage,
+}
 
-impl Processor for ReEncryptAuthToken {
+impl ClientProcessor {
+	fn client(&self) -> ArcLockClient {
+		let storage = self.storage.read().unwrap();
+		storage.client().as_ref().unwrap().clone()
+	}
+}
+
+impl Processor for ClientProcessor {
 	fn process(
 		&self,
 		kind: &event::Kind,
@@ -363,7 +387,7 @@ impl Processor for ReEncryptAuthToken {
 	}
 }
 
-impl PacketProcessor<Handshake> for ReEncryptAuthToken {
+impl PacketProcessor<Handshake> for ClientProcessor {
 	fn process_packet(
 		&self,
 		_kind: &event::Kind,
@@ -401,7 +425,7 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 
 				Ok(())
 			}
-			Request::ClientAuthenticated(account_id) => {
+			Request::ClientAuthenticated(account_id, entity) => {
 				let authenticated_self = account::ClientRegistry::read()?
 					.active_account()
 					.map(|account| account.meta.id == *account_id)
@@ -416,10 +440,15 @@ impl PacketProcessor<Handshake> for ReEncryptAuthToken {
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
 
 				if authenticated_self {
+					self.client().write().unwrap().set_entity_id(*entity);
+
 					// TODO: Server should send a "all data is ready" signal to tell the client
 					// that it is safe to enter the game, once relevant chunks and entities have been loaded.
+					// Must require:
+					// - player's entity and components have been replicated
+
 					use crate::app::state::State::InGame;
-					self.0.write().unwrap().transition_to(InGame, None);
+					self.app_state.write().unwrap().transition_to(InGame, None);
 				}
 
 				Ok(())

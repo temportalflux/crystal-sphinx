@@ -1,6 +1,7 @@
 use super::{Directive, Instruction};
 use crate::{
 	app::{self, state::ArcLockMachine},
+	entity::ArcLockEntityWorld,
 	network::{
 		packet::Handshake,
 		storage::{client::ArcLockClient, server::Server, ArcLockStorage},
@@ -19,6 +20,7 @@ pub struct Load {
 	state: ArctexState,
 	app_state: ArcLockMachine,
 	storage: ArcLockStorage,
+	entity_world: ArcLockEntityWorld,
 	next_app_state: Option<app::state::State>,
 }
 
@@ -35,8 +37,12 @@ impl futures::future::Future for Load {
 }
 
 impl Load {
-	pub fn load_dedicated_server(app_state: &ArcLockMachine, storage: &ArcLockStorage) {
-		Self::new(app_state.clone(), storage.clone())
+	pub fn load_dedicated_server(
+		app_state: &ArcLockMachine,
+		storage: &ArcLockStorage,
+		entity_world: &ArcLockEntityWorld,
+	) {
+		Self::new(app_state.clone(), storage.clone(), entity_world.clone())
 			.instruct(Instruction {
 				mode: mode::Kind::Server.into(),
 				port: LocalData::get_named_arg("host_port"),
@@ -45,11 +51,16 @@ impl Load {
 			.join(std::time::Duration::from_millis(100 * 1), None);
 	}
 
-	pub fn add_state_listener(app_state: &ArcLockMachine, storage: &ArcLockStorage) {
+	pub fn add_state_listener(
+		app_state: &ArcLockMachine,
+		storage: &ArcLockStorage,
+		entity_world: &ArcLockEntityWorld,
+	) {
 		use app::state::{State::*, Transition::*, *};
 		for state in [LoadingWorld, Connecting].iter() {
 			let callback_app_state = app_state.clone();
 			let callback_storage = storage.clone();
+			let callback_entity_world = entity_world.clone();
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(*state)),
 				move |operation| {
@@ -60,19 +71,28 @@ impl Load {
 						.downcast_ref::<Instruction>()
 						.unwrap()
 						.clone();
-					Self::new(callback_app_state.clone(), callback_storage.clone())
-						.instruct(instruction)
-						.send_to(engine::task::sender());
+					Self::new(
+						callback_app_state.clone(),
+						callback_storage.clone(),
+						callback_entity_world.clone(),
+					)
+					.instruct(instruction)
+					.send_to(engine::task::sender());
 				},
 			);
 		}
 	}
 
-	fn new(app_state: ArcLockMachine, storage: ArcLockStorage) -> Self {
+	fn new(
+		app_state: ArcLockMachine,
+		storage: ArcLockStorage,
+		entity_world: ArcLockEntityWorld,
+	) -> Self {
 		Self {
 			state: ArctexState::default(),
 			app_state,
 			storage,
+			entity_world,
 			next_app_state: None,
 		}
 	}
@@ -83,6 +103,7 @@ impl Load {
 		let thread_state = self.state.clone();
 		let thread_app_state = self.app_state.clone();
 		let thread_storage = self.storage.clone();
+		let thread_entity_world = self.entity_world.clone();
 		std::thread::spawn(move || {
 			if instruction.mode.contains(mode::Kind::Server) {
 				let world_name = match &instruction.directive {
@@ -101,9 +122,14 @@ impl Load {
 				}
 			}
 
-			let _ = crate::network::create(instruction.mode, &thread_app_state, &thread_storage)
-				.with_port(instruction.port.unwrap_or(25565))
-				.spawn();
+			let _ = crate::network::create(
+				instruction.mode,
+				&thread_app_state,
+				&thread_storage,
+				&thread_entity_world,
+			)
+			.with_port(instruction.port.unwrap_or(25565))
+			.spawn();
 			if let Ok(storage) = thread_storage.read() {
 				storage.start_loading();
 			}

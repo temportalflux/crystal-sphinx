@@ -36,6 +36,7 @@ pub mod account;
 pub mod app;
 pub mod block;
 pub mod commands;
+pub mod entity;
 pub mod graphics;
 pub mod input;
 pub mod network;
@@ -91,14 +92,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	assert_ne!(is_client, is_server);
 
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+	let entity_world = entity::ArcLockEntityWorld::default();
 	let network_storage = network::storage::Storage::new(&app_state);
 	network::task::Unload::add_state_listener(&app_state);
 
 	if is_server {
-		network::task::Load::load_dedicated_server(&app_state, &network_storage);
+		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 	} else {
 		input::init();
-		network::task::Load::add_state_listener(&app_state, &network_storage);
+		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);
 
 		if let Ok(mut guard) = account::ClientRegistry::write() {
 			(*guard).scan_accounts()?;
