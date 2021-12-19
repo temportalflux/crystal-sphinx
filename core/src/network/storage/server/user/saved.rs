@@ -18,6 +18,7 @@ impl User {
 		}
 	}
 
+	#[profiling::function]
 	pub fn load(dir: &Path) -> Result<Self, AnyError> {
 		let meta = account::Meta::load(&account::Meta::make_path(dir))?;
 		let key = account::Key::load(&account::Key::make_path(dir))?;
@@ -28,6 +29,7 @@ impl User {
 		})
 	}
 
+	#[profiling::function]
 	pub fn save(&self) -> VoidResult {
 		use engine::Application;
 		log::debug!(

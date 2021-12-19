@@ -20,6 +20,7 @@ pub struct Server {
 }
 
 impl Server {
+	#[profiling::function]
 	pub fn load(save_name: &str) -> Result<Self, AnyError> {
 		let mut savegame_path = std::env::current_dir().unwrap();
 		savegame_path.push("saves");
@@ -98,6 +99,7 @@ impl Server {
 		let arc_user = Arc::new(RwLock::new(user));
 		let thread_user = arc_user.clone();
 		std::thread::spawn(move || {
+			profiling::register_thread!("save-user");
 			if let Ok(user) = thread_user.read() {
 				let _ = user.save();
 			}
@@ -114,6 +116,7 @@ impl Server {
 		savegame_path
 	}
 
+	#[profiling::function]
 	pub fn start_loading_world(&mut self) {
 		use crate::world::Database;
 

@@ -73,6 +73,7 @@ pub fn start(incoming_requests: ticket::Receiver, cache: &ArcLockCache) -> Handl
 }
 
 impl ThreadState {
+	#[profiling::function]
 	fn update(&mut self, incoming_requests: &ticket::Receiver) {
 		self.process_new_tickets(&incoming_requests);
 		self.update_dropped_tickets();
@@ -82,12 +83,16 @@ impl ThreadState {
 		}
 	}
 
+	#[profiling::function]
 	fn process_new_tickets(&mut self, incoming_requests: &ticket::Receiver) {
 		use crossbeam_channel::TryRecvError;
 		let mut has_emptied_requests = false;
 		while !self.disconnected_from_requests && !has_emptied_requests {
 			match incoming_requests.try_recv() {
 				Ok(weak_ticket) => {
+					// TODO: Multiple chunks could be loaded concurrently.
+					// If requests are gathered first and then all new chunks are loaded at once,
+					// we could increase the throughput of the chunk loader.
 					self.sync_process_ticket(weak_ticket);
 				}
 				// no events, continue the loop after a short nap
@@ -103,6 +108,7 @@ impl ThreadState {
 		}
 	}
 
+	#[profiling::function]
 	fn sync_process_ticket(&mut self, weak_ticket: Weak<Ticket>) {
 		let arc_ticket = match weak_ticket.upgrade() {
 			Some(ticket) => ticket,
@@ -117,6 +123,7 @@ impl ThreadState {
 		self.ticket_bindings.push((weak_ticket, ticket_chunks));
 	}
 
+	#[profiling::function]
 	fn sync_load_ticket_chunks(
 		&mut self,
 		ticket: Arc<Ticket>,
@@ -124,6 +131,12 @@ impl ThreadState {
 		let mut chunks = Vec::new();
 		let coordinate_levels = ticket.coordinate_levels();
 		for (coordinate, level) in coordinate_levels.into_iter() {
+			let chunk_id = format!(
+				"<{}, {}, {}> @ {:?}",
+				coordinate[0], coordinate[1], coordinate[2], level
+			);
+			profiling::scope!("load-chunk", chunk_id.as_str());
+
 			let arc_chunk = self.sync_load_chunk(coordinate, level);
 			chunks.push((coordinate, arc_chunk, level));
 		}
@@ -185,6 +198,7 @@ impl ThreadState {
 	/// Iterate over all bound tickets to detect if any have been dropped.
 	/// All chunks related to a dropped ticket, which aren't referenced by other tickets,
 	/// are sent to the pending_unload list.
+	#[profiling::function]
 	fn update_dropped_tickets(&mut self) {
 		let now = std::time::Instant::now();
 		// Can use `Vec::drain_filter` when that api stabilizes.
@@ -223,6 +237,7 @@ impl ThreadState {
 		}
 	}
 
+	#[profiling::function]
 	fn find_expired_chunks(&mut self) -> Vec<(Point3<i64>, ArcLockChunk)> {
 		// Invalidate the flag indicating that there is some chunk pending expiration.
 		// We will later give it a proper value if there are still chunks in the list which will expire later.
@@ -265,6 +280,7 @@ impl ThreadState {
 		chunks_for_unloading
 	}
 
+	#[profiling::function]
 	fn unload_expired_chunks(
 		&mut self,
 		mut chunks_for_unloading: Vec<(Point3<i64>, ArcLockChunk)>,

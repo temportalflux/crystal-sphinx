@@ -55,6 +55,7 @@ impl Chunk {
 	}
 
 	pub(super) fn generate(path_on_disk: PathBuf, coordinate: &Point3<i64>, level: Level) -> Self {
+		profiling::scope!("generate-chunk", path_on_disk.to_str().unwrap_or(""));
 		// TODO: generate
 		//log::debug!(target: "world", "Generating chunk {}", coordinate);
 		Self {
@@ -65,6 +66,7 @@ impl Chunk {
 	}
 
 	pub(super) fn load(path_on_disk: PathBuf, coordinate: &Point3<i64>, level: Level) -> Self {
+		profiling::scope!("load-chunk", path_on_disk.to_str().unwrap_or(""));
 		// TODO: Load chunk from file
 		//log::debug!(target: "world", "Loading chunk {}", coordinate);
 		Self {
@@ -75,6 +77,7 @@ impl Chunk {
 	}
 
 	pub(super) fn save(&self) {
+		profiling::scope!("save-chunk", self.path_on_disk.to_str().unwrap_or(""));
 		let _path = &self.path_on_disk;
 		//log::debug!(target: "world", "Saving chunk {}", self.coordinate);
 		// TODO: Save chunk to disk

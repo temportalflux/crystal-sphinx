@@ -37,6 +37,7 @@ impl futures::future::Future for Load {
 }
 
 impl Load {
+	#[profiling::function]
 	pub fn load_dedicated_server(
 		app_state: &ArcLockMachine,
 		storage: &ArcLockStorage,
@@ -64,6 +65,7 @@ impl Load {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(*state)),
 				move |operation| {
+					profiling::scope!("load_client");
 					let instruction = operation
 						.data()
 						.as_ref()
@@ -97,6 +99,7 @@ impl Load {
 		}
 	}
 
+	#[profiling::function]
 	pub fn instruct(mut self, instruction: Instruction) -> Self {
 		self.next_app_state = instruction.get_next_app_state();
 
@@ -105,6 +108,7 @@ impl Load {
 		let thread_storage = self.storage.clone();
 		let thread_entity_world = self.entity_world.clone();
 		std::thread::spawn(move || {
+			profiling::register_thread!("load-world");
 			if instruction.mode.contains(mode::Kind::Server) {
 				let world_name = match &instruction.directive {
 					Directive::LoadWorld(world_name) => world_name,

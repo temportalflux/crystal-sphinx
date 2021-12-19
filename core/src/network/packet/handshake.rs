@@ -106,6 +106,7 @@ impl Handshake {
 		);
 	}
 
+	#[profiling::function]
 	pub fn connect_to_server(address: &str) -> VoidResult {
 		use network::prelude::*;
 		let request = match account::ClientRegistry::read()?.active_account() {
@@ -150,6 +151,7 @@ impl Processor for ServerProcessor {
 }
 
 impl PacketProcessor<Handshake> for ServerProcessor {
+	#[profiling::function]
 	fn process_packet(
 		&self,
 		_kind: &event::Kind,
@@ -160,12 +162,9 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 	) -> VoidResult {
 		match &data.0 {
 			Request::Login(account_meta, public_key) => {
-				log::info!(
-					target: LOG,
-					"Received login request from {}({})",
-					connection.address,
-					account_meta.id
-				);
+				let user_id = format!("{}({})", connection.address, account_meta.id);
+				profiling::scope!("received-login-request", user_id.as_str());
+				log::info!(target: LOG, "Received login request from {}", user_id);
 				let (server_auth_key, user) = match self.server().read() {
 					Ok(server) => (
 						server.auth_key().clone(),
@@ -240,6 +239,8 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 				Ok(())
 			}
 			Request::AuthTokenForServer(reencrypted_token) => {
+				let profiling_tag = format!("{}", connection.address);
+				profiling::scope!("received-auth-token", profiling_tag.as_str());
 				log::info!(
 					target: LOG,
 					"Received auth token from {}",
@@ -388,6 +389,7 @@ impl Processor for ClientProcessor {
 }
 
 impl PacketProcessor<Handshake> for ClientProcessor {
+	#[profiling::function]
 	fn process_packet(
 		&self,
 		_kind: &event::Kind,
@@ -398,6 +400,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 	) -> VoidResult {
 		match &data.0 {
 			Request::AuthTokenForClient(encrypted_bytes, server_public_key) => {
+				profiling::scope!("received-auth-token");
 				log::info!(target: LOG, "Received auth token from server");
 				// Technically we will have "connected" by the end of this request,
 				// but not really connected until the server validates the token.
@@ -426,6 +429,8 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 				Ok(())
 			}
 			Request::ClientAuthenticated(account_id, entity) => {
+				let profiling_tag = format!("{}", account_id);
+				profiling::scope!("client-authenticated", profiling_tag.as_str());
 				let authenticated_self = account::ClientRegistry::read()?
 					.active_account()
 					.map(|account| account.meta.id == *account_id)

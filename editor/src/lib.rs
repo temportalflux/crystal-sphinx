@@ -8,11 +8,6 @@ pub fn register_asset_types(manager: &mut editor::asset::Manager) {
 }
 
 pub fn run(_config: plugin::Config) -> VoidResult {
-	#[cfg(feature = "profile")]
-	{
-		engine::profiling::optick::start_capture();
-	}
-
 	engine::logging::init(&engine::logging::default_path(
 		CrystalSphinx::name(),
 		Some("_editor"),
@@ -40,10 +35,5 @@ pub fn run(_config: plugin::Config) -> VoidResult {
 	ui.write().unwrap().add_element(&workspace);
 
 	let engine = engine.into_arclock();
-	engine::Engine::run(engine.clone(), || {
-		#[cfg(feature = "profile")]
-		{
-			engine::profiling::optick::stop_capture(CrystalSphinx::name());
-		}
-	})
+	engine::Engine::run(engine.clone(), || {})
 }

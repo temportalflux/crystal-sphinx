@@ -72,12 +72,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	};
 	engine::logging::init(&log_path)?;
 
-	#[cfg(feature = "profile")]
-	{
-		log::info!(target: "profile", "Starting profiling capture");
-		engine::profiling::optick::start_capture();
-	}
-
 	// Load bundled plugins so they can be used throughout the instance
 	if let Ok(mut manager) = plugin::Manager::write() {
 		manager.load(config);
@@ -261,11 +255,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	engine::Engine::run(engine.clone(), || {
 		if let Ok(mut guard) = account::ClientRegistry::write() {
 			(*guard).logout();
-		}
-		#[cfg(feature = "profile")]
-		{
-			log::info!(target: "profile", "Stopping profiling capture");
-			engine::profiling::optick::stop_capture(CrystalSphinx::name());
 		}
 	})
 }

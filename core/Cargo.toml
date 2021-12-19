@@ -22,6 +22,8 @@ kdl-schema = { path = "../temportal-engine/crates/kdl-schema" }
 # [rust] async/future support in rust (for thinks like ongoing/background tasks)
 futures = "0.3"
 log = "0.4"
+# [utility] for getting performance information and rendering via any chosen viewer
+profiling = { version = "1.0", features = ["profile-with-tracy"] }
 rand = "0.8"
 rsa = "0.5"
 semver = "1.0"
