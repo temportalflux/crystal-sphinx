@@ -1,4 +1,4 @@
-use crate::entity::component::{Camera, NetRelevance, Orientation, Position};
+use crate::entity::component::{net, Camera, Orientation, Position};
 use std::net::SocketAddr;
 
 pub struct Server(hecs::EntityBuilder);
@@ -11,7 +11,7 @@ impl Server {
 	}
 
 	pub fn with_address(mut self, address: SocketAddr) -> Self {
-		self.0.add(NetRelevance::new(address));
+		self.0.add(net::Owner::new(address));
 		self
 	}
 

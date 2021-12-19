@@ -81,6 +81,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	crate::register_asset_types();
 	engine.scan_paks()?;
 
+	entity::component::register_replicated_components();
+
 	let is_client = std::env::args().any(|arg| arg == "-client");
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);
@@ -92,6 +94,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	if is_server {
 		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
+		engine.add_system(entity::system::Replicator::new(&entity_world).arclocked());
 	} else {
 		input::init();
 		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);

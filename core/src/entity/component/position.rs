@@ -1,6 +1,8 @@
-use engine::math::nalgebra::Point3;
+use super::net;
+use engine::{math::nalgebra::Point3, utility::AnyError};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
 	chunk: Point3<i64>,
 	offset: Point3<f32>,
@@ -39,5 +41,22 @@ impl Position {
 	/// Returns the offset position the entity is at within their chunk.
 	pub fn offset(&self) -> &Point3<f32> {
 		&self.offset
+	}
+}
+
+impl net::Replicated for Position {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::Position"
+	}
+
+	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+		Ok(rmp_serde::to_vec(&self)?)
+	}
+}
+
+impl std::convert::TryFrom<Vec<u8>> for Position {
+	type Error = AnyError;
+	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+		Ok(net::deserialize::<Self>(&bytes)?)
 	}
 }

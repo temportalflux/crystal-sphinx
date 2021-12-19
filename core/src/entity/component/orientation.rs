@@ -1,6 +1,8 @@
-use engine::math::nalgebra::UnitQuaternion;
+use super::net;
+use engine::{math::nalgebra::UnitQuaternion, utility::AnyError};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Orientation(UnitQuaternion<f32>);
 
 impl Default for Orientation {
@@ -28,5 +30,22 @@ impl std::fmt::Display for Orientation {
 impl Orientation {
 	pub fn orientation(&self) -> &UnitQuaternion<f32> {
 		&self.0
+	}
+}
+
+impl net::Replicated for Orientation {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::Orientation"
+	}
+
+	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+		Ok(rmp_serde::to_vec(&self)?)
+	}
+}
+
+impl std::convert::TryFrom<Vec<u8>> for Orientation {
+	type Error = rmp_serde::decode::Error;
+	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+		net::deserialize::<Self>(&bytes)
 	}
 }

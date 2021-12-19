@@ -1,8 +1,13 @@
 mod camera;
 pub use camera::*;
-mod net_relevance;
-pub use net_relevance::*;
+pub mod net;
 mod orientation;
 pub use orientation::*;
 mod position;
 pub use position::*;
+
+pub fn register_replicated_components() {
+	let mut registry = net::Registry::write();
+	registry.register::<Position>();
+	registry.register::<Orientation>();
+}

@@ -5,6 +5,9 @@ pub use handshake::*;
 
 mod connection;
 
+mod replicate_entity;
+pub use replicate_entity::*;
+
 pub fn register_types(
 	builder: &mut network::Builder,
 	app_state: &crate::app::state::ArcLockMachine,
@@ -23,4 +26,5 @@ pub fn register_types(
 		&entity_world,
 	);
 	connection::register_bonus_processors(builder, &auth_cache, &active_cache, &app_state);
+	ReplicateEntity::register(builder, &entity_world);
 }
