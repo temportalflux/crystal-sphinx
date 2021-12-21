@@ -8,9 +8,10 @@ as well as enabling the community to easily slot in their own modules/plugins/mo
 Crystal Sphinx (and TemportalEngine) are both entirely open source, and as such are easily modifiable by the
 community to further support the aforementioned module development.
 
-TODO:
-will need to separate to its own git repository at some point https://stosb.com/blog/retaining-history-when-moving-files-across-repositories-in-git/
-this operation will need to retain move history (i.e. `git log --name-only --format=format: --follow -- path/to/file | sort -u`)
+
+Separating code to its own repository (for future reference):
+https://stosb.com/blog/retaining-history-when-moving-files-across-repositories-in-git/
+to retain move history `git log --name-only --format=format: --follow -- path/to/file | sort -u`
 
 Library Notes:
 - [libloading](https://docs.rs/libloading/0.7.0/libloading/) for plugin loading/execution. [See guide for more.](https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html)

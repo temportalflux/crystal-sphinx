@@ -2,7 +2,6 @@ use crate::{
 	account,
 	entity::{archetype, ArcLockEntityWorld},
 	network::storage::{
-		client::ArcLockClient,
 		server::{user, ArcLockServer},
 		ArcLockStorage,
 	},
@@ -35,7 +34,7 @@ enum Request {
 		/*server public key*/ String,
 	),
 	AuthTokenForServer(/*re-encrypted auth token*/ Vec<u8>),
-	ClientAuthenticated(account::Id, hecs::Entity),
+	ClientAuthenticated(account::Id),
 }
 impl std::fmt::Display for Request {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -43,8 +42,8 @@ impl std::fmt::Display for Request {
 			Self::Login(account_meta, _client_key) => write!(f, "Login(id={})", account_meta.id),
 			Self::AuthTokenForClient(_bytes, _server_key) => write!(f, "AuthTokenForClient"),
 			Self::AuthTokenForServer(_bytes) => write!(f, "AuthTokenForServer"),
-			Self::ClientAuthenticated(account_id, entity) => {
-				write!(f, "Authenticated(id={} entity={})", account_id, entity.id())
+			Self::ClientAuthenticated(account_id) => {
+				write!(f, "Authenticated(id={})", account_id)
 			}
 		}
 	}
@@ -92,7 +91,6 @@ impl Handshake {
 		};
 		let client_proc = ClientProcessor {
 			app_state: app_state.clone(),
-			storage: storage.clone(),
 		};
 
 		builder.register_bundle::<Handshake>(
@@ -158,7 +156,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 		data: &mut Handshake,
 		connection: &Connection,
 		guarantee: &Guarantee,
-		_local_data: &LocalData,
+		local_data: &LocalData,
 	) -> VoidResult {
 		match &data.0 {
 			Request::Login(account_meta, public_key) => {
@@ -328,19 +326,45 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 							return Err(Box::new(Error::CannotReadServerData));
 						}
 
-						let mut builder =
-							archetype::player::Server::new().with_address(*pending_user.address());
-						// TODO: Destroy the player entity when the user disconnects
-						let player_entity =
-							self.entity_world.write().unwrap().spawn(builder.build());
+						if let Ok(mut world) = self.entity_world.write() {
+							log::debug!(
+								"Initializing entity for new player({})",
+								pending_user.id()
+							);
 
+							// Build an entity for the player which is marked with
+							// the account id of the user and the ip address of the connection.
+							let mut builder = archetype::player::Server::new()
+								.with_user_id(pending_user.id().clone())
+								.with_address(*pending_user.address())
+								.build();
+
+							// Integrated Client-Server needs to spawn client-only components
+							// if its the local player's entity.
+							if local_data.is_client() {
+								let client_reg = account::ClientRegistry::read()?;
+								let local_account = client_reg.active_account().unwrap();
+								// If the account ids match, then this entity is the local player's avatar
+								if *local_account.id() == *pending_user.id() {
+									if let Some(mut client_builder) =
+										archetype::player::Client::from(None).build()
+									{
+										builder.add_bundle(client_builder.build());
+									}
+								}
+							}
+
+							// TODO: Destroy the player entity when the user disconnects
+							world.spawn(builder.build());
+						}
+
+						// Tell all clients (including self if CotoS) that a user has joined.
 						Network::send_packets(
 							Packet::builder()
 								.with_mode(Broadcast)
 								.with_guarantee(Reliable + Unordered)
 								.with_payload(&Handshake(Request::ClientAuthenticated(
 									pending_user.id().clone(),
-									player_entity,
 								))),
 						)?;
 
@@ -367,14 +391,6 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 #[derive(Clone)]
 struct ClientProcessor {
 	app_state: crate::app::state::ArcLockMachine,
-	storage: ArcLockStorage,
-}
-
-impl ClientProcessor {
-	fn client(&self) -> ArcLockClient {
-		let storage = self.storage.read().unwrap();
-		storage.client().as_ref().unwrap().clone()
-	}
 }
 
 impl Processor for ClientProcessor {
@@ -428,7 +444,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 
 				Ok(())
 			}
-			Request::ClientAuthenticated(account_id, entity) => {
+			Request::ClientAuthenticated(account_id) => {
 				let profiling_tag = format!("{}", account_id);
 				profiling::scope!("client-authenticated", profiling_tag.as_str());
 				let authenticated_self = account::ClientRegistry::read()?
@@ -445,8 +461,6 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 				// TODO: If some other client has authed, add their account::Meta to some known-clients list for display in a "connected users" ui
 
 				if authenticated_self {
-					self.client().write().unwrap().set_entity_id(*entity);
-
 					// TODO: Server should send a "all data is ready" signal to tell the client
 					// that it is safe to enter the game, once relevant chunks and entities have been loaded.
 					// Must require:

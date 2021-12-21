@@ -126,21 +126,40 @@ impl Load {
 				}
 			}
 
+			let socknet_port = instruction.port.unwrap_or(25565);
 			let _ = crate::network::create(
 				instruction.mode,
 				&thread_app_state,
 				&thread_storage,
 				&thread_entity_world,
 			)
-			.with_port(instruction.port.unwrap_or(25565))
+			.with_port(socknet_port)
 			.spawn();
 			if let Ok(storage) = thread_storage.read() {
 				storage.start_loading();
 			}
-			if instruction.mode == mode::Kind::Client {
-				let url = match &instruction.directive {
-					Directive::Connect(url) => url,
-					_ => unimplemented!(),
+
+			if instruction.mode == mode::Kind::Client {}
+
+			// Dedicated Client (mode == Client) needs to connect to the server.
+			// Additionally... Integrated Client-Server (mode == Client + Server) should run
+			// authentication against its save data.
+			// We can't prevent a smart user from downloading save data and replacing the
+			// user id's and public key with their own, but we can at least do a bare-bones
+			// "your id and public keys match" authentication.
+			// Really we want to run the auth flow here because it allows us to put
+			// initialization for entities on the server in the handshake and
+			// initialization for entities on the client in the replication packet,
+			// running both for Integrated Client-Server/Client-on-top-of-Server.
+			if instruction.mode.contains(mode::Kind::Client) {
+				let url = if instruction.mode == mode::Kind::Client {
+					match &instruction.directive {
+						Directive::Connect(url) => url.clone(),
+						_ => unimplemented!(),
+					}
+				} else {
+					// for Cotos, the server url is the address we just initialized the network with
+					format!("127.0.0.1:{}", socknet_port)
 				};
 				if let Err(err) = Handshake::connect_to_server(&url) {
 					log::error!("{}", err);

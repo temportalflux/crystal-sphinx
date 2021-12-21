@@ -27,10 +27,7 @@ impl EngineSystem for Replicator {
 	fn update(&mut self, _delta_time: std::time::Duration) {
 		profiling::scope!("subsystem:replicator");
 
-		// TODO:
-		// Find all net::Owner entities
-		// Replicate owner entities to their connections
-		// Destroy entities when their owner disconnects
+		// TODO: Destroy entities when their owner disconnects
 		// Later:
 		// - Replicate all entities & components which implement net::Replicated to net::Owner connections when they come within range of the owner
 		// - Destroy entities from connections when they leave net relevance
@@ -58,34 +55,34 @@ impl Replicator {
 				owner.mark_as_replicated();
 			}
 		}
+
+		let mut replications = Vec::new();
 		let registry = net::Registry::read();
 		for (entity, address) in entities_to_replicate.into_iter() {
 			let scope_tag = format!("entity:{}", entity.id());
 			profiling::scope!("serialize-entity", scope_tag.as_str());
 
 			let entity_ref = world.entity(entity).unwrap();
-			let mut serialized_components = Vec::new();
-
-			for type_id in entity_ref.component_types() {
-				match registry.serialize(&entity_ref, type_id) {
-					Ok(Some(data)) => {
-						serialized_components.push(data);
-					}
-					Ok(None) => {} // NO-OP: the entity did not have a component of the given type
-					Err(err) => {
-						log::error!(target: "entity-replicator", "Encountered error while serializing entity: {}", err)
-					}
+			match registry.serialize_entity(entity_ref) {
+				Ok(serialized) => {
+					replications.push((address.clone(), serialized));
+				}
+				Err(err) => {
+					log::error!(target: "entity-replicator", "Encountered error while serializing entity: {}", err)
 				}
 			}
+		}
 
+		for (address, serialized) in replications.into_iter() {
 			let _ = Network::send_packets(
 				Packet::builder()
 					.with_address(address)
 					.unwrap()
+					// Integrated Client-Server should not sent to itself
+					.ignore_local_address()
 					.with_guarantee(Reliable + Unordered)
 					.with_payload(&ReplicateEntity {
-						entity,
-						serialized_components,
+						entities: vec![serialized],
 					}),
 			);
 		}

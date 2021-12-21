@@ -1,4 +1,7 @@
-use crate::entity::{self, component, ArcLockEntityWorld};
+use crate::{
+	account,
+	entity::{self, archetype, component, ArcLockEntityWorld},
+};
 use engine::{
 	network::{
 		self,
@@ -14,8 +17,7 @@ use std::sync::{Arc, RwLock, Weak};
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
 pub struct ReplicateEntity {
-	pub entity: hecs::Entity,
-	pub serialized_components: Vec<component::net::SerializedComponent>,
+	pub entities: Vec<component::net::SerializedEntity>,
 }
 
 impl ReplicateEntity {
@@ -65,23 +67,59 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 			Some(arc) => arc,
 			None => return Ok(()),
 		};
-		
+
 		let registry = component::net::Registry::read();
-		let mut builder = hecs::EntityBuilder::default();
-		for comp_data in data.serialized_components.clone().into_iter() {
-			let _ = registry.deserialize(comp_data, &mut builder);
+		let mut updates = Vec::new();
+
+		for serialized in data.entities.iter() {
+			let scope_tag = format!("entity-id:{}", serialized.entity.id());
+			profiling::scope!("deserialize-components", scope_tag.as_str());
+
+			let mut builder = hecs::EntityBuilder::default();
+			for comp_data in serialized.components.clone().into_iter() {
+				let _ = registry.deserialize(comp_data, &mut builder);
+			}
+			updates.push((serialized.entity, builder));
 		}
 
-		if let Ok(mut world) = arc_world.write() {
-			// Dedicated Clients wont run this logic,
-			// but because client-on-top-of-server is supported,
-			// its possible for the entity to already be in the shared-world.
-			if !world.contains(data.entity) {
-				world.spawn_at(data.entity, builder.build());
+		if updates.len() > 0 {
+			profiling::scope!("spawn-replicated");
+
+			let local_account_id = account::ClientRegistry::read()?
+				.active_account()
+				.map(|account| account.meta.id.clone());
+
+			let mut world = arc_world.write().unwrap();
+			for (entity, mut builder) in updates.into_iter() {
+				// If the entity doesn't exist in the world, spawn it with the components.
+				// Otherwise, replace any existing components with the same types with the new data.
+				// Example: Dedicated or Integrated Server spawns an entity and a Client receives
+				//          the update for the first time. Client doesn't have the entity in its
+				//          world yet, so it and its components are spawned.
+				// Integrated Client-Server might spawn an entity, but it should never send the packet to itself.
+				let bundle = builder.build();
+				if !world.contains(entity) {
+					world.spawn_at(entity, bundle);
+				} else {
+					let _ = world.insert(entity, bundle);
+				}
+
+				match (local_account_id, builder.get::<component::User>()) {
+					(Some(local_id), Some(user)) => {
+						// If the account ids match, then this entity is the local player's avatar
+						if *user.id() == local_id {
+							let entity_ref = world.entity(entity).unwrap();
+							if let Some(mut builder) =
+								archetype::player::Client::from(Some(entity_ref)).build()
+							{
+								let _ = world.insert(entity, builder.build());
+							}
+						}
+					}
+					_ => {}
+				}
 			}
 		}
-
-		// TODO: Attach owner-client-only components if the replicated entity is the client-player
 
 		Ok(())
 	}

@@ -9,8 +9,13 @@ struct Item {
 	deserialize: Box<dyn Fn(Vec<u8>, &mut hecs::EntityBuilder) -> VoidResult>,
 }
 
-#[derive(Clone)]
 #[derive(Serialize, Deserialize)]
+pub struct SerializedEntity {
+	pub entity: hecs::Entity,
+	pub components: Vec<SerializedComponent>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SerializedComponent {
 	id: String,
 	data: Vec<u8>,
@@ -99,6 +104,23 @@ impl Registry {
 			.get(serialized.id.as_str())
 			.ok_or(NoSuchId(serialized.id))?;
 		(item.deserialize)(serialized.data, builder)
+	}
+
+	pub(crate) fn serialize_entity(
+		&self,
+		entity_ref: hecs::EntityRef<'_>,
+	) -> Result<SerializedEntity, AnyError> {
+		let mut serialized_components = Vec::new();
+		for type_id in entity_ref.component_types() {
+			// None means NO-OP: the entity did not have a component of the given type
+			if let Some(data) = self.serialize(&entity_ref, type_id)? {
+				serialized_components.push(data);
+			}
+		}
+		Ok(SerializedEntity {
+			entity: entity_ref.entity(),
+			components: serialized_components,
+		})
 	}
 }
 
