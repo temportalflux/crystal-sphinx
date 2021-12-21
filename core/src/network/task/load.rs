@@ -1,7 +1,7 @@
 use super::{Directive, Instruction};
 use crate::{
 	app::{self, state::ArcLockMachine},
-	entity::ArcLockEntityWorld,
+	entity::{ArcLockEntityWorld, self},
 	network::{
 		packet::Handshake,
 		storage::{client::ArcLockClient, server::Server, ArcLockStorage},
@@ -13,6 +13,7 @@ use engine::{
 };
 use std::{
 	pin::Pin,
+	sync::{Arc, Weak, RwLock},
 	task::{Context, Poll},
 };
 
@@ -20,7 +21,7 @@ pub struct Load {
 	state: ArctexState,
 	app_state: ArcLockMachine,
 	storage: ArcLockStorage,
-	entity_world: ArcLockEntityWorld,
+	entity_world: Weak<RwLock<entity::World>>,
 	next_app_state: Option<app::state::State>,
 }
 
@@ -43,7 +44,7 @@ impl Load {
 		storage: &ArcLockStorage,
 		entity_world: &ArcLockEntityWorld,
 	) {
-		Self::new(app_state.clone(), storage.clone(), entity_world.clone())
+		Self::new(app_state.clone(), storage.clone(), Arc::downgrade(&entity_world))
 			.instruct(Instruction {
 				mode: mode::Kind::Server.into(),
 				port: LocalData::get_named_arg("host_port"),
@@ -61,7 +62,7 @@ impl Load {
 		for state in [LoadingWorld, Connecting].iter() {
 			let callback_app_state = app_state.clone();
 			let callback_storage = storage.clone();
-			let callback_entity_world = entity_world.clone();
+			let callback_entity_world = Arc::downgrade(&entity_world);
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(*state)),
 				move |operation| {
@@ -88,7 +89,7 @@ impl Load {
 	fn new(
 		app_state: ArcLockMachine,
 		storage: ArcLockStorage,
-		entity_world: ArcLockEntityWorld,
+		entity_world: Weak<RwLock<entity::World>>,
 	) -> Self {
 		Self {
 			state: ArctexState::default(),
@@ -126,12 +127,13 @@ impl Load {
 				}
 			}
 
+			let entity_world = thread_entity_world.upgrade().unwrap();
 			let socknet_port = instruction.port.unwrap_or(25565);
 			let _ = crate::network::create(
 				instruction.mode,
 				&thread_app_state,
 				&thread_storage,
-				&thread_entity_world,
+				&entity_world,
 			)
 			.with_port(socknet_port)
 			.spawn();

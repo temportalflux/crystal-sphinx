@@ -25,6 +25,12 @@ pub fn register_types(
 		&storage,
 		&entity_world,
 	);
-	connection::register_bonus_processors(builder, &auth_cache, &active_cache, &app_state);
+	connection::register_bonus_processors(
+		builder,
+		&auth_cache,
+		&active_cache,
+		&app_state,
+		&entity_world,
+	);
 	ReplicateEntity::register(builder, &entity_world);
 }

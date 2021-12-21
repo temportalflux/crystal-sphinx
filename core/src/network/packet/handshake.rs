@@ -1,6 +1,6 @@
 use crate::{
 	account,
-	entity::{archetype, ArcLockEntityWorld},
+	entity::{self, archetype, ArcLockEntityWorld},
 	network::storage::{
 		server::{user, ArcLockServer},
 		ArcLockStorage,
@@ -21,6 +21,7 @@ use engine::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock, Weak};
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -87,7 +88,7 @@ impl Handshake {
 			auth_cache: auth_cache.clone(),
 			active_cache: active_cache.clone(),
 			storage: storage.clone(),
-			entity_world: entity_world.clone(),
+			entity_world: Arc::downgrade(&entity_world),
 		};
 		let client_proc = ClientProcessor {
 			app_state: app_state.clone(),
@@ -127,7 +128,7 @@ struct ServerProcessor {
 	auth_cache: user::pending::ArcLockCache,
 	active_cache: user::active::ArcLockCache,
 	storage: ArcLockStorage,
-	entity_world: ArcLockEntityWorld,
+	entity_world: Weak<RwLock<entity::World>>,
 }
 
 impl ServerProcessor {
@@ -326,7 +327,8 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 							return Err(Box::new(Error::CannotReadServerData));
 						}
 
-						if let Ok(mut world) = self.entity_world.write() {
+						let arc_world = self.entity_world.upgrade().unwrap();
+						if let Ok(mut world) = arc_world.write() {
 							log::debug!(
 								"Initializing entity for new player({})",
 								pending_user.id()
@@ -354,7 +356,6 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 								}
 							}
 
-							// TODO: Destroy the player entity when the user disconnects
 							world.spawn(builder.build());
 						}
 

@@ -27,8 +27,7 @@ impl EngineSystem for Replicator {
 	fn update(&mut self, _delta_time: std::time::Duration) {
 		profiling::scope!("subsystem:replicator");
 
-		// TODO: Destroy entities when their owner disconnects
-		// Later:
+		// TODO: more entity replication
 		// - Replicate all entities & components which implement net::Replicated to net::Owner connections when they come within range of the owner
 		// - Destroy entities from connections when they leave net relevance
 		// - While relevant, replicate updates on net::Replicated components (net::Replicated should have a flag to indicate that it is dirty)
