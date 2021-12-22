@@ -12,7 +12,7 @@ impl Default for Position {
 	fn default() -> Self {
 		Self {
 			chunk: Point3::new(0, 0, 0),
-			offset: Point3::new(0.0, 0.0, 0.0),
+			offset: Point3::new(3.5, 0.0, 0.5),
 		}
 	}
 }

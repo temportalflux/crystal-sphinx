@@ -7,7 +7,11 @@ pub struct Orientation(UnitQuaternion<f32>);
 
 impl Default for Orientation {
 	fn default() -> Self {
-		Self(UnitQuaternion::identity())
+		//Self(UnitQuaternion::identity())
+		Self(UnitQuaternion::from_axis_angle(
+			&-engine::world::global_up(),
+			-90.0f32.to_radians(),
+		))
 	}
 }
 

@@ -3,7 +3,7 @@ use crate::{
 	entity::{self, component, ArcLockEntityWorld},
 };
 use engine::{
-	math::nalgebra::{Point3, Vector3, UnitQuaternion},
+	math::nalgebra::{Point3, UnitQuaternion, Vector3},
 	EngineSystem,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -38,6 +38,14 @@ impl EngineSystem for PlayerController {
 	fn update(&mut self, delta_time: std::time::Duration) {
 		profiling::scope!("subsystem:player_controller");
 
+		// TODO: Input action states should be able to be weak-referenced
+		// instead of needing to lock the entire input system.
+		if let Some(state) =
+			engine::input::read().get_user_action(0, crate::input::AXIS_LOOK_HORIZONTAL)
+		{
+			log::debug!("{}", state.axis_value());
+		}
+
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
 			None => return,
@@ -54,11 +62,20 @@ impl EngineSystem for PlayerController {
 			self.time += delta_time.as_secs_f32();
 			let t = self.time / 10.0;
 			let t = t * std::f32::consts::PI * 2.0;
-			position.offset = Point3::new(t.cos() * r, 0.0, t.sin() * r) + Vector3::new(0.5, 0.0, 0.5);
-			**orientation = UnitQuaternion::from_axis_angle(
+			//position.offset = Point3::new(t.cos() * r, 0.0, t.sin() * r) + Vector3::new(0.5, 0.0, 0.5);
+
+			let desired_horizontal_rot = UnitQuaternion::from_axis_angle(
 				&-engine::world::global_up(),
-				t - 90.0f32.to_radians()
+				t - 90.0f32.to_radians(),
 			);
+			//**orientation = desired_horizontal_rot;
+
+			let pi2_radians = 90.0f32.to_radians();
+			let additional_horz = UnitQuaternion::from_axis_angle(
+				&engine::world::global_forward(),
+				delta_time.as_secs_f32() * pi2_radians,
+			);
+			//**orientation = additional_horz * (**orientation);
 		}
 	}
 }
