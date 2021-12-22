@@ -2,18 +2,34 @@ use engine::{
 	graphics::camera,
 	math::nalgebra::{self, point, vector, Matrix4, Point3, UnitQuaternion, Vector2, Vector3},
 };
+use std::sync::{Arc, RwLock};
 
 pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 
+pub type ArcLockCamera = Arc<RwLock<Camera>>;
+#[derive(Clone)]
 pub struct Camera {
+	pub chunk_size: Vector3<f32>,
 	pub chunk_coordinate: Point3<f32>,
 	pub position: Point3<f32>,
-
 	pub orientation: UnitQuaternion<f32>,
-
 	pub projection: camera::Projection,
+}
 
-	pub chunk_size: Vector3<f32>,
+impl Default for Camera {
+	fn default() -> Self {
+		Self {
+			chunk_size: Vector3::<f32>::new(16.0, 16.0, 16.0),
+			chunk_coordinate: Point3::<f32>::new(0.0, 0.0, 0.0),
+			position: Point3::<f32>::new(0.0, 0.0, 0.0),
+			orientation: UnitQuaternion::identity(),
+			projection: camera::Projection::Perspective(camera::PerspectiveProjection {
+				vertical_fov: 43.0,
+				near_plane: 0.1,
+				far_plane: 1000.0,
+			}),
+		}
+	}
 }
 
 impl camera::Camera for Camera {

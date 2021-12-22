@@ -9,7 +9,7 @@ use engine::{
 		self, buffer, command, flags, structs, utility::NamedObject, ArcRenderChain, Drawable,
 		RenderChain, RenderChainElement, Uniform,
 	},
-	math::nalgebra::{Point3, Translation3, UnitQuaternion, Vector2, Vector3},
+	math::nalgebra::{Translation3, UnitQuaternion, Vector2, Vector3},
 	task::{self, ScheduledTask},
 	utility::AnyError,
 	Application,
@@ -27,6 +27,7 @@ pub struct RenderVoxel {
 	index_buffer: Arc<buffer::Buffer>,
 	instance_buffer: Arc<buffer::Buffer>,
 	camera_uniform: Uniform,
+	camera: Arc<RwLock<camera::Camera>>,
 	model_cache: ArcLockModelCache,
 }
 
@@ -39,6 +40,7 @@ impl RenderVoxel {
 		app_state: &ArcLockMachine,
 		render_chain: &ArcRenderChain,
 		model_cache: &ArcLockModelCache,
+		camera: &Arc<RwLock<camera::Camera>>,
 	) {
 		use state::{
 			storage::{Event::*, Storage},
@@ -49,6 +51,7 @@ impl RenderVoxel {
 
 		let callback_render_chain = render_chain.clone();
 		let callback_model_cache = model_cache.clone();
+		let callback_camera = Arc::downgrade(&camera);
 		Storage::<ArcLockRenderVoxel>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
@@ -56,7 +59,8 @@ impl RenderVoxel {
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
 				let mut render_chain = callback_render_chain.write().unwrap();
-				match Self::create(&mut render_chain, &callback_model_cache) {
+				let arc_camera = callback_camera.upgrade().unwrap();
+				match Self::create(&mut render_chain, &callback_model_cache, arc_camera) {
 					Ok(arclocked) => Some(arclocked),
 					Err(err) => {
 						log::error!(target: ID, "{}", err);
@@ -69,14 +73,19 @@ impl RenderVoxel {
 	fn create(
 		render_chain: &mut RenderChain,
 		model_cache: &ArcLockModelCache,
+		camera: Arc<RwLock<camera::Camera>>,
 	) -> Result<ArcLockRenderVoxel, AnyError> {
 		let subpass_id = Self::subpass_id();
-		let render_chunks = Self::new(&render_chain, model_cache.clone())?.arclocked();
+		let render_chunks = Self::new(&render_chain, model_cache.clone(), camera)?.arclocked();
 		render_chain.add_render_chain_element(Some(subpass_id.as_string()), &render_chunks)?;
 		Ok(render_chunks)
 	}
 
-	fn new(render_chain: &RenderChain, model_cache: ArcLockModelCache) -> Result<Self, AnyError> {
+	fn new(
+		render_chain: &RenderChain,
+		model_cache: ArcLockModelCache,
+		camera: Arc<RwLock<camera::Camera>>,
+	) -> Result<Self, AnyError> {
 		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
@@ -125,6 +134,7 @@ impl RenderVoxel {
 			instance_buffer,
 			index_buffer,
 			camera_uniform,
+			camera,
 			model_cache,
 		})
 	}
@@ -242,26 +252,8 @@ impl RenderChainElement for RenderVoxel {
 		frame: usize,
 		resolution: &Vector2<f32>,
 	) -> Result<bool, AnyError> {
-		// TEMPORARY - camera should be externally managed
-		let orientation =
-			UnitQuaternion::from_axis_angle(&-engine::world::global_up(), 45.0f32.to_radians());
-		//let orientation = UnitQuaternion::from_axis_angle(
-		//	&-engine::world::global_right(),
-		//	30.0f32.to_radians(),
-		//);
-		let camera = camera::Camera {
-			chunk_coordinate: Point3::<f32>::new(0.0, 0.0, 0.0),
-			position: Point3::<f32>::new(-3.0, 2.0, 3.0),
-			orientation,
-			projection: camera::Projection::Perspective(camera::PerspectiveProjection {
-				vertical_fov: 43.0,
-				near_plane: 0.1,
-				far_plane: 1000.0,
-			}),
-			chunk_size: Vector3::<f32>::new(16.0, 16.0, 16.0),
-		};
-		self.camera_uniform
-			.write_data(frame, &camera.as_uniform_data(resolution))?;
+		let data = self.camera.read().unwrap().as_uniform_data(resolution);
+		self.camera_uniform.write_data(frame, &data)?;
 		Ok(false)
 	}
 

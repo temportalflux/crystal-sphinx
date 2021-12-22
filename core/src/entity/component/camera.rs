@@ -14,7 +14,7 @@ impl Default for Camera {
 		Self {
 			view_offset: Vector3::new(0.0, 0.0, 0.0),
 			format: Projection::Perspective(PerspectiveProjection {
-				vertical_fov: 45.0,
+				vertical_fov: 43.0,
 				near_plane: 0.1,
 				far_plane: 1000.0,
 			}),
@@ -29,5 +29,15 @@ impl std::fmt::Display for Camera {
 			"Camera(offset=<{}, {}, {}> format={})",
 			self.view_offset[0], self.view_offset[1], self.view_offset[2], self.format
 		)
+	}
+}
+
+impl Camera {
+	pub fn offset(&self) -> &Vector3<f32> {
+		&self.view_offset
+	}
+
+	pub fn projection(&self) -> &Projection {
+		&self.format
 	}
 }

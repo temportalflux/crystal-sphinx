@@ -1,7 +1,7 @@
 use super::{Directive, Instruction};
 use crate::{
 	app::{self, state::ArcLockMachine},
-	entity::{ArcLockEntityWorld, self},
+	entity::{self, ArcLockEntityWorld},
 	network::{
 		packet::Handshake,
 		storage::{client::ArcLockClient, server::Server, ArcLockStorage},
@@ -13,7 +13,7 @@ use engine::{
 };
 use std::{
 	pin::Pin,
-	sync::{Arc, Weak, RwLock},
+	sync::{Arc, RwLock, Weak},
 	task::{Context, Poll},
 };
 
@@ -44,13 +44,17 @@ impl Load {
 		storage: &ArcLockStorage,
 		entity_world: &ArcLockEntityWorld,
 	) {
-		Self::new(app_state.clone(), storage.clone(), Arc::downgrade(&entity_world))
-			.instruct(Instruction {
-				mode: mode::Kind::Server.into(),
-				port: LocalData::get_named_arg("host_port"),
-				directive: Directive::LoadWorld("tmp".to_owned()),
-			})
-			.join(std::time::Duration::from_millis(100 * 1), None);
+		Self::new(
+			app_state.clone(),
+			storage.clone(),
+			Arc::downgrade(&entity_world),
+		)
+		.instruct(Instruction {
+			mode: mode::Kind::Server.into(),
+			port: LocalData::get_named_arg("host_port"),
+			directive: Directive::LoadWorld("tmp".to_owned()),
+		})
+		.join(std::time::Duration::from_millis(100 * 1), None);
 	}
 
 	pub fn add_state_listener(

@@ -93,8 +93,8 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	network::task::Unload::add_state_listener(&app_state);
 
 	if is_server {
-		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 		engine.add_system(entity::system::Replicator::new(&entity_world).arclocked());
+		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 	} else {
 		input::init();
 		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);
@@ -153,11 +153,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				),
 			])));
 		}
+
+		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::RenderVoxel::add_state_listener(
 			&app_state,
 			&engine.render_chain().unwrap(),
 			&model_cache.arclocked(),
+			&arc_camera,
 		);
+		engine.add_system(entity::system::UpdateCamera::new(&entity_world, arc_camera).arclocked());
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
