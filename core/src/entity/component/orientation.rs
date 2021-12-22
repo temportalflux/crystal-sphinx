@@ -49,3 +49,16 @@ impl std::convert::TryFrom<Vec<u8>> for Orientation {
 		net::deserialize::<Self>(&bytes)
 	}
 }
+
+impl std::ops::Deref for Orientation {
+	type Target = UnitQuaternion<f32>;
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl std::ops::DerefMut for Orientation {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
+	}
+}

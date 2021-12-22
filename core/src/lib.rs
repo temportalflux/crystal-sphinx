@@ -99,14 +99,20 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		input::init();
 		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);
 
-		if let Ok(mut guard) = account::ClientRegistry::write() {
-			(*guard).scan_accounts()?;
+		let account_id = if let Ok(mut client_reg) = account::ClientRegistry::write() {
+			client_reg.scan_accounts()?;
 			let user_name = std::env::args()
 				.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
 				.unwrap();
-			let user_id = (*guard).ensure_account(&user_name)?;
-			let _account = (*guard).login_as(&user_id);
-		}
+			let user_id = client_reg.ensure_account(&user_name)?;
+			client_reg.login_as(&user_id)?;
+			user_id
+		} else {
+			unimplemented!()
+		};
+		engine.add_system(
+			entity::system::PlayerController::new(&entity_world, account_id).arclocked(),
+		);
 
 		engine::window::Window::builder()
 			.with_title("Crystal Sphinx")

@@ -2,7 +2,7 @@ use crate::{
 	entity::{self, component, ArcLockEntityWorld},
 	graphics::voxel::camera,
 };
-use engine::{EngineSystem, math::nalgebra::{Point3, Vector3, UnitQuaternion}};
+use engine::{math::nalgebra::Point3, EngineSystem};
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
@@ -44,21 +44,15 @@ impl EngineSystem for UpdateCamera {
 			// WARN: Casting i64 to f32 will result in data loss...
 			// I'll find a way to address this on another day...
 			let chunk = position.chunk();
-			result.chunk_coordinate = Point3::new(
-				chunk[0] as f32,
-				chunk[1] as f32,
-				chunk[2] as f32,
-			);
+			result.chunk_coordinate =
+				Point3::new(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32);
 
-			//result.position = *position.offset() + *camera.offset();
-			result.position = Point3::new(-3.0, 0.0, 3.0) + Vector3::new(0.0, 1.75, 0.0);
-			//result.orientation = *orientation.orientation();
-			result.orientation = UnitQuaternion::from_axis_angle(&-engine::world::global_up(), 45.0f32.to_radians());
-			
+			result.position = *position.offset() + *camera.offset();
+			result.orientation = **orientation;
 			result.projection = *camera.projection();
 
 			// TODO: support multiple camera components but only 1 active at a time
-			break
+			break;
 		}
 
 		*self.camera.write().unwrap() = result;

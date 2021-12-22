@@ -12,7 +12,7 @@ pub struct Camera {
 impl Default for Camera {
 	fn default() -> Self {
 		Self {
-			view_offset: Vector3::new(0.0, 0.0, 0.0),
+			view_offset: Vector3::new(0.0, 1.75, 0.0),
 			format: Projection::Perspective(PerspectiveProjection {
 				vertical_fov: 43.0,
 				near_plane: 0.1,

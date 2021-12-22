@@ -9,7 +9,7 @@ use engine::{
 		self, buffer, command, flags, structs, utility::NamedObject, ArcRenderChain, Drawable,
 		RenderChain, RenderChainElement, Uniform,
 	},
-	math::nalgebra::{Translation3, UnitQuaternion, Vector2, Vector3},
+	math::nalgebra::{Translation3, Vector2, Vector3},
 	task::{self, ScheduledTask},
 	utility::AnyError,
 	Application,

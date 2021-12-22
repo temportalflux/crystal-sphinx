@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
 	chunk: Point3<i64>,
-	offset: Point3<f32>,
+	pub(crate) offset: Point3<f32>,
 }
 
 impl Default for Position {
