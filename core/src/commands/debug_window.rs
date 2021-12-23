@@ -4,22 +4,25 @@ use engine::{input, ui::egui::Element};
 pub struct DebugWindow {
 	is_open: bool,
 	commands: CommandList,
+	weak_action: input::action::WeakLockState,
 }
 
 impl DebugWindow {
-	pub fn new(commands: CommandList) -> Self {
+	pub fn new(commands: CommandList, arc_user: &input::ArcLockUser) -> Self {
+		let weak_action =
+			input::User::get_action_in(&arc_user, crate::input::ACTION_TOGGLE_DEBUG_CMDS).unwrap();
 		Self {
 			is_open: false,
 			commands,
+			weak_action,
 		}
 	}
 }
 
 impl Element for DebugWindow {
 	fn render(&mut self, ctx: &egui::CtxRef) {
-		if let Some(action) =
-			input::read().get_user_action(0, crate::input::ACTION_TOGGLE_DEBUG_CMDS)
-		{
+		if let Some(arc_state) = self.weak_action.upgrade() {
+			let action = arc_state.read().unwrap();
 			if !self.is_open && action.on_button_pressed() {
 				self.is_open = true;
 			}

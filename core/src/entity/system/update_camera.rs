@@ -30,7 +30,7 @@ impl UpdateCamera {
 }
 
 impl EngineSystem for UpdateCamera {
-	fn update(&mut self, _delta_time: std::time::Duration) {
+	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
 		profiling::scope!("subsystem:update_camera");
 
 		let arc_world = match self.world.upgrade() {

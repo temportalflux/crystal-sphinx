@@ -83,6 +83,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	entity::component::register_replicated_components();
 
+	let mut input_user = None;
 	let is_client = std::env::args().any(|arg| arg == "-client");
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);
@@ -96,7 +97,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		engine.add_system(entity::system::Replicator::new(&entity_world).arclocked());
 		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 	} else {
-		input::init();
+		input_user = Some(input::init());
 		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);
 
 		let account_id = if let Ok(mut client_reg) = account::ClientRegistry::write() {
@@ -111,7 +112,12 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			unimplemented!()
 		};
 		engine.add_system(
-			entity::system::PlayerController::new(&entity_world, account_id).arclocked(),
+			entity::system::PlayerController::new(
+				&entity_world,
+				account_id,
+				input_user.as_ref().unwrap(),
+			)
+			.arclocked(),
 		);
 
 		engine::window::Window::builder()
@@ -179,9 +185,10 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
 			)?;
-			ui.write()
-				.unwrap()
-				.add_owned_element(DebugWindow::new(command_list.clone()));
+			ui.write().unwrap().add_owned_element(DebugWindow::new(
+				command_list.clone(),
+				input_user.as_ref().unwrap(),
+			));
 			_egui_ui = Some(ui);
 		}
 

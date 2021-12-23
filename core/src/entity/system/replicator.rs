@@ -24,7 +24,7 @@ impl Replicator {
 }
 
 impl EngineSystem for Replicator {
-	fn update(&mut self, _delta_time: std::time::Duration) {
+	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
 		profiling::scope!("subsystem:replicator");
 
 		// TODO: more entity replication

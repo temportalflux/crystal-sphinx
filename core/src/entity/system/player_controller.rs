@@ -3,6 +3,7 @@ use crate::{
 	entity::{self, component, ArcLockEntityWorld},
 };
 use engine::{
+	input,
 	math::nalgebra::{Point3, UnitQuaternion, Vector3},
 	EngineSystem,
 };
@@ -17,14 +18,23 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 pub struct PlayerController {
 	world: Weak<RwLock<entity::World>>,
 	account_id: account::Id,
+	look_actions: Vec<input::action::WeakLockState>,
 	time: f32,
 }
 
 impl PlayerController {
-	pub fn new(world: &ArcLockEntityWorld, account_id: account::Id) -> Self {
+	pub fn new(
+		world: &ArcLockEntityWorld,
+		account_id: account::Id,
+		arc_user: &input::ArcLockUser,
+	) -> Self {
 		Self {
 			world: Arc::downgrade(&world),
 			account_id,
+			look_actions: vec![crate::input::AXIS_LOOK_HORIZONTAL]
+				.into_iter()
+				.map(|id| input::User::get_action_in(&arc_user, id).unwrap())
+				.collect(),
 			time: 0.0,
 		}
 	}
@@ -35,15 +45,11 @@ impl PlayerController {
 }
 
 impl EngineSystem for PlayerController {
-	fn update(&mut self, delta_time: std::time::Duration) {
+	fn update(&mut self, delta_time: std::time::Duration, _has_focus: bool) {
 		profiling::scope!("subsystem:player_controller");
 
-		// TODO: Input action states should be able to be weak-referenced
-		// instead of needing to lock the entire input system.
-		if let Some(state) =
-			engine::input::read().get_user_action(0, crate::input::AXIS_LOOK_HORIZONTAL)
-		{
-			log::debug!("{}", state.axis_value());
+		if let Some(arc_state) = self.look_actions[0].upgrade() {
+			log::debug!("{}", arc_state.read().unwrap().axis_value());
 		}
 
 		let arc_world = match self.world.upgrade() {
