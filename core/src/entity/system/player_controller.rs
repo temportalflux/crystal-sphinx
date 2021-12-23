@@ -4,8 +4,8 @@ use crate::{
 };
 use engine::{
 	input,
-	math::nalgebra::{Point3, UnitQuaternion, Vector3},
-	EngineSystem,
+	math::nalgebra::{Point3, Unit, UnitQuaternion, Vector3},
+	world, EngineSystem,
 };
 use std::sync::{Arc, RwLock, Weak};
 
@@ -15,10 +15,47 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c mut component::Orientation,
 )>;
 
+enum RotationOrder {
+	First, Second,
+}
+
+struct LookAction {
+	action: input::action::WeakLockState,
+	side: RotationOrder,
+	axis: Unit<Vector3<f32>>,
+}
+
+impl LookAction {
+	fn take_value(&self) -> f32 {
+		if let Some(arc_state) = self.action.upgrade() {
+			arc_state.write().unwrap().take_value() as f32
+		} else {
+			0.0
+		}
+	}
+	
+	fn concat_into(&self, value: f32, orientation: &mut UnitQuaternion<f32>) {
+		if value.abs() > std::f32::EPSILON {
+			let rot = UnitQuaternion::from_axis_angle(
+				&self.axis,
+				value * 90.0f32.to_radians(),
+			);
+			match self.side {
+				RotationOrder::First => {
+					*orientation = (*orientation) * rot;
+				}
+				RotationOrder::Second => {
+					*orientation = rot * (*orientation);
+				}
+			}
+		}
+	}
+}
+
 pub struct PlayerController {
 	world: Weak<RwLock<entity::World>>,
 	account_id: account::Id,
-	look_actions: Vec<input::action::WeakLockState>,
+	look_actions: Vec<LookAction>,
 	time: f32,
 }
 
@@ -28,13 +65,23 @@ impl PlayerController {
 		account_id: account::Id,
 		arc_user: &input::ArcLockUser,
 	) -> Self {
+		let get_action = |id| input::User::get_action_in(&arc_user, id).unwrap();
+
 		Self {
 			world: Arc::downgrade(&world),
 			account_id,
-			look_actions: vec![crate::input::AXIS_LOOK_HORIZONTAL]
-				.into_iter()
-				.map(|id| input::User::get_action_in(&arc_user, id).unwrap())
-				.collect(),
+			look_actions: vec![
+				LookAction {
+					action: get_action(crate::input::AXIS_LOOK_VERTICAL),
+					side: RotationOrder::First,
+					axis: -world::global_right(),
+				},
+				LookAction {
+					action: get_action(crate::input::AXIS_LOOK_HORIZONTAL),
+					side: RotationOrder::Second,
+					axis: world::global_up(),
+				},
+			],
 			time: 0.0,
 		}
 	}
@@ -48,9 +95,7 @@ impl EngineSystem for PlayerController {
 	fn update(&mut self, delta_time: std::time::Duration, _has_focus: bool) {
 		profiling::scope!("subsystem:player_controller");
 
-		if let Some(arc_state) = self.look_actions[0].upgrade() {
-			log::debug!("{}", arc_state.read().unwrap().axis_value());
-		}
+		let input_values = self.look_actions.iter().map(|action| action.take_value()).collect::<Vec<_>>();
 
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
@@ -64,24 +109,23 @@ impl EngineSystem for PlayerController {
 				continue;
 			}
 
+			/* Rotate around <0.5, 0, 0.5>
 			let r = 3.0;
 			self.time += delta_time.as_secs_f32();
 			let t = self.time / 10.0;
 			let t = t * std::f32::consts::PI * 2.0;
-			//position.offset = Point3::new(t.cos() * r, 0.0, t.sin() * r) + Vector3::new(0.5, 0.0, 0.5);
+			position.offset = Point3::new(t.cos() * r, 0.0, t.sin() * r) + Vector3::new(0.5, 0.0, 0.5);
 
 			let desired_horizontal_rot = UnitQuaternion::from_axis_angle(
 				&-engine::world::global_up(),
 				t - 90.0f32.to_radians(),
 			);
-			//**orientation = desired_horizontal_rot;
-
-			let pi2_radians = 90.0f32.to_radians();
-			let additional_horz = UnitQuaternion::from_axis_angle(
-				&engine::world::global_forward(),
-				delta_time.as_secs_f32() * pi2_radians,
-			);
-			//**orientation = additional_horz * (**orientation);
+			**orientation = desired_horizontal_rot;
+			*/
+			
+			for (look_action, value) in self.look_actions.iter().zip(input_values.iter()) {
+				look_action.concat_into(*value, &mut (**orientation));
+			}
 		}
 	}
 }

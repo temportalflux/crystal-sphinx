@@ -46,7 +46,8 @@ pub fn init() -> ArcLockUser {
 						.bind(BUTTON_FLY_DOWN, Keyboard(Q))
 						.bind(
 							AXIS_LOOK_HORIZONTAL,
-							Source::Mouse(Mouse::Move(MouseX)) + ScreenPositionDelta,
+							Source::Mouse(Mouse::Move(MouseX))
+								+ ScreenPositionDelta + Multiplier(3.0),
 						)
 						.bind(
 							AXIS_LOOK_VERTICAL,
