@@ -83,7 +83,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 
 	entity::component::register_replicated_components();
 
-	let mut input_user = None;
+	let input_user: Option<input::ArcLockUser>;
 	let is_client = std::env::args().any(|arg| arg == "-client");
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);

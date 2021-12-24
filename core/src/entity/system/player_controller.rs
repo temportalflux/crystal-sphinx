@@ -4,7 +4,7 @@ use crate::{
 };
 use engine::{
 	input,
-	math::nalgebra::{Point3, Unit, UnitQuaternion, Vector3},
+	math::nalgebra::{Unit, UnitQuaternion, Vector3},
 	world, EngineSystem,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -16,7 +16,24 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 )>;
 
 enum RotationOrder {
-	First, Second,
+	First,
+	Second,
+}
+
+struct MoveAction {
+	action: input::action::WeakLockState,
+	direction: Unit<Vector3<f32>>,
+	is_global: bool,
+}
+
+impl MoveAction {
+	fn value(&self) -> f32 {
+		if let Some(arc_state) = self.action.upgrade() {
+			arc_state.read().unwrap().value() as f32
+		} else {
+			0.0
+		}
+	}
 }
 
 struct LookAction {
@@ -33,13 +50,10 @@ impl LookAction {
 			0.0
 		}
 	}
-	
+
 	fn concat_into(&self, value: f32, orientation: &mut UnitQuaternion<f32>) {
 		if value.abs() > std::f32::EPSILON {
-			let rot = UnitQuaternion::from_axis_angle(
-				&self.axis,
-				value * 90.0f32.to_radians(),
-			);
+			let rot = UnitQuaternion::from_axis_angle(&self.axis, value * 90.0f32.to_radians());
 			match self.side {
 				RotationOrder::First => {
 					*orientation = (*orientation) * rot;
@@ -56,7 +70,8 @@ pub struct PlayerController {
 	world: Weak<RwLock<entity::World>>,
 	account_id: account::Id,
 	look_actions: Vec<LookAction>,
-	time: f32,
+	move_speed: f32,
+	move_actions: Vec<MoveAction>,
 }
 
 impl PlayerController {
@@ -82,7 +97,24 @@ impl PlayerController {
 					axis: world::global_up(),
 				},
 			],
-			time: 0.0,
+			move_speed: 4.0,
+			move_actions: vec![
+				MoveAction {
+					action: get_action(crate::input::AXIS_MOVE),
+					direction: world::global_forward(),
+					is_global: false,
+				},
+				MoveAction {
+					action: get_action(crate::input::AXIS_STRAFE),
+					direction: world::global_right(),
+					is_global: false,
+				},
+				MoveAction {
+					action: get_action(crate::input::AXIS_FLY),
+					direction: world::global_up(),
+					is_global: true,
+				},
+			],
 		}
 	}
 
@@ -95,7 +127,16 @@ impl EngineSystem for PlayerController {
 	fn update(&mut self, delta_time: std::time::Duration, _has_focus: bool) {
 		profiling::scope!("subsystem:player_controller");
 
-		let input_values = self.look_actions.iter().map(|action| action.take_value()).collect::<Vec<_>>();
+		let look_values = self
+			.look_actions
+			.iter()
+			.map(|action| action.take_value())
+			.collect::<Vec<_>>();
+		let move_values = self
+			.move_actions
+			.iter()
+			.map(|action| action.value())
+			.collect::<Vec<_>>();
 
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
@@ -122,8 +163,22 @@ impl EngineSystem for PlayerController {
 			);
 			**orientation = desired_horizontal_rot;
 			*/
-			
-			for (look_action, value) in self.look_actions.iter().zip(input_values.iter()) {
+
+			let mut displacement = Vector3::new(0.0, 0.0, 0.0);
+			for (move_action, &value) in self.move_actions.iter().zip(move_values.iter()) {
+				if value.abs() > std::f32::EPSILON {
+					let mut direction = *move_action.direction;
+					if !move_action.is_global {
+						direction = (**orientation) * direction;
+						// zero out the y-value of the direction
+						direction[1] = 0.0;
+					}
+					displacement += direction * value * self.move_speed * delta_time.as_secs_f32();
+				}
+			}
+			position.offset += displacement;
+
+			for (look_action, value) in self.look_actions.iter().zip(look_values.iter()) {
 				look_action.concat_into(*value, &mut (**orientation));
 			}
 		}
