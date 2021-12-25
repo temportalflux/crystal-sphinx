@@ -94,7 +94,6 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	network::task::Unload::add_state_listener(&app_state);
 
 	if is_server {
-		engine.add_system(entity::system::Replicator::new(&entity_world).arclocked());
 		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 	} else {
 		input_user = Some(input::init());

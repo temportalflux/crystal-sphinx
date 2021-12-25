@@ -1,6 +1,6 @@
 use crate::{
 	account,
-	entity::component::{net, Camera, Orientation, Position, User},
+	entity::component::{net, Camera, ChunkLoader, Orientation, Position, User},
 };
 use std::net::SocketAddr;
 
@@ -8,7 +8,9 @@ pub struct Server(hecs::EntityBuilder);
 impl Server {
 	pub fn new() -> Self {
 		let mut builder = hecs::EntityBuilder::default();
-		builder.add(Position::default()).add(Orientation::default());
+		builder.add(Position::default());
+		builder.add(Orientation::default());
+		builder.add(ChunkLoader::default());
 		Self(builder)
 	}
 

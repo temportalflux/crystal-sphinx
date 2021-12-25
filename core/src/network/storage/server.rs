@@ -1,5 +1,12 @@
-use crate::{account, world::ArcLockDatabase};
-use engine::utility::{AnyError, VoidResult};
+use crate::{
+	account,
+	entity::{self, ArcLockEntityWorld},
+	world::ArcLockDatabase,
+};
+use engine::{
+	utility::{AnyError, VoidResult},
+	Engine, EngineSystem,
+};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -17,6 +24,7 @@ pub struct Server {
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 
 	database: Option<ArcLockDatabase>,
+	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
 }
 
 impl Server {
@@ -35,6 +43,7 @@ impl Server {
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
 			database: None,
+			systems: vec![],
 		})
 	}
 
@@ -114,6 +123,23 @@ impl Server {
 	fn world_path(mut savegame_path: PathBuf) -> PathBuf {
 		savegame_path.push("world");
 		savegame_path
+	}
+
+	pub fn initialize_systems(&mut self, entity_world: &ArcLockEntityWorld) {
+		self.add_system(entity::system::Replicator::new(&entity_world));
+		self.add_system(entity::system::UserChunkTicketUpdater::new(&entity_world));
+	}
+
+	fn add_system<T>(&mut self, system: T)
+	where
+		T: EngineSystem + 'static + Send + Sync,
+	{
+		let system = Arc::new(RwLock::new(system));
+		Engine::get()
+			.write()
+			.unwrap()
+			.add_weak_system(Arc::downgrade(&system));
+		self.systems.push(system);
 	}
 
 	#[profiling::function]

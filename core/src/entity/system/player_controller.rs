@@ -176,7 +176,9 @@ impl EngineSystem for PlayerController {
 					displacement += direction * value * self.move_speed * delta_time.as_secs_f32();
 				}
 			}
-			position.offset += displacement;
+			if displacement.magnitude_squared() > 0.0 {
+				*position += displacement;
+			}
 
 			for (look_action, value) in self.look_actions.iter().zip(look_values.iter()) {
 				look_action.concat_into(*value, &mut (**orientation));

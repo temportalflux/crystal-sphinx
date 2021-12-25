@@ -231,7 +231,7 @@ impl ThreadState {
 	fn has_expired_chunks(&self) -> bool {
 		match self.earliest_expiration_timestamp {
 			Some(insertion_time) => {
-				insertion_time.duration_since(std::time::Instant::now()) > self.expiration_delay
+				std::time::Instant::now().duration_since(insertion_time) > self.expiration_delay
 			}
 			None => false,
 		}
@@ -251,7 +251,7 @@ impl ThreadState {
 		while i < self.ticketless_chunks.len() {
 			let (insertion_time, coordinate) = self.ticketless_chunks[i].clone();
 			// A chunk has expired if the amount of time since insertion exceeds the maximum.
-			let has_expired = insertion_time.duration_since(now) > self.expiration_delay;
+			let has_expired = now.duration_since(insertion_time) > self.expiration_delay;
 			// If the chunk has any new tickets which reference it, it shouldnt be dropped.
 			let has_been_renewed = if let Some(state) = self.chunk_states.get(&coordinate) {
 				state.tickets.len() > 0

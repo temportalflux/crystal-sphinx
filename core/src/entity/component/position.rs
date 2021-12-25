@@ -1,11 +1,14 @@
 use super::net;
-use engine::{math::nalgebra::Point3, utility::AnyError};
+use engine::{
+	math::nalgebra::{Point3, Vector3},
+	utility::AnyError,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
 	chunk: Point3<i64>,
-	pub(crate) offset: Point3<f32>,
+	offset: Point3<f32>,
 }
 
 impl Default for Position {
@@ -21,7 +24,7 @@ impl std::fmt::Display for Position {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(
 			f,
-			"Position(<{}`{}, {}`{}, {}`{}>)",
+			"Position(<{:04}`{:.2}, {:04}`{:.2}, {:04}`{:.2})",
 			self.chunk[0],
 			self.offset[0],
 			self.chunk[1],
@@ -41,6 +44,29 @@ impl Position {
 	/// Returns the offset position the entity is at within their chunk.
 	pub fn offset(&self) -> &Point3<f32> {
 		&self.offset
+	}
+}
+
+impl std::ops::AddAssign<Vector3<f32>> for Position {
+	fn add_assign(&mut self, rhs: Vector3<f32>) {
+		use crate::world::chunk::SIZE;
+		self.offset += rhs;
+		let iter = self
+			.offset
+			.iter_mut()
+			.zip(self.chunk.iter_mut())
+			.zip(SIZE.iter());
+		for ((offset, chunk), &size) in iter {
+			let sign = if *offset < 0.0 {
+				-1.0
+			} else if *offset >= size {
+				1.0
+			} else {
+				0.0
+			};
+			*offset -= sign * size;
+			*chunk += sign as i64;
+		}
 	}
 }
 

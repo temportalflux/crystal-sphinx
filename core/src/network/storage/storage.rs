@@ -2,7 +2,7 @@ use super::{
 	client::ArcLockClient,
 	server::{ArcLockServer, Server},
 };
-use crate::app::state::ArcLockMachine;
+use crate::{app::state::ArcLockMachine, entity::ArcLockEntityWorld};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockStorage = Arc<RwLock<Storage>>;
@@ -67,9 +67,10 @@ impl Storage {
 		&self.client
 	}
 
-	pub fn start_loading(&self) {
+	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) {
 		if let Some(arc_server) = self.server.as_ref() {
 			if let Ok(mut server) = arc_server.write() {
+				server.initialize_systems(&entity_world);
 				server.start_loading_world();
 			}
 		}

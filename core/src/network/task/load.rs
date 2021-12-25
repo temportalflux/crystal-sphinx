@@ -142,10 +142,8 @@ impl Load {
 			.with_port(socknet_port)
 			.spawn();
 			if let Ok(storage) = thread_storage.read() {
-				storage.start_loading();
+				storage.start_loading(&entity_world);
 			}
-
-			if instruction.mode == mode::Kind::Client {}
 
 			// Dedicated Client (mode == Client) needs to connect to the server.
 			// Additionally... Integrated Client-Server (mode == Client + Server) should run
