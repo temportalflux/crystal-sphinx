@@ -8,6 +8,9 @@ mod connection;
 mod replicate_entity;
 pub use replicate_entity::*;
 
+mod replicate_world;
+pub use replicate_world::*;
+
 pub fn register_types(
 	builder: &mut network::Builder,
 	app_state: &crate::app::state::ArcLockMachine,
@@ -33,4 +36,5 @@ pub fn register_types(
 		&entity_world,
 	);
 	ReplicateEntity::register(builder, &entity_world);
+	ReplicateWorld::register(builder, &storage, &entity_world);
 }

@@ -15,7 +15,7 @@ pub type ArcLockDatabase = Arc<RwLock<Database>>;
 /// Exists on the server, does not contain presentational/graphical data.
 pub struct Database {
 	_settings: Settings,
-	chunk_cache: chunk::ArcLockCache,
+	chunk_cache: chunk::ArcLockServerCache,
 	_load_request_sender: Arc<chunk::ticket::Sender>,
 	// When this is dropped, the loading thread stops.
 	_chunk_thread_handle: chunk::thread::Handle,
@@ -27,10 +27,10 @@ impl Database {
 	pub fn new(root_path: PathBuf) -> Self {
 		let settings = Settings::load(&root_path).unwrap();
 
-		let chunk_cache = Arc::new(RwLock::new(chunk::Cache::new(&settings)));
+		let chunk_cache = Arc::new(RwLock::new(chunk::Cache::new()));
 
 		let (load_request_sender, load_request_receiver) = crossbeam_channel::unbounded();
-		let thread_handle = chunk::thread::start(load_request_receiver, &chunk_cache);
+		let thread_handle = chunk::thread::start(root_path, load_request_receiver, &chunk_cache);
 
 		let load_request_sender = Arc::new(load_request_sender);
 		*Self::ticket_sender_static() = Some(Arc::downgrade(&load_request_sender));
@@ -62,7 +62,7 @@ impl Database {
 		Ok(Self::ticket_sender()?.try_send(Arc::downgrade(&ticket))?)
 	}
 
-	pub fn chunk_cache(&self) -> &chunk::ArcLockCache {
+	pub fn chunk_cache(&self) -> &chunk::ArcLockServerCache {
 		&self.chunk_cache
 	}
 

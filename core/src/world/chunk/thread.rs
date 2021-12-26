@@ -1,24 +1,28 @@
-use super::{ticket, ArcLockCache, ArcLockChunk, Chunk, Level, Ticket};
+use super::{ticket, ArcLockServerCache, Level, ServerChunk, Ticket};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{spawn_thread, VoidResult},
 };
 use std::{
 	collections::HashMap,
-	sync::{Arc, Weak},
+	path::PathBuf,
+	sync::{Arc, RwLock, Weak},
 };
 
 /// The log category for the chunk loading thread.
 static LOG: &'static str = "chunk-loading";
 /// The handle for the chunk-loading thread. Dropping the handle results in the thread ending.
 pub(crate) type Handle = Arc<()>;
+type ArcLockChunk = Arc<RwLock<ServerChunk>>;
 
 /// State data about the loading thread.
 pub(crate) struct ThreadState {
+	root_dir: PathBuf,
+
 	/// The public cache of chunks that are currently loaded.
 	/// The cache holds no ownership of chunks,
 	/// just weak references to what is loaded at any given time.
-	cache: ArcLockCache,
+	cache: ArcLockServerCache,
 
 	/// List of inactive and recently dropped tickets (and the chunk coordinates they reference).
 	ticket_bindings: Vec<(Weak<Ticket>, Vec<Point3<i64>>)>,
@@ -40,14 +44,20 @@ pub(crate) struct ThreadState {
 
 /// Begins the chunk loading thread, returning its handle.
 /// If the handle is dropped, the thread will stop at the next loop.
-pub fn start(incoming_requests: ticket::Receiver, cache: &ArcLockCache) -> Handle {
+pub fn start(
+	root_dir: PathBuf,
+	incoming_requests: ticket::Receiver,
+	cache: &ArcLockServerCache,
+) -> Handle {
 	let handle = Handle::new(());
 
 	let weak_handle = Arc::downgrade(&handle);
 
 	let cache = cache.clone();
+	let root_dir = root_dir.clone();
 	spawn_thread(LOG, move || -> VoidResult {
 		let mut thread_state = ThreadState {
+			root_dir: root_dir.clone(),
 			cache: cache.clone(),
 			ticket_bindings: Vec::new(),
 			chunk_states: HashMap::new(),
@@ -158,8 +168,8 @@ impl ThreadState {
 			}
 			None => {
 				let mut cache = self.cache.write().unwrap();
-				let arc_chunk =
-					Chunk::load_or_generate(&coordinate, level, &cache.world_gen_settings);
+				let root_dir = self.root_dir.clone();
+				let arc_chunk = ServerChunk::load_or_generate(&coordinate, level, root_dir);
 				cache.insert(&coordinate, Arc::downgrade(&arc_chunk));
 				(true, arc_chunk)
 			}

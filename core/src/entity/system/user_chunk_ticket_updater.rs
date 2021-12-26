@@ -2,8 +2,10 @@ use crate::entity::{self, component, ArcLockEntityWorld};
 use engine::EngineSystem;
 use std::sync::{Arc, RwLock, Weak};
 
-type QueryBundle<'c> =
-	hecs::PreparedQuery<(&'c component::Position, &'c mut component::ChunkLoader)>;
+type QueryBundle<'c> = hecs::PreparedQuery<(
+	&'c component::Position,
+	&'c mut component::chunk::TicketOwner,
+)>;
 
 pub struct UserChunkTicketUpdater {
 	world: Weak<RwLock<entity::World>>,

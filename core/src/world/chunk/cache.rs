@@ -1,52 +1,50 @@
-use super::WeakLockChunk;
-use crate::world::Settings;
+use super::{Chunk, ServerChunk};
 use engine::math::nalgebra::Point3;
 use std::{
-	collections::HashMap,
-	path::PathBuf,
-	sync::{Arc, RwLock},
+	collections::{HashMap, HashSet},
+	sync::{Arc, RwLock, Weak},
 };
-
-#[derive(Clone)]
-pub struct GeneratorSettings {
-	pub(super) root_dir: PathBuf,
-	pub(super) _seed: String,
-}
-
-/// Alias for Arc<RwLock<[`Cache`](Cache)>>.
-pub type ArcLockCache = Arc<RwLock<Cache>>;
 
 /// A storage bin for all the chunks which are loaded.
 /// This cache stores weak references (not strong references).
 ///
 /// It is possible (albeit unlikely) for a chunk to be present in the cache,
 /// but be unloaded in a number of milliseconds because it has expired.
-pub struct Cache {
-	loaded_chunks: HashMap<Point3<i64>, WeakLockChunk>,
-	pub(crate) world_gen_settings: GeneratorSettings,
+pub type ServerCache = Cache<Weak<RwLock<ServerChunk>>>;
+pub type ArcLockServerCache = Arc<RwLock<ServerCache>>;
+pub type WeakLockServerCache = Weak<RwLock<ServerCache>>;
+/// A storage bin for all the chunks which are relevant to the client.
+/// Stores strong references until replication packets remove chunks.
+pub type ClientCache = Cache<Arc<RwLock<Chunk>>>;
+pub type ArcLockClientCache = Arc<RwLock<ClientCache>>;
+
+pub struct Cache<TArcLockChunk> {
+	pending: HashSet<Point3<i64>>,
+	loaded_chunks: HashMap<Point3<i64>, TArcLockChunk>,
 }
-impl Cache {
-	pub(crate) fn new(settings: &Settings) -> Self {
+impl<TArcLockChunk> Cache<TArcLockChunk> {
+	pub(crate) fn new() -> Self {
 		Self {
+			pending: HashSet::new(),
 			loaded_chunks: HashMap::new(),
-			world_gen_settings: GeneratorSettings {
-				root_dir: settings.root_path().to_owned(),
-				_seed: settings.seed().to_owned(),
-			},
 		}
 	}
 
-	pub fn find(&self, coordinate: &Point3<i64>) -> Option<&WeakLockChunk> {
+	pub fn find(&self, coordinate: &Point3<i64>) -> Option<&TArcLockChunk> {
 		self.loaded_chunks.get(coordinate)
 	}
 
-	pub(crate) fn insert(&mut self, coordinate: &Point3<i64>, chunk: WeakLockChunk) {
-		let old_value = self.loaded_chunks.insert(*coordinate, chunk);
-		assert!(old_value.is_none());
+	pub(crate) fn insert_pending(&mut self, coordinate: Point3<i64>) {
+		self.pending.insert(coordinate);
+	}
+
+	pub(crate) fn insert(&mut self, coordinate: &Point3<i64>, chunk: TArcLockChunk) {
+		self.pending.remove(&coordinate);
+		let _ = self.loaded_chunks.insert(*coordinate, chunk);
 	}
 
 	pub(crate) fn remove(&mut self, coordinate: &Point3<i64>) {
-		let old_value = self.loaded_chunks.remove(coordinate);
-		assert!(old_value.is_some());
+		self.pending.remove(&coordinate);
+		let _ = self.loaded_chunks.remove(coordinate);
 	}
 }

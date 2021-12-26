@@ -1,22 +1,16 @@
-use super::Level;
+use crate::world::chunk::Level;
 use engine::math::nalgebra::Point3;
+use serde::{Deserialize, Serialize};
 use std::{
 	path::PathBuf,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
-
-/// Alias for Arc<RwLock<[`Chunk`](Chunk)>>.
-pub type ArcLockChunk = Arc<RwLock<Chunk>>;
-/// Alias for Weak<RwLock<[`Chunk`](Chunk)>>.
-pub type WeakLockChunk = Weak<RwLock<Chunk>>;
 
 /// A 16x16x16 chunk in the world.
 ///
 /// Data is saved to disk at `<world root>/chunks/x.y.z.kdl`.
-pub struct Chunk {
-	/// The coordinate of the chunk in the world.
-	/// Not saved to file.
-	coordinate: Point3<i64>,
+pub struct ServerChunk {
+	pub chunk: Chunk,
 	/// The path to the chunk on disk.
 	/// Not saved to file.
 	path_on_disk: PathBuf,
@@ -25,13 +19,20 @@ pub struct Chunk {
 	pub(crate) level: Level,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Chunk {
+	/// The coordinate of the chunk in the world.
+	/// Not saved to file.
+	coordinate: Point3<i64>,
+}
+
 impl Chunk {
 	pub fn coordinate(&self) -> &Point3<i64> {
 		&self.coordinate
 	}
 }
 
-impl Chunk {
+impl ServerChunk {
 	fn create_path_for(mut world_root: PathBuf, coordinate: &Point3<i64>) -> PathBuf {
 		world_root.push("chunks");
 		world_root.push(format!(
@@ -44,9 +45,9 @@ impl Chunk {
 	pub(super) fn load_or_generate(
 		coordinate: &Point3<i64>,
 		level: Level,
-		settings: &super::GeneratorSettings,
-	) -> ArcLockChunk {
-		let path_on_disk = Self::create_path_for(settings.root_dir.clone(), &coordinate);
+		root_dir: PathBuf,
+	) -> Arc<RwLock<ServerChunk>> {
+		let path_on_disk = Self::create_path_for(root_dir, &coordinate);
 		Arc::new(RwLock::new(if path_on_disk.exists() {
 			Self::load(path_on_disk, &coordinate, level)
 		} else {
@@ -60,7 +61,9 @@ impl Chunk {
 		//log::debug!(target: "world", "Generating chunk {}", coordinate);
 		Self {
 			path_on_disk,
-			coordinate: *coordinate,
+			chunk: Chunk {
+				coordinate: *coordinate,
+			},
 			level,
 		}
 	}
@@ -71,7 +74,9 @@ impl Chunk {
 		//log::debug!(target: "world", "Loading chunk {}", coordinate);
 		Self {
 			path_on_disk,
-			coordinate: *coordinate,
+			chunk: Chunk {
+				coordinate: *coordinate,
+			},
 			level,
 		}
 	}

@@ -126,7 +126,11 @@ impl Server {
 	}
 
 	pub fn initialize_systems(&mut self, entity_world: &ArcLockEntityWorld) {
-		self.add_system(entity::system::Replicator::new(&entity_world));
+		let chunk_cache = {
+			let database = self.database.as_ref().unwrap().read().unwrap();
+			Arc::downgrade(database.chunk_cache())
+		};
+		self.add_system(entity::system::Replicator::new(chunk_cache, &entity_world));
 		self.add_system(entity::system::UserChunkTicketUpdater::new(&entity_world));
 	}
 

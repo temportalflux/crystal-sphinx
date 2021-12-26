@@ -1,7 +1,6 @@
 mod camera;
 pub use camera::*;
-mod chunk_loader;
-pub use chunk_loader::*;
+pub mod chunk;
 pub mod net;
 mod orientation;
 pub use orientation::*;

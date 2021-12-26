@@ -10,15 +10,20 @@ pub(crate) struct ActiveTicket {
 }
 
 #[derive(Clone, Default)]
-pub struct ChunkLoader {
+pub struct TicketOwner {
+	/// The radius of chunks around the [`current chunk coordinate`](super::Position::chunk)
+	/// to load on the server.
+	server_load_radius: usize,
+
+	/// The ticket on the server that keeps chunks around the entity loaded.
 	current_ticket: Option<ActiveTicket>,
 }
 
-impl std::fmt::Display for ChunkLoader {
+impl std::fmt::Display for TicketOwner {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(
 			f,
-			"ChunkLoader({})",
+			"TicketOwner({})",
 			match &self.current_ticket {
 				Some(active) => format!(
 					"<{}, {}, {}>",
@@ -30,7 +35,12 @@ impl std::fmt::Display for ChunkLoader {
 	}
 }
 
-impl ChunkLoader {
+impl TicketOwner {
+	pub fn with_load_radius(mut self, radius: usize) -> Self {
+		self.server_load_radius = radius;
+		self
+	}
+
 	pub(crate) fn ticket_coordinate(&self) -> Option<Point3<i64>> {
 		self.current_ticket.as_ref().map(|active| active.coordinate)
 	}
@@ -41,7 +51,7 @@ impl ChunkLoader {
 		self.current_ticket = None;
 		let ticket = chunk::Ticket {
 			coordinate,
-			level: (chunk::Level::Ticking, 2).into(),
+			level: (chunk::Level::Ticking, self.server_load_radius).into(),
 		};
 		if let Ok(handle) = ticket.submit() {
 			self.current_ticket = Some(ActiveTicket { coordinate, handle })
