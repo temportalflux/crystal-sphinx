@@ -36,6 +36,7 @@ pub mod account;
 pub mod app;
 pub mod block;
 pub mod commands;
+pub mod debug;
 pub mod entity;
 pub mod graphics;
 pub mod input;
@@ -177,17 +178,16 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
-			use commands::DebugWindow;
 			use engine::ui::egui::Ui;
 			let command_list = commands::create_list(&app_state);
 			let ui = Ui::create_with_subpass(
 				&mut engine,
 				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
 			)?;
-			ui.write().unwrap().add_owned_element(DebugWindow::new(
-				command_list.clone(),
-				input_user.as_ref().unwrap(),
-			));
+			ui.write().unwrap().add_owned_element(
+				debug::Panel::new(input_user.as_ref().unwrap())
+					.with_window("Commands", debug::CommandWindow::new(command_list.clone())),
+			);
 			_egui_ui = Some(ui);
 		}
 

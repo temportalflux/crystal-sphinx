@@ -13,7 +13,7 @@ debug = []
 [dependencies]
 chrono = { version = "0.4", features = ["serde"]}
 crossbeam-channel = "0.5"
-egui = "0.14"
+egui = "0.15"
 engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
 enumset = { version = "1.0", features = ["serde"] }
 hecs = { version = "0.7", features = ["serde"] }
