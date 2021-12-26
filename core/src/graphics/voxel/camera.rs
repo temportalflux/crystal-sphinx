@@ -1,6 +1,6 @@
 use engine::{
 	graphics::camera,
-	math::nalgebra::{self, point, vector, Matrix4, Point3, UnitQuaternion, Vector2, Vector3},
+	math::nalgebra::{self, point, Matrix4, Point3, UnitQuaternion, Vector2},
 };
 use std::sync::{Arc, RwLock};
 
@@ -9,7 +9,6 @@ pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 pub type ArcLockCamera = Arc<RwLock<Camera>>;
 #[derive(Clone)]
 pub struct Camera {
-	pub chunk_size: Vector3<f32>,
 	pub chunk_coordinate: Point3<f32>,
 	pub position: Point3<f32>,
 	pub orientation: UnitQuaternion<f32>,
@@ -19,7 +18,6 @@ pub struct Camera {
 impl Default for Camera {
 	fn default() -> Self {
 		Self {
-			chunk_size: Vector3::<f32>::new(16.0, 16.0, 16.0),
 			chunk_coordinate: Point3::<f32>::new(0.0, 0.0, 0.0),
 			position: Point3::<f32>::new(0.0, 0.0, 0.0),
 			orientation: UnitQuaternion::identity(),
@@ -51,7 +49,6 @@ impl Camera {
 			view: self.view_matrix(),
 			projection: self.projection_matrix(resolution),
 			chunk_coordinate: self.chunk_coordinate,
-			chunk_size: self.chunk_size,
 		}
 	}
 }
@@ -62,7 +59,6 @@ pub struct UniformData {
 	view: Matrix4<f32>,
 	projection: Matrix4<f32>,
 	chunk_coordinate: Point3<f32>,
-	chunk_size: Vector3<f32>,
 }
 
 impl Default for UniformData {
@@ -71,7 +67,6 @@ impl Default for UniformData {
 			view: Matrix4::identity(),
 			projection: Matrix4::identity(),
 			chunk_coordinate: point![0.0, 0.0, 0.0],
-			chunk_size: vector![16.0, 16.0, 16.0],
 		}
 	}
 }

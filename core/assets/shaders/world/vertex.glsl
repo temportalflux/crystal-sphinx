@@ -1,12 +1,15 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
+// The number of blocks in each dimension of a chunk.
+// MIRRORS: `chunk::SIZE`
+vec3 CHUNK_SIZE = vec3(16.0, 16.0, 16.0);
+
 // Camera-based unform - changes each frame based on the camera's POV and chunk data
 layout(set = 0, binding = 0) uniform CameraUniform {
 	mat4 view;
 	mat4 proj;
 	vec3 posOfCurrentChunk;
-	vec3 chunkSize;
 } camera;
 
 // Model attributes - changes based on the block type being drawn
@@ -36,7 +39,7 @@ void main()
 {
 	vec3 chunk_offset = chunk_coordinate - camera.posOfCurrentChunk;
 	// component-wise multiply to convert chunk pos to world pos
-	vec3 blockPosRelativeToCameraChunk = chunk_offset * camera.chunkSize;
+	vec3 blockPosRelativeToCameraChunk = chunk_offset * CHUNK_SIZE;
 	vec3 vertPos = blockPosRelativeToCameraChunk + position;
 	gl_Position = camera.proj * camera.view * model_matrix * vec4(vertPos, 1.0);
 	

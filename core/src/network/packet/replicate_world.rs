@@ -118,7 +118,6 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 				}
 				if let Ok(mut cache) = self.chunk_cache().write() {
 					for coord in relevancy.old_chunks.iter() {
-						
 						cache.remove(&coord);
 					}
 					for &coord in relevancy.new_chunks.iter() {

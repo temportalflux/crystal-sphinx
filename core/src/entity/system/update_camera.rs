@@ -46,7 +46,6 @@ impl EngineSystem for UpdateCamera {
 			let chunk = position.chunk();
 			result.chunk_coordinate =
 				Point3::new(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32);
-
 			result.position = *position.offset() + *camera.offset();
 			result.orientation = **orientation;
 			result.projection = *camera.projection();
