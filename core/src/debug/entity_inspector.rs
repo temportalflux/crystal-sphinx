@@ -1,4 +1,8 @@
-use crate::entity::{self, component, ArcLockEntityWorld};
+use crate::entity::{
+	self,
+	component::{self, debug},
+	ArcLockEntityWorld,
+};
 use engine::ui::egui::Element;
 use enumset::{EnumSet, EnumSetType};
 use std::{
@@ -163,7 +167,7 @@ impl EntityInspector {
 					for type_id in entity_ref.component_types() {
 						if let Some(registered) = registry.find(&type_id) {
 							let is_showing = self.components_to_show.contains(&type_id);
-							let can_be_displayed = registered.debug().is_some();
+							let can_be_displayed = registered.has::<debug::Registration>();
 							let label =
 								egui::SelectableLabel::new(is_showing, registered.display_name());
 							if ui.add_enabled(can_be_displayed, label).clicked() {
@@ -178,7 +182,7 @@ impl EntityInspector {
 		});
 		for type_id in self.components_to_show.iter() {
 			let registered = registry.find(&type_id).unwrap();
-			if let Some(debug_registration) = registered.debug() {
+			if let Some(debug_registration) = registered.get::<debug::Registration>() {
 				ui.label(registered.display_name());
 				ui.indent(registered.id(), |ui| {
 					debug_registration.render(&entity_ref, ui);

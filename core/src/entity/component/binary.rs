@@ -33,7 +33,14 @@ pub struct Registration {
 	serialize: Box<dyn Fn(&hecs::EntityRef<'_>) -> Result<Option<SerializedComponent>, AnyError>>,
 	deserialize: Box<dyn Fn(Vec<u8>, &mut hecs::EntityBuilder) -> VoidResult>,
 }
-
+impl super::ExtensionRegistration for Registration {
+	fn extension_id() -> &'static str
+	where
+		Self: Sized,
+	{
+		"binary-serializable"
+	}
+}
 impl Registration {
 	pub(crate) fn from<T>() -> Self
 	where

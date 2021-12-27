@@ -1,4 +1,4 @@
-use crate::entity::component::{binary, debug, Component};
+use crate::entity::component::Component;
 use std::{any::TypeId, collections::HashMap};
 
 pub struct Registration<T: Component> {
@@ -14,8 +14,7 @@ where
 			item: Registered {
 				id: T::unique_id(),
 				display_name: T::display_name(),
-				binary: None,
-				debug: None,
+				extensions: HashMap::new(),
 			},
 			marker: Default::default(),
 		}
@@ -25,19 +24,13 @@ impl<T> Registration<T>
 where
 	T: Component,
 {
-	pub fn with_binary_serialization(mut self) -> Self
+	pub fn with_ext<TExt>(mut self, ext: TExt) -> Self
 	where
-		T: binary::Serializable,
+		TExt: ExtensionRegistration + 'static,
 	{
-		self.item.binary = Some(binary::Registration::from::<T>());
-		self
-	}
-
-	pub fn with_debug(mut self) -> Self
-	where
-		T: debug::EguiInformation,
-	{
-		self.item.debug = Some(debug::Registration::from::<T>());
+		self.item
+			.extensions
+			.insert(TExt::extension_id(), Box::new(ext));
 		self
 	}
 }
@@ -45,19 +38,39 @@ where
 pub struct Registered {
 	id: &'static str,
 	display_name: &'static str,
-	binary: Option<binary::Registration>,
-	debug: Option<debug::Registration>,
+	extensions: HashMap<&'static str, Box<dyn std::any::Any>>,
 }
 impl Registered {
 	pub fn id(&self) -> &'static str {
 		&self.id
 	}
+
 	pub fn display_name(&self) -> &'static str {
 		&self.display_name
 	}
-	pub fn debug(&self) -> Option<&debug::Registration> {
-		self.debug.as_ref()
+
+	pub fn has<T>(&self) -> bool
+	where
+		T: 'static + ExtensionRegistration,
+	{
+		self.get::<T>().is_some()
 	}
+
+	pub fn get<T>(&self) -> Option<&T>
+	where
+		T: 'static + ExtensionRegistration,
+	{
+		self.extensions
+			.get(T::extension_id())
+			.map(|ext| ext.downcast_ref::<T>())
+			.flatten()
+	}
+}
+
+pub trait ExtensionRegistration {
+	fn extension_id() -> &'static str
+	where
+		Self: Sized;
 }
 
 #[derive(Default)]
@@ -83,6 +96,13 @@ impl Registry {
 }
 
 impl Registry {
+	pub fn register<T>(&mut self)
+	where
+		T: Component,
+	{
+		self.add(T::registration());
+	}
+
 	pub fn add<T>(&mut self, registration: Registration<T>)
 	where
 		T: Component,
@@ -98,10 +118,6 @@ impl Registry {
 
 	pub fn find(&self, type_id: &TypeId) -> Option<&Registered> {
 		self.items.get(&type_id)
-	}
-
-	pub fn find_binary(&self, type_id: &TypeId) -> Option<&binary::Registration> {
-		self.find(&type_id).map(|reg| reg.binary.as_ref()).flatten()
 	}
 }
 

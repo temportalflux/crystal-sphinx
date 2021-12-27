@@ -22,6 +22,17 @@ impl super::Component for Orientation {
 	fn display_name() -> &'static str {
 		"Orientation"
 	}
+
+	fn registration() -> super::Registration<Self>
+	where
+		Self: Sized,
+	{
+		use super::binary::Registration as binary;
+		use super::debug::Registration as debug;
+		super::Registration::<Self>::default()
+			.with_ext(binary::from::<Self>())
+			.with_ext(debug::from::<Self>())
+	}
 }
 
 impl std::fmt::Display for Orientation {

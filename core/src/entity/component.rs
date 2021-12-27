@@ -19,31 +19,21 @@ pub use replicated::*;
 pub trait Component: hecs::Component {
 	fn unique_id() -> &'static str;
 	fn display_name() -> &'static str;
+	fn registration() -> Registration<Self>
+	where
+		Self: Sized,
+	{
+		Registration::<Self>::default()
+	}
 }
 
-pub fn register_replicated_components() {
+pub fn register_types() {
 	let mut registry = Registry::write();
-	registry.add(Registration::<Camera>::default().with_debug());
-	registry.add(Registration::<chunk::Relevancy>::default());
-	registry.add(Registration::<chunk::TicketOwner>::default());
-	registry.add(
-		Registration::<Orientation>::default()
-			.with_binary_serialization()
-			.with_debug(),
-	);
-	registry.add(
-		Registration::<OwnedByAccount>::default()
-			.with_binary_serialization()
-			.with_debug(),
-	);
-	registry.add(
-		Registration::<OwnedByConnection>::default()
-			.with_binary_serialization()
-			.with_debug(),
-	);
-	registry.add(
-		Registration::<Position>::default()
-			.with_binary_serialization()
-			.with_debug(),
-	);
+	registry.register::<Camera>();
+	registry.register::<chunk::Relevancy>();
+	registry.register::<chunk::TicketOwner>();
+	registry.register::<Orientation>();
+	registry.register::<OwnedByAccount>();
+	registry.register::<OwnedByConnection>();
+	registry.register::<Position>();
 }

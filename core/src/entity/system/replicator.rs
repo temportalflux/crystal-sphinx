@@ -182,12 +182,14 @@ impl Replicator {
 		let mut serialized_components = Vec::new();
 		for type_id in entity_ref.component_types() {
 			// TODO: Implement a Replicated trait for the components which should actually be replicated (instead of using binary::Serializable as the marker).
-			if let Some(binary_registration) = registry.find_binary(&type_id) {
-				match binary_registration.serialize(&entity_ref)? {
-					Some(serialized) => {
-						serialized_components.push(serialized);
+			if let Some(registered) = registry.find(&type_id) {
+				if let Some(binary_registration) = registered.get::<binary::Registration>() {
+					match binary_registration.serialize(&entity_ref)? {
+						Some(serialized) => {
+							serialized_components.push(serialized);
+						}
+						None => {} // The component didn't actually exist on the entity
 					}
-					None => {} // The component didn't actually exist on the entity
 				}
 			}
 		}

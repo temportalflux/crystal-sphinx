@@ -18,6 +18,17 @@ impl super::Component for OwnedByAccount {
 	fn display_name() -> &'static str {
 		"Owned By Account"
 	}
+
+	fn registration() -> super::Registration<Self>
+	where
+		Self: Sized,
+	{
+		use super::binary::Registration as binary;
+		use super::debug::Registration as debug;
+		super::Registration::<Self>::default()
+			.with_ext(binary::from::<Self>())
+			.with_ext(debug::from::<Self>())
+	}
 }
 
 impl std::fmt::Display for OwnedByAccount {

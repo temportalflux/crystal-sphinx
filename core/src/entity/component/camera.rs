@@ -1,3 +1,4 @@
+use super::Registration;
 use engine::{
 	graphics::camera::{PerspectiveProjection, Projection},
 	math::nalgebra::Vector3,
@@ -29,6 +30,13 @@ impl super::Component for Camera {
 
 	fn display_name() -> &'static str {
 		"Camera"
+	}
+
+	fn registration() -> Registration<Self>
+	where
+		Self: Sized,
+	{
+		Registration::<Self>::default().with_ext(super::debug::Registration::from::<Self>())
 	}
 }
 

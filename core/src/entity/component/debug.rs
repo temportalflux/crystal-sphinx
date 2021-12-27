@@ -7,6 +7,14 @@ pub trait EguiInformation {
 pub struct Registration {
 	render_inspector: Box<dyn Fn(&hecs::EntityRef<'_>, &mut egui::Ui)>,
 }
+impl super::ExtensionRegistration for Registration {
+	fn extension_id() -> &'static str
+	where
+		Self: Sized,
+	{
+		"debug"
+	}
+}
 impl Registration {
 	pub(crate) fn from<T>() -> Self
 	where

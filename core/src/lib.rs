@@ -82,7 +82,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	crate::register_asset_types();
 	engine.scan_paks()?;
 
-	entity::component::register_replicated_components();
+	entity::component::register_types();
 
 	let input_user: Option<input::ArcLockUser>;
 	let is_client = std::env::args().any(|arg| arg == "-client");

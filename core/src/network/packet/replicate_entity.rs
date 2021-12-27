@@ -78,12 +78,14 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 			let mut builder = hecs::EntityBuilder::default();
 			for comp_data in serialized.components.clone().into_iter() {
 				let type_id = registry.get_type_id(&comp_data.id).unwrap();
-				match registry.find_binary(&type_id) {
-					Some(binary_registration) => {
-						let _ = binary_registration.deserialize(comp_data.data, &mut builder);
-					}
-					None => {
-						log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
+				if let Some(registered) = registry.find(&type_id) {
+					match registered.get::<component::binary::Registration>() {
+						Some(binary_registration) => {
+							let _ = binary_registration.deserialize(comp_data.data, &mut builder);
+						}
+						None => {
+							log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
+						}
 					}
 				}
 			}
