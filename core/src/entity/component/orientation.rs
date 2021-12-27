@@ -71,3 +71,15 @@ impl std::ops::DerefMut for Orientation {
 		&mut self.0
 	}
 }
+
+impl super::debug::EguiInformation for Orientation {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(match self.0.axis() {
+			Some(axis) => {
+				format!("Axis: <{:.2}, {:.2}, {:.2}>", axis[0], axis[1], axis[2])
+			}
+			None => "None".to_owned(),
+		});
+		ui.label(format!("Angle: {}°", self.0.angle().to_degrees()));
+	}
+}

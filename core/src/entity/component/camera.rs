@@ -51,3 +51,26 @@ impl Camera {
 		&self.format
 	}
 }
+
+impl super::debug::EguiInformation for Camera {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(format!("Offset: <{:.2}, {:.2}, {:.2}>", self.view_offset[0], self.view_offset[1], self.view_offset[2]));
+		match &self.format {
+			Projection::Orthographic(ortho) => {
+				ui.label("Projection: Orthographic");
+				ui.label(format!("Left: {}", ortho.left()));
+				ui.label(format!("Right: {}", ortho.right()));
+				ui.label(format!("Top: {}", ortho.top()));
+				ui.label(format!("Bottom: {}", ortho.bottom()));
+				ui.label(format!("Z-Near: {}", ortho.z_near()));
+				ui.label(format!("Z-Far: {}", ortho.z_far()));
+			}
+			Projection::Perspective(persp) => {
+				ui.label("Projection: Perspective");
+				ui.label(format!("Vertical FOV: {}", persp.vertical_fov));
+				ui.label(format!("Z-Near: {}", persp.near_plane));
+				ui.label(format!("Z-Far: {}", persp.far_plane));
+			}
+		}
+	}
+}
