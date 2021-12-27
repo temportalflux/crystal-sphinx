@@ -1,8 +1,4 @@
-use crate::{
-	entity::{self, ArcLockEntityWorld},
-	network::storage::ArcLockStorage,
-	world::chunk,
-};
+use crate::{entity::ArcLockEntityWorld, network::storage::ArcLockStorage, world::chunk};
 use engine::{
 	math::nalgebra::Point3,
 	network::{
@@ -16,7 +12,7 @@ use engine::{
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashSet,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
 
 #[packet_kind(engine::network)]
@@ -45,13 +41,12 @@ impl ReplicateWorld {
 	pub fn register(
 		builder: &mut network::Builder,
 		storage: &ArcLockStorage,
-		entity_world: &ArcLockEntityWorld,
+		_entity_world: &ArcLockEntityWorld,
 	) {
 		use mode::Kind::*;
 
 		let client_proc = ReceiveReplicatedWorld {
 			storage: storage.clone(),
-			entity_world: Arc::downgrade(&entity_world),
 		};
 
 		builder.register_bundle::<Self>(
@@ -65,7 +60,6 @@ impl ReplicateWorld {
 #[derive(Clone)]
 struct ReceiveReplicatedWorld {
 	storage: ArcLockStorage,
-	entity_world: Weak<RwLock<entity::World>>,
 }
 
 impl ReceiveReplicatedWorld {
@@ -97,25 +91,9 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 		_guarantee: &packet::Guarantee,
 		_local_data: &network::LocalData,
 	) -> VoidResult {
-		use entity::component::chunk::Relevancy;
 		profiling::scope!("process-packet", "ReplicateWorld");
 		match &data.0 {
 			WorldUpdate::Relevancy(relevancy) => {
-				let arc_world = self.entity_world.upgrade().unwrap();
-				if let Ok(mut world) = arc_world.write() {
-					match world.query_one_mut::<&mut Relevancy>(relevancy.entity) {
-						Ok(e_relevancy) => {
-							e_relevancy.update_with_replicated(
-								relevancy.origin,
-								&relevancy.old_chunks,
-								&relevancy.new_chunks,
-							);
-						}
-						Err(_) => {
-							log::warn!(target: "replicator", "Client has not yet received its owner entity, but already has receved a world update.");
-						}
-					}
-				}
 				if let Ok(mut cache) = self.chunk_cache().write() {
 					for coord in relevancy.old_chunks.iter() {
 						cache.remove(&coord);

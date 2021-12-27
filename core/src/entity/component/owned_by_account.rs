@@ -48,3 +48,9 @@ impl std::convert::TryFrom<Vec<u8>> for OwnedByAccount {
 		super::binary::deserialize::<Self>(&bytes)
 	}
 }
+
+impl super::debug::EguiInformation for OwnedByAccount {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(format!("Account ID: {}", self.account_id));
+	}
+}

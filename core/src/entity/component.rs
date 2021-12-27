@@ -26,9 +26,21 @@ pub fn register_replicated_components() {
 	registry.add(Registration::<Camera>::default().with_debug());
 	registry.add(Registration::<chunk::Relevancy>::default());
 	registry.add(Registration::<chunk::TicketOwner>::default());
-	registry.add(Registration::<Orientation>::default().with_binary_serialization().with_debug());
-	registry.add(Registration::<OwnedByAccount>::default().with_binary_serialization());
-	registry.add(Registration::<OwnedByConnection>::default().with_binary_serialization());
+	registry.add(
+		Registration::<Orientation>::default()
+			.with_binary_serialization()
+			.with_debug(),
+	);
+	registry.add(
+		Registration::<OwnedByAccount>::default()
+			.with_binary_serialization()
+			.with_debug(),
+	);
+	registry.add(
+		Registration::<OwnedByConnection>::default()
+			.with_binary_serialization()
+			.with_debug(),
+	);
 	registry.add(
 		Registration::<Position>::default()
 			.with_binary_serialization()

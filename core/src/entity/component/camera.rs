@@ -54,7 +54,10 @@ impl Camera {
 
 impl super::debug::EguiInformation for Camera {
 	fn render(&self, ui: &mut egui::Ui) {
-		ui.label(format!("Offset: <{:.2}, {:.2}, {:.2}>", self.view_offset[0], self.view_offset[1], self.view_offset[2]));
+		ui.label(format!(
+			"Offset: <{:.2}, {:.2}, {:.2}>",
+			self.view_offset[0], self.view_offset[1], self.view_offset[2]
+		));
 		match &self.format {
 			Projection::Orthographic(ortho) => {
 				ui.label("Projection: Orthographic");

@@ -59,3 +59,9 @@ impl std::convert::TryFrom<Vec<u8>> for OwnedByConnection {
 		super::binary::deserialize::<Self>(&bytes)
 	}
 }
+
+impl super::debug::EguiInformation for OwnedByConnection {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(format!("IP Address: {}", self.address));
+	}
+}

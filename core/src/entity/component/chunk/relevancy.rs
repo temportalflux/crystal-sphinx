@@ -1,12 +1,16 @@
 use engine::math::nalgebra::{Point3, Vector3};
 use std::collections::HashSet;
 
+/// Component added on the server to indicate what chunks are relevant to a given entity.
+/// Chunks which exist inside the radius are replicated, if the entity also has the
+/// [`Owned By Connection`](super::super::OwnedByConnection) component.
 #[derive(Clone)]
 pub struct Relevancy {
-	/// The radius of chunks around the [`current chunk coordinate`](super::Position::chunk)
-	/// to replicate to the [`owner connection`](super::net::Owner::address).
+	/// The radius of chunks around the [`current chunk coordinate`](super::super::Position::chunk).
 	radius: usize,
 	/// The origin chunk of the last replication.
+	/// Compared against the entity's [`current chunk coordinate`](super::super::Position::chunk)
+	/// to determine if chunks need to be replicated.
 	replicated_origin: Point3<i64>,
 	/// Chunk coordinates which are relevant to the owner entity,
 	/// but which have not yet been loaded by the server.
@@ -14,8 +18,7 @@ pub struct Relevancy {
 	/// and moved to [`replicated_chunks`](Relevancy::replicated_chunks).
 	pending_chunks: HashSet<Point3<i64>>,
 	/// Chunk coordinates replicated to the owner of this component.
-	/// On the server, this is updated before the replication packets are sent.
-	/// On the client, this is updated when the packets are received.
+	/// This is updated before the replication packets are sent.
 	replicated_chunks: HashSet<Point3<i64>>,
 }
 
@@ -116,20 +119,5 @@ impl Relevancy {
 
 	pub(crate) fn mark_as_replicated(&mut self, coord: Point3<i64>) {
 		self.replicated_chunks.insert(coord);
-	}
-
-	pub(crate) fn update_with_replicated(
-		&mut self,
-		origin: Point3<i64>,
-		old: &HashSet<Point3<i64>>,
-		new: &HashSet<Point3<i64>>,
-	) {
-		self.replicated_origin = origin;
-		for coord in old.iter() {
-			self.replicated_chunks.remove(&coord);
-		}
-		for coord in new.iter() {
-			self.mark_as_replicated(*coord);
-		}
 	}
 }
