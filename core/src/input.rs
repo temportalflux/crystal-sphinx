@@ -1,6 +1,7 @@
 pub use engine::input::{self, *};
 
 pub static ACTION_TOGGLE_DEBUG_CMDS: &'static str = "ToggleDebugCommands";
+pub static ACTION_TOGGLE_CHUNK_BOUNDARIES: &'static str = "ToggleChunkBoundaries";
 
 pub static AXIS_STRAFE: &'static str = "Strafe";
 pub static AXIS_MOVE: &'static str = "Move";
@@ -13,6 +14,7 @@ pub fn init() -> ArcLockUser {
 	input::set_config(
 		Config::default()
 			.add_action(ACTION_TOGGLE_DEBUG_CMDS, Kind::Button)
+			.add_action(ACTION_TOGGLE_CHUNK_BOUNDARIES, Kind::Button)
 			.add_action(AXIS_STRAFE, Kind::Axis)
 			.add_action(AXIS_MOVE, Kind::Axis)
 			.add_action(AXIS_FLY, Kind::Axis)
@@ -24,7 +26,9 @@ pub fn init() -> ArcLockUser {
 				Some("ApplicationActions"),
 				ActionSet::default().with(
 					LayoutId::default(),
-					ActionMap::default().bind(ACTION_TOGGLE_DEBUG_CMDS, Keyboard(Backslash)),
+					ActionMap::default()
+						.bind(ACTION_TOGGLE_DEBUG_CMDS, Keyboard(Backslash))
+						.bind(ACTION_TOGGLE_CHUNK_BOUNDARIES, Keyboard(F3)),
 				),
 			)
 			.add_action_set(

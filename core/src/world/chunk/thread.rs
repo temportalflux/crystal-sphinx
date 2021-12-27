@@ -266,7 +266,7 @@ impl ThreadState {
 			let has_been_renewed = if let Some(state) = self.chunk_states.get(&coordinate) {
 				state.tickets.len() > 0
 			} else {
-				unimplemented!()
+				false
 			};
 			// If any given chunk /should be dropped/ or a new ticket has referenced it, it is no longer "pending" unload.
 			if has_expired || has_been_renewed {

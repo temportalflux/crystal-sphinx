@@ -1,0 +1,11 @@
+{
+	"asset_type": "render-subpass",
+	"attachments": {
+		"color": [
+			{
+				"id": "crystal-sphinx:render_pass/frame_image",
+				"layout": "ColorAttachmentOptimal"
+			}
+		]
+	}
+}

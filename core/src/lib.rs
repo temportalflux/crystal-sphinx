@@ -173,6 +173,12 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			&model_cache.arclocked(),
 			&arc_camera,
 		);
+		graphics::chunk_boundary::Render::add_state_listener(
+			&app_state,
+			&engine.render_chain().unwrap(),
+			&arc_camera,
+			input_user.as_ref().unwrap(),
+		);
 		engine.add_system(entity::system::UpdateCamera::new(&entity_world, arc_camera).arclocked());
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
