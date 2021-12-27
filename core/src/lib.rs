@@ -135,9 +135,9 @@ pub fn run(config: plugin::Config) -> VoidResult {
 					.as_graphics()?,
 			);
 		}
-		let mut model_cache = graphics::voxel::ModelCache::new();
+		let mut model_cache = graphics::voxel::model::Cache::new();
 		{
-			use graphics::voxel::*;
+			use graphics::voxel::{model::*, texture::*, Face};
 			model_cache.insert(Model::new(std::collections::HashMap::from([
 				(
 					Face::Left,

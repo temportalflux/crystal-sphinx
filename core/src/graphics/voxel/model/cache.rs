@@ -1,14 +1,14 @@
 use super::{Model, Vertex};
 use std::sync::{Arc, RwLock};
 
-pub type ArcLockModelCache = Arc<RwLock<ModelCache>>;
-pub struct ModelCache {
+pub type ArcLockCache = Arc<RwLock<Cache>>;
+pub struct Cache {
 	models: Vec<(Model, /*vertex offset*/ usize)>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 }
 
-impl ModelCache {
+impl Cache {
 	pub fn new() -> Self {
 		Self {
 			models: Vec::new(),
@@ -17,7 +17,7 @@ impl ModelCache {
 		}
 	}
 
-	pub fn arclocked(self) -> ArcLockModelCache {
+	pub fn arclocked(self) -> ArcLockCache {
 		Arc::new(RwLock::new(self))
 	}
 
@@ -25,8 +25,8 @@ impl ModelCache {
 		use crate::graphics::model::Model;
 		model = model.build_data();
 		let vertex_offset = self.vertices.len();
-		self.vertices.append(&mut model.vertices().to_vec());
-		self.indices.append(&mut model.indices().to_vec());
+		self.vertices.append(&mut model.vertices().clone());
+		self.indices.append(&mut model.indices().clone());
 		self.models.push((model, vertex_offset));
 	}
 

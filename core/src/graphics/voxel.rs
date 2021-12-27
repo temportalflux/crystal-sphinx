@@ -9,17 +9,9 @@ pub use flags::*;
 mod instance;
 pub use instance::*;
 
-mod model;
-pub use model::*;
-
-mod model_cache;
-pub use model_cache::*;
+pub mod model;
 
 mod render;
 pub use render::*;
 
-mod tex_coord;
-pub use tex_coord::*;
-
-mod vertex;
-pub use vertex::*;
+pub mod texture;

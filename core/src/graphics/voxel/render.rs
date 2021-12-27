@@ -1,6 +1,6 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
-	graphics::voxel::{camera, ArcLockModelCache, Instance, InstanceFlags, Vertex},
+	graphics::voxel::{camera, model, Instance, InstanceFlags},
 	CrystalSphinx,
 };
 use engine::{
@@ -28,7 +28,7 @@ pub struct RenderVoxel {
 	instance_buffer: Arc<buffer::Buffer>,
 	camera_uniform: Uniform,
 	camera: Arc<RwLock<camera::Camera>>,
-	model_cache: ArcLockModelCache,
+	model_cache: model::ArcLockCache,
 }
 
 impl RenderVoxel {
@@ -39,7 +39,7 @@ impl RenderVoxel {
 	pub fn add_state_listener(
 		app_state: &ArcLockMachine,
 		render_chain: &ArcRenderChain,
-		model_cache: &ArcLockModelCache,
+		model_cache: &model::ArcLockCache,
 		camera: &Arc<RwLock<camera::Camera>>,
 	) {
 		use state::{
@@ -72,7 +72,7 @@ impl RenderVoxel {
 
 	fn create(
 		render_chain: &mut RenderChain,
-		model_cache: &ArcLockModelCache,
+		model_cache: &model::ArcLockCache,
 		camera: Arc<RwLock<camera::Camera>>,
 	) -> Result<ArcLockRenderVoxel, AnyError> {
 		let subpass_id = Self::subpass_id();
@@ -83,7 +83,7 @@ impl RenderVoxel {
 
 	fn new(
 		render_chain: &RenderChain,
-		model_cache: ArcLockModelCache,
+		model_cache: model::ArcLockCache,
 		camera: Arc<RwLock<camera::Camera>>,
 	) -> Result<Self, AnyError> {
 		// TODO: Load shaders in async process before renderer is created
@@ -225,7 +225,7 @@ impl RenderChainElement for RenderVoxel {
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
-						.with_object::<Vertex>(0, flags::VertexInputRate::VERTEX)
+						.with_object::<model::Vertex>(0, flags::VertexInputRate::VERTEX)
 						.with_object::<Instance>(1, flags::VertexInputRate::INSTANCE),
 				)
 				.set_viewport_state(Viewport::from(structs::Extent2D {
