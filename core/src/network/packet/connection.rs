@@ -107,14 +107,14 @@ impl Processor for DestroyOwnedEntities {
 		data: &mut Option<event::Data>,
 		_local_data: &LocalData,
 	) -> VoidResult {
-		use entity::component::net;
+		use entity::component::OwnedByConnection;
 		if let Some(event::Data::Connection(connection)) = data {
 			profiling::scope!("destroy-owned-entities");
 			if let Some(arc_world) = self.entity_world.upgrade() {
 				if let Ok(mut world) = arc_world.write() {
 					// Iterate over the world and collect all of the entity ids which are owned by the connection
 					let mut entities_to_remove = Vec::new();
-					for (entity, net_owner) in world.query_mut::<&net::Owner>() {
+					for (entity, net_owner) in world.query_mut::<&OwnedByConnection>() {
 						if *net_owner.address() == connection.address {
 							entities_to_remove.push(entity);
 						}

@@ -1,4 +1,3 @@
-use super::net;
 use engine::{math::nalgebra::UnitQuaternion, utility::AnyError};
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +11,16 @@ impl Default for Orientation {
 			&-engine::world::global_up(),
 			-90.0f32.to_radians(),
 		))
+	}
+}
+
+impl super::Component for Orientation {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::Orientation"
+	}
+
+	fn display_name() -> &'static str {
+		"Orientation"
 	}
 }
 
@@ -37,11 +46,7 @@ impl Orientation {
 	}
 }
 
-impl net::Replicated for Orientation {
-	fn unique_id() -> &'static str {
-		"crystal_sphinx::entity::component::Orientation"
-	}
-
+impl super::binary::Serializable for Orientation {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
@@ -50,7 +55,7 @@ impl net::Replicated for Orientation {
 impl std::convert::TryFrom<Vec<u8>> for Orientation {
 	type Error = rmp_serde::decode::Error;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		net::deserialize::<Self>(&bytes)
+		super::binary::deserialize::<Self>(&bytes)
 	}
 }
 

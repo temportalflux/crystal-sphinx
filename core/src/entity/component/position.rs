@@ -1,4 +1,3 @@
-use super::net;
 use engine::{
 	math::nalgebra::{Point3, Vector3},
 	utility::AnyError,
@@ -17,6 +16,16 @@ impl Default for Position {
 			chunk: Point3::new(0, 0, 0),
 			offset: Point3::new(3.5, 0.0, 0.5),
 		}
+	}
+}
+
+impl super::Component for Position {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::Position"
+	}
+
+	fn display_name() -> &'static str {
+		"Position"
 	}
 }
 
@@ -70,11 +79,7 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 	}
 }
 
-impl net::Replicated for Position {
-	fn unique_id() -> &'static str {
-		"crystal_sphinx::entity::component::Position"
-	}
-
+impl super::binary::Serializable for Position {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
@@ -83,6 +88,19 @@ impl net::Replicated for Position {
 impl std::convert::TryFrom<Vec<u8>> for Position {
 	type Error = AnyError;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		Ok(net::deserialize::<Self>(&bytes)?)
+		Ok(super::binary::deserialize::<Self>(&bytes)?)
+	}
+}
+
+impl super::debug::EguiInformation for Position {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(format!(
+			"Chunk: <{:04}, {:04}, {:04}>",
+			self.chunk[0], self.chunk[1], self.chunk[2]
+		));
+		ui.label(format!(
+			"Offset: <{:.2}, {:.2}, {:.2}>",
+			self.offset[0], self.offset[1], self.offset[2]
+		));
 	}
 }

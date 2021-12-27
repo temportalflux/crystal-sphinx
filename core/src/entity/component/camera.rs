@@ -22,6 +22,16 @@ impl Default for Camera {
 	}
 }
 
+impl super::Component for Camera {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::Camera"
+	}
+
+	fn display_name() -> &'static str {
+		"Camera"
+	}
+}
+
 impl std::fmt::Display for Camera {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(

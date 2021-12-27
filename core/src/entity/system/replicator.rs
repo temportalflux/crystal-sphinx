@@ -1,12 +1,12 @@
 use crate::{
 	entity::{
 		self,
-		component::{self, net, Position},
+		component::{self, binary, Position},
 		ArcLockEntityWorld,
 	},
 	world::chunk,
 };
-use engine::EngineSystem;
+use engine::{utility::AnyError, EngineSystem};
 use std::sync::{Arc, RwLock, Weak};
 
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
@@ -45,8 +45,8 @@ impl EngineSystem for Replicator {
 
 		// TODO: Replicate relevant entities to other connections
 		// TODO: Destroy entities from other connecctions when they are removed from the world
-		// TODO: Replicate updates on net::Replicated components
-		// - (net::Replicated should have a flag to indicate that it is dirty)
+		// TODO: Replicate updates on net::BinarySerializable components
+		// - (net::BinarySerializable should have a flag to indicate that it is dirty)
 	}
 }
 
@@ -57,7 +57,7 @@ impl Replicator {
 		use engine::network::{enums::*, packet::Packet, Network};
 		type QueryBundle<'c> = hecs::PreparedQuery<(
 			&'c component::Position,
-			&'c net::Owner,
+			&'c component::OwnedByConnection,
 			&'c mut component::chunk::Relevancy,
 		)>;
 		// TODO: Replicate relevant chunks to connections based on the position of owner entities
@@ -135,7 +135,7 @@ impl Replicator {
 
 		let mut world = arc_world.write().unwrap();
 		let mut entities_to_replicate = vec![];
-		for (id, owner) in world.query_mut::<&mut net::Owner>() {
+		for (id, owner) in world.query_mut::<&mut component::OwnedByConnection>() {
 			if !owner.has_been_replicated() {
 				entities_to_replicate.push((id, *owner.address()));
 				owner.mark_as_replicated();
@@ -143,13 +143,13 @@ impl Replicator {
 		}
 
 		let mut replications = Vec::new();
-		let registry = net::Registry::read();
+		let registry = component::Registry::read();
 		for (entity, address) in entities_to_replicate.into_iter() {
 			let scope_tag = format!("entity:{}", entity.id());
 			profiling::scope!("serialize-entity", scope_tag.as_str());
 
 			let entity_ref = world.entity(entity).unwrap();
-			match registry.serialize_entity(entity_ref) {
+			match self.serialize_entity(&registry, entity_ref) {
 				Ok(serialized) => {
 					replications.push((address.clone(), serialized));
 				}
@@ -174,13 +174,36 @@ impl Replicator {
 		}
 	}
 
+	fn serialize_entity(
+		&self,
+		registry: &component::Registry,
+		entity_ref: hecs::EntityRef<'_>,
+	) -> Result<binary::SerializedEntity, AnyError> {
+		let mut serialized_components = Vec::new();
+		for type_id in entity_ref.component_types() {
+			// TODO: Implement a Replicated trait for the components which should actually be replicated (instead of using binary::Serializable as the marker).
+			if let Some(binary_registration) = registry.find_binary(&type_id) {
+				match binary_registration.serialize(&entity_ref)? {
+					Some(serialized) => {
+						serialized_components.push(serialized);
+					}
+					None => {} // The component didn't actually exist on the entity
+				}
+			}
+		}
+		Ok(binary::SerializedEntity {
+			entity: entity_ref.entity(),
+			components: serialized_components,
+		})
+	}
+
 	fn _owned_entities(
 		&self,
 		arc_world: &ArcLockEntityWorld,
 	) -> Vec<(hecs::Entity, std::net::SocketAddr, Position)> {
 		let world = arc_world.read().unwrap();
 		let entities = world
-			.query::<(&net::Owner, &Position)>()
+			.query::<(&component::OwnedByConnection, &Position)>()
 			.iter()
 			.map(|(entity, (&owner, &position))| (entity, *owner.address(), position))
 			.collect::<Vec<_>>();

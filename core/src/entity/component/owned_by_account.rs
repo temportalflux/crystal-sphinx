@@ -1,4 +1,4 @@
-use crate::{account, entity::component::net};
+use crate::account;
 use engine::utility::AnyError;
 use serde::{Deserialize, Serialize};
 
@@ -6,17 +6,27 @@ use serde::{Deserialize, Serialize};
 /// Use in conjunction with `net::Owner` to determine if the entity is
 /// controlled by the local player and what account it is that controls it.
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct User {
+pub struct OwnedByAccount {
 	account_id: account::Id,
 }
 
-impl std::fmt::Display for User {
+impl super::Component for OwnedByAccount {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::OwnedByAccount"
+	}
+
+	fn display_name() -> &'static str {
+		"Owned By Account"
+	}
+}
+
+impl std::fmt::Display for OwnedByAccount {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "net::User({})", self.account_id)
 	}
 }
 
-impl User {
+impl OwnedByAccount {
 	pub fn new(id: account::Id) -> Self {
 		Self { account_id: id }
 	}
@@ -26,19 +36,15 @@ impl User {
 	}
 }
 
-impl net::Replicated for User {
-	fn unique_id() -> &'static str {
-		"crystal_sphinx::entity::component::User"
-	}
-
+impl super::binary::Serializable for OwnedByAccount {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }
 
-impl std::convert::TryFrom<Vec<u8>> for User {
+impl std::convert::TryFrom<Vec<u8>> for OwnedByAccount {
 	type Error = rmp_serde::decode::Error;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		net::deserialize::<Self>(&bytes)
+		super::binary::deserialize::<Self>(&bytes)
 	}
 }

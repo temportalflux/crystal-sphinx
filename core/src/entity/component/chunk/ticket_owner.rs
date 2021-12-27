@@ -19,6 +19,16 @@ pub struct TicketOwner {
 	current_ticket: Option<ActiveTicket>,
 }
 
+impl super::super::Component for TicketOwner {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::chunk::TicketOwner"
+	}
+
+	fn display_name() -> &'static str {
+		"Chunk Ticket Owner"
+	}
+}
+
 impl std::fmt::Display for TicketOwner {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(

@@ -1,6 +1,6 @@
 use crate::{
 	account,
-	entity::component::{chunk, net, Camera, Orientation, Position, User},
+	entity::component::{chunk, Camera, Orientation, OwnedByAccount, OwnedByConnection, Position},
 };
 use std::net::SocketAddr;
 
@@ -16,12 +16,12 @@ impl Server {
 	}
 
 	pub fn with_user_id(mut self, id: account::Id) -> Self {
-		self.0.add(User::new(id));
+		self.0.add(OwnedByAccount::new(id));
 		self
 	}
 
 	pub fn with_address(mut self, address: SocketAddr) -> Self {
-		self.0.add(net::Owner::new(address));
+		self.0.add(OwnedByConnection::new(address));
 		self
 	}
 

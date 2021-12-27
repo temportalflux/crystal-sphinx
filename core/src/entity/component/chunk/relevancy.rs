@@ -30,6 +30,16 @@ impl Default for Relevancy {
 	}
 }
 
+impl super::super::Component for Relevancy {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::entity::component::chunk::Relevancy"
+	}
+
+	fn display_name() -> &'static str {
+		"Chunk Relevancy"
+	}
+}
+
 impl std::fmt::Display for Relevancy {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "Relevancy(radius={})", self.radius)

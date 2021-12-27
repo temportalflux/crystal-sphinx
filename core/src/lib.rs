@@ -186,7 +186,12 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(input_user.as_ref().unwrap())
-					.with_window("Commands", debug::CommandWindow::new(command_list.clone())),
+					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
+					.with_window(
+						"Entity Inspector",
+						debug::EntityInspector::new(&entity_world),
+					)
+					.with_window("Chunk Inspector", debug::ChunkInspector::new()),
 			);
 			_egui_ui = Some(ui);
 		}

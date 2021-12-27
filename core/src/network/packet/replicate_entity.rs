@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock, Weak};
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
 pub struct ReplicateEntity {
-	pub entities: Vec<component::net::SerializedEntity>,
+	pub entities: Vec<component::binary::SerializedEntity>,
 }
 
 impl ReplicateEntity {
@@ -68,7 +68,7 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 			None => return Ok(()),
 		};
 
-		let registry = component::net::Registry::read();
+		let registry = component::Registry::read();
 		let mut updates = Vec::new();
 
 		for serialized in data.entities.iter() {
@@ -77,7 +77,15 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 
 			let mut builder = hecs::EntityBuilder::default();
 			for comp_data in serialized.components.clone().into_iter() {
-				let _ = registry.deserialize(comp_data, &mut builder);
+				let type_id = registry.get_type_id(&comp_data.id).unwrap();
+				match registry.find_binary(&type_id) {
+					Some(binary_registration) => {
+						let _ = binary_registration.deserialize(comp_data.data, &mut builder);
+					}
+					None => {
+						log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
+					}
+				}
 			}
 			updates.push((serialized.entity, builder));
 		}
@@ -104,7 +112,7 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 					let _ = world.insert(entity, bundle);
 				}
 
-				match (local_account_id, builder.get::<component::User>()) {
+				match (local_account_id, builder.get::<component::OwnedByAccount>()) {
 					(Some(local_id), Some(user)) => {
 						// If the account ids match, then this entity is the local player's avatar
 						if *user.id() == local_id {

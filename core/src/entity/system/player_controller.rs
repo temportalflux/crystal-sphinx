@@ -10,7 +10,7 @@ use engine::{
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
-	&'c component::User,
+	&'c component::OwnedByAccount,
 	&'c mut component::Position,
 	&'c mut component::Orientation,
 )>;
