@@ -1,9 +1,13 @@
-use super::{Model, Vertex};
+use crate::graphics::voxel::{
+	atlas::Atlas,
+	model::{Model, Vertex},
+};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockCache = Arc<RwLock<Cache>>;
 pub struct Cache {
 	models: Vec<(Model, /*vertex offset*/ usize)>,
+	atlas: Atlas,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 }
@@ -12,6 +16,7 @@ impl Cache {
 	pub fn new() -> Self {
 		Self {
 			models: Vec::new(),
+			atlas: Atlas::default(),
 			vertices: Vec::new(),
 			indices: Vec::new(),
 		}
@@ -19,6 +24,10 @@ impl Cache {
 
 	pub fn arclocked(self) -> ArcLockCache {
 		Arc::new(RwLock::new(self))
+	}
+
+	pub(crate) fn atlas_mut(&mut self) -> &mut Atlas {
+		&mut self.atlas
 	}
 
 	pub fn insert(&mut self, mut model: Model) {

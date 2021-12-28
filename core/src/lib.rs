@@ -135,7 +135,9 @@ pub fn run(config: plugin::Config) -> VoidResult {
 					.as_graphics()?,
 			);
 		}
-		let mut model_cache = graphics::voxel::model::Cache::new();
+		let model_cache = graphics::voxel::model::Cache::new().arclocked();
+		graphics::voxel::model::Load::start(&model_cache);
+		/*
 		{
 			use graphics::voxel::{model::*, texture::*, Face};
 			model_cache.insert(Model::new(std::collections::HashMap::from([
@@ -165,12 +167,13 @@ pub fn run(config: plugin::Config) -> VoidResult {
 				),
 			])));
 		}
+		*/
 
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::RenderVoxel::add_state_listener(
 			&app_state,
 			&engine.render_chain().unwrap(),
-			&model_cache.arclocked(),
+			&model_cache,
 			&arc_camera,
 		);
 		graphics::chunk_boundary::Render::add_state_listener(

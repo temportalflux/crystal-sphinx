@@ -1,6 +1,6 @@
 use crate::graphics::{
 	model::Model as ModelTrait,
-	voxel::{model::Vertex, texture::AtlasTexCoord, Face, VertexFlags},
+	voxel::{atlas::AtlasTexCoord, model::Vertex, Face, VertexFlags},
 };
 use engine::math::nalgebra::{Matrix4x2, Vector2, Vector4};
 use std::collections::HashMap;

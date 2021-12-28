@@ -1,80 +1,11 @@
+use super::Side;
 use engine::asset::{self, AssetResult, TypeMetadata};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-enum Side {
-	Top,
-	Bottom,
-	Front,
-	Back,
-	Left,
-	Right,
-
-	Side,
-}
-impl Side {
-	fn all_real() -> Vec<Self> {
-		vec![
-			Self::Top,
-			Self::Bottom,
-			Self::Front,
-			Self::Back,
-			Self::Left,
-			Self::Right,
-		]
-	}
-	fn all() -> Vec<Self> {
-		vec![
-			Self::Top,
-			Self::Bottom,
-			Self::Front,
-			Self::Back,
-			Self::Left,
-			Self::Right,
-			Self::Side,
-		]
-	}
-	fn as_side_list(&self) -> Vec<Self> {
-		match self {
-			Self::Side => vec![Self::Front, Self::Back, Self::Left, Self::Right],
-			_ => vec![*self],
-		}
-	}
-}
-impl Side {
-	fn as_str(&self) -> &'static str {
-		match self {
-			Self::Top => "Top",
-			Self::Bottom => "Bottom",
-			Self::Front => "Front",
-			Self::Back => "Back",
-			Self::Left => "Left",
-			Self::Right => "Right",
-			Self::Side => "Side",
-		}
-	}
-}
-impl std::convert::TryFrom<&str> for Side {
-	type Error = ();
-	fn try_from(value: &str) -> Result<Self, Self::Error> {
-		match value {
-			"Top" => Ok(Self::Top),
-			"Bottom" => Ok(Self::Bottom),
-			"Front" => Ok(Self::Front),
-			"Back" => Ok(Self::Back),
-			"Left" => Ok(Self::Left),
-			"Right" => Ok(Self::Right),
-			"Side" => Ok(Self::Side),
-			_ => Err(()),
-		}
-	}
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Block {
 	asset_type: String,
-	#[serde(skip)]
 	textures: HashMap<Side, asset::Id>,
 }
 
@@ -85,6 +16,10 @@ impl asset::Asset for Block {
 }
 
 impl Block {
+	pub fn textures(&self) -> &HashMap<Side, asset::Id> {
+		&self.textures
+	}
+
 	fn set_textures(&mut self, node: &kdl::KdlNode) {
 		use engine::utility::kdl::value_as_asset_id;
 		use std::convert::TryFrom;

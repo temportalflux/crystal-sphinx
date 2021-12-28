@@ -1,4 +1,6 @@
+pub mod atlas;
 pub mod camera;
+pub mod model;
 
 mod face;
 pub use face::*;
@@ -9,9 +11,5 @@ pub use flags::*;
 mod instance;
 pub use instance::*;
 
-pub mod model;
-
 mod render;
 pub use render::*;
-
-pub mod texture;
