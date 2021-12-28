@@ -1,11 +1,8 @@
-pub trait Model {
+pub trait ModelBuilder {
 	type Vertex;
 	type Index;
 
-	fn vertices(&self) -> &Vec<Self::Vertex>;
 	fn vertices_mut(&mut self) -> &mut Vec<Self::Vertex>;
-
-	fn indices(&self) -> &Vec<Self::Index>;
 	fn indices_mut(&mut self) -> &mut Vec<Self::Index>;
 	fn get_next_index(&self) -> Self::Index;
 
@@ -24,4 +21,11 @@ pub trait Model {
 		self.push_index(tri.1);
 		self.push_index(tri.2);
 	}
+}
+
+pub trait Model {
+	type Vertex;
+	type Index;
+	fn vertices(&self) -> &Vec<Self::Vertex>;
+	fn indices(&self) -> &Vec<Self::Index>;
 }

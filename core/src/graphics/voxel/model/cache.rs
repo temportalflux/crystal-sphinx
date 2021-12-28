@@ -1,13 +1,13 @@
-use crate::graphics::voxel::{
-	atlas::Atlas,
-	model::{Model, Vertex},
+use crate::graphics::voxel::model::{Model, Vertex};
+use engine::asset;
+use std::{
+	collections::HashMap,
+	sync::{Arc, RwLock},
 };
-use std::sync::{Arc, RwLock};
 
 pub type ArcLockCache = Arc<RwLock<Cache>>;
 pub struct Cache {
-	models: Vec<(Model, /*vertex offset*/ usize)>,
-	atlases: Vec<Arc<Atlas>>,
+	models: HashMap<asset::Id, (Model, /*vertex offset*/ usize)>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 }
@@ -15,8 +15,7 @@ pub struct Cache {
 impl Cache {
 	pub fn new() -> Self {
 		Self {
-			models: Vec::new(),
-			atlases: Vec::new(),
+			models: HashMap::new(),
 			vertices: Vec::new(),
 			indices: Vec::new(),
 		}
@@ -26,17 +25,12 @@ impl Cache {
 		Arc::new(RwLock::new(self))
 	}
 
-	pub(crate) fn add_atlas(&mut self, atlas: Arc<Atlas>) {
-		self.atlases.push(atlas);
-	}
-
-	pub fn insert(&mut self, mut model: Model) {
+	pub fn insert(&mut self, block_id: asset::Id, model: Model) {
 		use crate::graphics::model::Model;
-		model = model.build_data();
 		let vertex_offset = self.vertices.len();
 		self.vertices.append(&mut model.vertices().clone());
 		self.indices.append(&mut model.indices().clone());
-		self.models.push((model, vertex_offset));
+		self.models.insert(block_id, (model, vertex_offset));
 	}
 
 	pub fn vertex_buffer_size(&self) -> usize {

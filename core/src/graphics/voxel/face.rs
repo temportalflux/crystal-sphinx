@@ -66,3 +66,18 @@ impl Face {
 		}
 	}
 }
+
+impl From<crate::block::Side> for Face {
+	fn from(side: crate::block::Side) -> Self {
+		use crate::block::Side;
+		match side {
+			Side::Top => Self::Up,
+			Side::Bottom => Self::Down,
+			Side::Front => Self::Front,
+			Side::Back => Self::Back,
+			Side::Left => Self::Left,
+			Side::Right => Self::Right,
+			Side::Side => unimplemented!(),
+		}
+	}
+}

@@ -135,39 +135,9 @@ pub fn run(config: plugin::Config) -> VoidResult {
 					.as_graphics()?,
 			);
 		}
+
 		let model_cache = graphics::voxel::model::Cache::new().arclocked();
 		graphics::voxel::model::Load::start(&model_cache);
-		/*
-		{
-			use graphics::voxel::{model::*, texture::*, Face};
-			model_cache.insert(Model::new(std::collections::HashMap::from([
-				(
-					Face::Left,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-				(
-					Face::Right,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-				(
-					Face::Up,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-				(
-					Face::Down,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-				(
-					Face::Front,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-				(
-					Face::Back,
-					AtlasTexCoord::new([0.0, 0.0].into(), [1.0, 1.0].into()),
-				),
-			])));
-		}
-		*/
 
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::RenderVoxel::add_state_listener(

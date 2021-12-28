@@ -9,6 +9,7 @@ struct Entry {
 	coord: Point2<usize>,
 	size: Vector2<usize>,
 	uv: Point2<f32>,
+	size_in_atlas: Vector2<f32>,
 	binary: Vec<u8>,
 }
 
@@ -63,7 +64,7 @@ impl Builder {
 		self.size = size;
 		self
 	}
-	
+
 	fn create_stub(&self) -> Self {
 		Self {
 			next_coord: self.next_coord,
@@ -86,7 +87,7 @@ impl Builder {
 		});
 		let mut stub = self.create_stub();
 		for (id, texture) in texture_to_fit {
-			if stub.insert(&id, &texture).is_ok() {
+			if !stub.insert(&id, &texture).is_ok() {
 				return false;
 			}
 		}
@@ -131,8 +132,12 @@ impl Builder {
 					coord: coord.clone(),
 					size: texture.size().clone(),
 					uv: Point2::new(
-						coord.x as f32 / self.size.x as f32,
-						coord.y as f32 / self.size.y as f32,
+						0.0, // coord.x as f32 / self.size.x as f32,
+						0.0, // coord.y as f32 / self.size.y as f32,
+					),
+					size_in_atlas: Vector2::new(
+						1.0, // texture.size().x as f32 / self.size.x as f32,
+						1.0, // texture.size().y as f32 / self.size.y as f32,
 					),
 					binary: texture.binary().clone(),
 				},
@@ -173,28 +178,34 @@ impl Builder {
 
 	pub fn build(self) -> Atlas {
 		let binary = self.as_binary();
+		// TODO: make graphics image and view
 		Atlas {
 			size: self.size,
 			entries: self.entries,
 			binary,
 		}
 	}
-
 }
 
 pub struct Atlas {
 	size: Vector2<usize>,
 	entries: EntryMap,
 	binary: Vec<u8>,
+	// TODO: graphics image & view
 }
 impl Atlas {
 	pub fn builder_2k() -> Builder {
-		Builder::default()
-		.with_size(Vector2::new(2048, 2048))
+		Builder::default().with_size(Vector2::new(2048, 2048))
 	}
 
-	pub fn get(&self, id: &asset::Id) -> Option<&Point2<f32>> {
-		self.entries.get(&id).map(|entry| &entry.uv)
+	pub fn get(&self, id: &asset::Id) -> Option<super::AtlasTexCoord> {
+		match self.entries.get(&id) {
+			Some(entry) => Some(super::AtlasTexCoord {
+				offset: entry.uv.clone(),
+				size: entry.size_in_atlas.clone(),
+			}),
+			None => None,
+		}
 	}
 }
 

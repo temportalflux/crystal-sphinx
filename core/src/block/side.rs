@@ -1,4 +1,3 @@
-use crate::graphics::voxel::Face;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, Serialize, Deserialize)]
@@ -68,20 +67,6 @@ impl std::convert::TryFrom<&str> for Side {
 			"Right" => Ok(Self::Right),
 			"Side" => Ok(Self::Side),
 			_ => Err(()),
-		}
-	}
-}
-
-impl Into<Face> for Side {
-	fn into(self) -> Face {
-		match self {
-			Self::Top => Face::Up,
-			Self::Bottom => Face::Down,
-			Self::Front => Face::Front,
-			Self::Back => Face::Back,
-			Self::Left => Face::Left,
-			Self::Right => Face::Right,
-			Self::Side => unimplemented!(),
 		}
 	}
 }

@@ -1,19 +1,9 @@
-use engine::math::nalgebra::{Matrix2, Vector2};
+use engine::math::nalgebra::{Point2, Vector2};
 
-pub struct AtlasTexCoord(Matrix2<f32>);
-
-impl AtlasTexCoord {
-	pub fn new(offset: Vector2<f32>, size: Vector2<f32>) -> Self {
-		Self(Matrix2::from_columns(&[offset, size]))
-	}
-
-	pub fn offset(&self) -> Vector2<f32> {
-		self.0.column(0).into()
-	}
-
-	pub fn size(&self) -> Vector2<f32> {
-		self.0.column(1).into()
-	}
+#[derive(Clone, Copy)]
+pub struct AtlasTexCoord {
+	pub(crate) offset: Point2<f32>,
+	pub(crate) size: Vector2<f32>,
 }
 
 impl std::fmt::Display for AtlasTexCoord {
@@ -21,10 +11,7 @@ impl std::fmt::Display for AtlasTexCoord {
 		write!(
 			f,
 			"texture::Coord(offset=<{}, {}> size=<{}, {}>)",
-			self.offset().x,
-			self.offset().y,
-			self.size().x,
-			self.size().y
+			self.offset.x, self.offset.y, self.size.x, self.size.y
 		)
 	}
 }

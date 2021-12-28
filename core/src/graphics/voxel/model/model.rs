@@ -1,9 +1,13 @@
 use crate::graphics::{
-	model::Model as ModelTrait,
-	voxel::{atlas::AtlasTexCoord, model::Vertex, Face, VertexFlags},
+	model::{Model as ModelTrait, ModelBuilder},
+	voxel::{
+		atlas::{Atlas, AtlasTexCoord},
+		model::Vertex,
+		Face, VertexFlags,
+	},
 };
 use engine::math::nalgebra::{Matrix4x2, Vector2, Vector4};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 #[rustfmt::skip]
 static TL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
@@ -35,20 +39,47 @@ static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 );
 
 #[derive(Default)]
-pub struct Model {
+pub struct Builder {
 	faces: HashMap<Face, AtlasTexCoord>,
+	atlas: Option<Arc<Atlas>>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 }
 
-impl std::fmt::Debug for Model {
+impl Builder {
+	pub fn insert(&mut self, face: Face, tex_coord: AtlasTexCoord) {
+		self.faces.insert(face, tex_coord);
+	}
+
+	pub fn set_atlas(&mut self, atlas: Arc<Atlas>) {
+		self.atlas = Some(atlas);
+	}
+
+	pub fn build(mut self) -> Model {
+		let face_count = self.faces.len();
+		// each face needs its own vectors because the texture data is embedded in each vertex
+		self.vertices = Vec::with_capacity(face_count * 4); // 4 corners per face
+		self.indices = Vec::with_capacity(face_count * 6); // two tris per face
+		let coords = self.faces.drain().collect::<Vec<_>>();
+		for (face, tex_coord) in coords.into_iter() {
+			self.push_face(face, &tex_coord);
+		}
+		Model {
+			atlas: self.atlas.unwrap(),
+			vertices: self.vertices,
+			indices: self.indices,
+		}
+	}
+}
+
+impl std::fmt::Debug for Builder {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		let face_string_list = self
 			.faces
 			.iter()
 			.map(|(face, tex_coord)| {
-				let tex_offset = tex_coord.offset();
-				let tex_size = tex_coord.size();
+				let tex_offset = tex_coord.offset;
+				let tex_size = tex_coord.size;
 				format!(
 					"{} => (offset:<{}, {}>, size:<{}, {}>)",
 					face, tex_offset[0], tex_offset[1], tex_size[0], tex_size[1]
@@ -59,35 +90,24 @@ impl std::fmt::Debug for Model {
 	}
 }
 
-impl Model {
-	pub fn new(faces: HashMap<Face, AtlasTexCoord>) -> Self {
-		let face_count = enumset::EnumSet::<Face>::all().len();
-		Self {
-			faces,
-			// each face needs its own vectors because the texture data is embedded in each vertex
-			vertices: Vec::with_capacity(face_count * 4), // 4 corners per face
-			indices: Vec::with_capacity(face_count * 6),  // two tris per face
-		}
+impl ModelBuilder for Builder {
+	type Vertex = Vertex;
+	type Index = u32;
+
+	fn vertices_mut(&mut self) -> &mut Vec<Self::Vertex> {
+		&mut self.vertices
 	}
 
-	pub fn build_data(mut self) -> Self {
-		let data = self.faces.drain().collect::<HashMap<_, _>>();
-		for face in enumset::EnumSet::<Face>::all() {
-			match data.get(&face) {
-				Some(atlas_tex_coord) => {
-					self.push_face(face, atlas_tex_coord);
-				}
-				None => {
-					log::error!("Failed to find face {} in texture coord map.", face);
-				}
-			}
-		}
-		self.faces = data;
-		self
+	fn indices_mut(&mut self) -> &mut Vec<Self::Index> {
+		&mut self.indices
+	}
+
+	fn get_next_index(&self) -> Self::Index {
+		self.vertices.len() as u32
 	}
 }
 
-impl Model {
+impl Builder {
 	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord) {
 		let flags: Vector4<f32> = VertexFlags { face }.into();
 
@@ -110,13 +130,26 @@ impl Model {
 		let tex_coord_mask: Vector2<f32> = mask_mat.column(0).fixed_rows::<2>(0).into();
 
 		let position = (face.model_offset_matrix() * offset_mask) + face.model_axis();
-		let tex_coord = tex_coord.offset() + tex_coord.size().component_mul(&tex_coord_mask);
+		let tex_coord = tex_coord.offset + tex_coord.size.component_mul(&tex_coord_mask);
 
 		self.push_vertex(Vertex {
 			position: position.into(),
 			tex_coord: tex_coord.into(),
 			model_flags: model_flags.into(),
 		})
+	}
+}
+
+pub struct Model {
+	vertices: Vec<Vertex>,
+	indices: Vec<u32>,
+	atlas: Arc<Atlas>,
+	// TODO: texture descriptor sets
+}
+
+impl Model {
+	pub fn builder() -> Builder {
+		Builder::default()
 	}
 }
 
@@ -128,19 +161,7 @@ impl ModelTrait for Model {
 		&self.vertices
 	}
 
-	fn vertices_mut(&mut self) -> &mut Vec<Self::Vertex> {
-		&mut self.vertices
-	}
-
 	fn indices(&self) -> &Vec<Self::Index> {
 		&self.indices
-	}
-
-	fn indices_mut(&mut self) -> &mut Vec<Self::Index> {
-		&mut self.indices
-	}
-
-	fn get_next_index(&self) -> Self::Index {
-		self.vertices.len() as u32
 	}
 }
