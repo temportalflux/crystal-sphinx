@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 pub type ArcLockCache = Arc<RwLock<Cache>>;
 pub struct Cache {
 	models: Vec<(Model, /*vertex offset*/ usize)>,
-	atlas: Atlas,
+	atlases: Vec<Arc<Atlas>>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 }
@@ -16,7 +16,7 @@ impl Cache {
 	pub fn new() -> Self {
 		Self {
 			models: Vec::new(),
-			atlas: Atlas::default(),
+			atlases: Vec::new(),
 			vertices: Vec::new(),
 			indices: Vec::new(),
 		}
@@ -26,8 +26,8 @@ impl Cache {
 		Arc::new(RwLock::new(self))
 	}
 
-	pub(crate) fn atlas_mut(&mut self) -> &mut Atlas {
-		&mut self.atlas
+	pub(crate) fn add_atlas(&mut self, atlas: Arc<Atlas>) {
+		self.atlases.push(atlas);
 	}
 
 	pub fn insert(&mut self, mut model: Model) {

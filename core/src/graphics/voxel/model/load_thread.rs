@@ -1,4 +1,4 @@
-use crate::{block::Block, graphics::voxel::model};
+use crate::{block::Block, graphics::voxel::{model, atlas}};
 use engine::{
 	asset,
 	graphics::Texture,
@@ -8,6 +8,7 @@ use engine::{
 use std::{
 	collections::{HashMap, HashSet},
 	pin::Pin,
+	sync::Arc,
 	task::{Context, Poll},
 };
 
@@ -93,21 +94,22 @@ impl Load {
 			// and each block only needs access to 1 atlas
 			// (even if it means uploading a given block texture on multiple atlases).
 			log::debug!(target: LOG, "Stitching block textures");
+			let mut atlas = atlas::Atlas::builder_2k();
 			for (_block_id, block) in blocks.iter() {
-				let atlas = model_cache.atlas_mut();
 				let textures = block
-					.textures()
-					.iter()
-					.map(|(_side, id)| (id, textures.get(&id).unwrap()))
-					.collect::<HashMap<_, _>>();
+				.textures()
+				.iter()
+				.map(|(_side, id)| (id, textures.get(&id).unwrap()))
+				.collect::<HashMap<_, _>>();
 				if !atlas.contains_or_fits_all(&textures) {
 					atlas.insert_all(&textures)?;
 				}
 			}
-
+			
 			log::debug!(target: LOG, "Compiling atlas binary");
-			let _binary = model_cache.atlas_mut().as_binary();
-
+			let atlas = Arc::new(atlas.build());
+			model_cache.add_atlas(atlas);
+			
 			// TODO: Save atlas texture graphics arc and the texture
 			//			 coordinates to models, which are inserted into the model cache
 

@@ -12,20 +12,22 @@ struct Entry {
 	binary: Vec<u8>,
 }
 
-pub struct Atlas {
+type EntryMap = HashMap<asset::Id, Entry>;
+
+pub struct Builder {
 	size: Vector2<usize>,
 	cell_size: Vector2<usize>,
 
 	next_coord: Point2<usize>,
 
-	entries: HashMap<asset::Id, Entry>,
+	entries: EntryMap,
 	save_entries: bool,
 }
 
-impl Default for Atlas {
+impl Default for Builder {
 	fn default() -> Self {
 		Self {
-			size: Vector2::new(2048, 2048),
+			size: Vector2::new(0, 0),
 			cell_size: Vector2::new(16, 16),
 			next_coord: Point2::new(0, 0),
 			entries: HashMap::new(),
@@ -34,7 +36,7 @@ impl Default for Atlas {
 	}
 }
 
-impl std::fmt::Display for Atlas {
+impl std::fmt::Display for Builder {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		let width_remaining_in_row = self.size.x - self.next_coord.x;
 		let remaining_in_row = width_remaining_in_row / self.cell_size.x;
@@ -56,7 +58,12 @@ impl std::fmt::Display for Atlas {
 	}
 }
 
-impl Atlas {
+impl Builder {
+	pub fn with_size(mut self, size: Vector2<usize>) -> Self {
+		self.size = size;
+		self
+	}
+	
 	fn create_stub(&self) -> Self {
 		Self {
 			next_coord: self.next_coord,
@@ -143,11 +150,7 @@ impl Atlas {
 		Ok(coord)
 	}
 
-	pub fn get(&self, id: &asset::Id) -> Option<&Point2<f32>> {
-		self.entries.get(&id).map(|entry| &entry.uv)
-	}
-
-	pub fn as_binary(&self) -> Vec<u8> {
+	fn as_binary(&self) -> Vec<u8> {
 		// 4 per pixel for each RGBA channel
 		let size = self.size.x * self.size.y * 4;
 		let mut binary = Vec::with_capacity(size);
@@ -166,6 +169,32 @@ impl Atlas {
 			}
 		}
 		binary
+	}
+
+	pub fn build(self) -> Atlas {
+		let binary = self.as_binary();
+		Atlas {
+			size: self.size,
+			entries: self.entries,
+			binary,
+		}
+	}
+
+}
+
+pub struct Atlas {
+	size: Vector2<usize>,
+	entries: EntryMap,
+	binary: Vec<u8>,
+}
+impl Atlas {
+	pub fn builder_2k() -> Builder {
+		Builder::default()
+		.with_size(Vector2::new(2048, 2048))
+	}
+
+	pub fn get(&self, id: &asset::Id) -> Option<&Point2<f32>> {
+		self.entries.get(&id).map(|entry| &entry.uv)
 	}
 }
 
