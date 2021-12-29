@@ -15,6 +15,7 @@ use std::{
 	sync::{Arc, Weak},
 };
 
+// Top-Left UV is -Horizontal & -Vertical
 #[rustfmt::skip]
 static TL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*u*/ 0.0, /*uNeg*/ 1.0,
@@ -22,6 +23,7 @@ static TL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*_*/ 0.0, /*vNeg*/ 1.0,
 	/*_*/ 0.0, /*vPos*/ 0.0,
 );
+// Top-Right UV is +Horizontal & -Vertical
 #[rustfmt::skip]
 static TR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*u*/ 1.0, /*uNeg*/ 0.0,
@@ -29,6 +31,7 @@ static TR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*_*/ 0.0, /*vNeg*/ 1.0,
 	/*_*/ 0.0, /*vPos*/ 0.0,
 );
+// Bottom-Left UV is -Horizontal & +Vertical
 #[rustfmt::skip]
 static BL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*u*/ 0.0, /*uNeg*/ 1.0,
@@ -36,6 +39,7 @@ static BL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*_*/ 0.0, /*vNeg*/ 0.0,
 	/*_*/ 0.0, /*vPos*/ 1.0,
 );
+// Bottom-Right UV is +Horizontal & +Vertical
 #[rustfmt::skip]
 static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 	/*u*/ 1.0, /*uNeg*/ 0.0,
@@ -127,8 +131,8 @@ impl Builder {
 
 		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, flags);
 		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, flags);
-		let idx_bl = self.push_masked_vertex(face, &tex_coord, &BL_MATRIX, flags);
 		let idx_br = self.push_masked_vertex(face, &tex_coord, &BR_MATRIX, flags);
+		let idx_bl = self.push_masked_vertex(face, &tex_coord, &BL_MATRIX, flags);
 		self.push_tri((idx_tl, idx_tr, idx_br));
 		self.push_tri((idx_br, idx_bl, idx_tl));
 	}

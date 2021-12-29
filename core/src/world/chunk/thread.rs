@@ -273,8 +273,9 @@ impl ThreadState {
 				self.ticketless_chunks.remove(i);
 				// Only move the chunk to the list to be unloaded if no other tickets reference it.
 				if !has_been_renewed {
-					let state = self.chunk_states.remove(&coordinate).unwrap();
-					chunks_for_unloading.push((coordinate, state.chunk));
+					if let Some(state) = self.chunk_states.remove(&coordinate) {
+						chunks_for_unloading.push((coordinate, state.chunk));
+					}
 				}
 			} else {
 				i += 1;

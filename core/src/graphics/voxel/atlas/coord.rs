@@ -6,6 +6,12 @@ pub struct AtlasTexCoord {
 	pub(crate) size: Vector2<f32>,
 }
 
+impl std::fmt::Debug for AtlasTexCoord {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		<Self as std::fmt::Display>::fmt(&self, f)
+	}
+}
+
 impl std::fmt::Display for AtlasTexCoord {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(

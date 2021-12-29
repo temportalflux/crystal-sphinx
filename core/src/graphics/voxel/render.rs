@@ -99,7 +99,7 @@ impl RenderVoxel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/fragment"))?;
 
-		let max_instances = 1; // TODO: what to do with this?
+		let max_instances = 4; // TODO: what to do with this?
 
 		let instance_buffer = buffer::Buffer::create_gpu(
 			Some(format!("RenderVoxel.InstanceBuffer")),
@@ -147,14 +147,40 @@ impl RenderChainElement for RenderVoxel {
 		self.drawable.create_shaders(render_chain)?;
 		self.camera_uniform.write_descriptor_sets(render_chain);
 
-		let instances: Vec<Instance> = vec![Instance {
-			chunk_coordinate: Vector3::default().into(),
-			model_matrix: Translation3::new(0.0, 0.0, 0.0).to_homogeneous().into(),
-			instance_flags: InstanceFlags {
-				faces: EnumSet::all(),
-			}
-			.into(),
-		}];
+		let instances: Vec<Instance> = vec![
+			Instance {
+				chunk_coordinate: Vector3::default().into(),
+				model_matrix: Translation3::new(0.0, 1.0, 0.0).to_homogeneous().into(),
+				instance_flags: InstanceFlags {
+					faces: EnumSet::all(),
+				}
+				.into(),
+			},
+			Instance {
+				chunk_coordinate: Vector3::default().into(),
+				model_matrix: Translation3::new(1.0, 1.0, 1.0).to_homogeneous().into(),
+				instance_flags: InstanceFlags {
+					faces: EnumSet::all(),
+				}
+				.into(),
+			},
+			Instance {
+				chunk_coordinate: Vector3::default().into(),
+				model_matrix: Translation3::new(0.0, 1.0, 2.0).to_homogeneous().into(),
+				instance_flags: InstanceFlags {
+					faces: EnumSet::all(),
+				}
+				.into(),
+			},
+			Instance {
+				chunk_coordinate: Vector3::default().into(),
+				model_matrix: Translation3::new(1.0, 1.0, 3.0).to_homogeneous().into(),
+				instance_flags: InstanceFlags {
+					faces: EnumSet::all(),
+				}
+				.into(),
+			},
+		];
 
 		graphics::TaskGpuCopy::new(
 			self.instance_buffer.wrap_name(|v| format!("Write({})", v)),
@@ -230,8 +256,17 @@ impl RenderChainElement for RenderVoxel {
 			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.model_cache.index_buffer, 0);
 
-			let id = asset::Id::new("vanilla", "blocks/dirt");
-			if let Some((model, index_start, vertex_offset)) = self.model_cache.get(&id) {
+			let instances = [
+				(asset::Id::new("vanilla", "blocks/stone"), 0, 1),
+				(asset::Id::new("vanilla", "blocks/dirt"), 1, 1),
+				(asset::Id::new("vanilla", "blocks/coal_ore"), 2, 1),
+				(asset::Id::new("vanilla", "blocks/cobblestone"), 3, 1),
+			];
+			for (id, instance_start, instance_count) in instances.iter() {
+				let (model, index_start, vertex_offset) = match self.model_cache.get(&id) {
+					Some(entry) => entry,
+					None => continue,
+				};
 				let label = format!("Draw:Voxel({})", id);
 				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
 
@@ -249,7 +284,13 @@ impl RenderChainElement for RenderVoxel {
 					],
 				);
 				// Draw based on the model
-				buffer.draw(model.index_count(), *index_start, 1, 0, *vertex_offset);
+				buffer.draw(
+					model.index_count(),
+					*index_start,
+					*instance_count,
+					*instance_start,
+					*vertex_offset,
+				);
 
 				buffer.end_label();
 			}
