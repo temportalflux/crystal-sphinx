@@ -234,12 +234,17 @@ impl RenderChainElement for RenderVoxel {
 			if let Some((model, index_start, vertex_offset)) = self.model_cache.get(&id) {
 				let label = format!("Draw:Voxel({})", id);
 				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
-				
+
 				// Bind the texture-atlas and camera descriptors
 				self.drawable.bind_descriptors(
 					buffer,
 					vec![
+						// Descriptor set=0 is the camera uniform.
+						// layout(set = 0, binding = 0) uniform CameraUniform ...
 						&self.camera_uniform.get_set(frame).unwrap(),
+						// Descriptor set=1 is the texture sampler.
+						// The binding number is defined when creating the descriptor cache.
+						// layout(set = 1, binding = 0) uniform sampler2D texSampler;
 						&model.descriptor_set(),
 					],
 				);
@@ -248,7 +253,6 @@ impl RenderChainElement for RenderVoxel {
 
 				buffer.end_label();
 			}
-
 		}
 		buffer.end_label();
 

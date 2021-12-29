@@ -140,6 +140,8 @@ impl Load {
 				DescriptorCache::<(usize, usize)>::new(
 					descriptor::layout::SetLayout::builder()
 						.with_name("RenderVoxel.Atlas.DescriptorLayout")
+						// In whatever set index a descriptor of this layout is bound to...
+						// binding=0 is the texture sampler (for the atlas)
 						.with_binding(
 							0,
 							flags::DescriptorKind::COMBINED_IMAGE_SAMPLER,

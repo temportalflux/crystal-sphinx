@@ -37,17 +37,34 @@ highp int bitSubset(int field, int size, int start, int end)
 
 void main()
 {
+
+	// How far away from the camera's current chunk is the chunk of the voxel being rendered?
 	vec3 chunk_offset = chunk_coordinate - camera.posOfCurrentChunk;
-	// component-wise multiply to convert chunk pos to world pos
+	// Convert the chunk distance into a number of blocks
 	vec3 blockPosRelativeToCameraChunk = chunk_offset * CHUNK_SIZE;
+	// Now add the position of the block inside the chunk to the number of blocks from the camera's chunk
 	vec3 vertPos = blockPosRelativeToCameraChunk + position;
+	// Integrate the vertex model matrix with its block-offset position
+	// and the camera's view (which includes the camera's offset in its chunk) and projection.
+	// This results in the virtual position of the block, on the screen,
+	// relative to the camera's view (position & orientation).
 	gl_Position = camera.proj * camera.view * model_matrix * vec4(vertPos, 1.0);
 	
-	// bit mask indicating what face this is
+	// Determine if the face should be drawn
+	// -------------------------------------
+	// Bit-Mask which indicates which of the 6 faces this vertex is on
 	int faceMask = floatBitsToInt(model_flags.x) & 0x3F; // 0b111111
+	// Get the bit-mask for which faces are enabled/visible for this instance
 	int faceEnabledBits = floatBitsToInt(instance_flags.x);
+	// Tell the fragment shader if this fragment is actually visible;
+	// aka is the face this vertex is on enabled for the instance.
+	// 0.0 means the face/vertex is not visible and should be discarded.
+	// 1.0 means the face IS visible and should be draw.
 	fragFlags.x = float(faceMask & faceEnabledBits);
 	
+	// NOTE: Will eventually be used to colorize voxel faces based on biome
 	fragColor = vec4(1, 1, 1, 1);
+
+	// Copy over the texture coordinate for sampling from atlas
 	fragTexCoord = tex_coord;
 }

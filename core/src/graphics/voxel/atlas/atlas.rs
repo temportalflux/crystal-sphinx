@@ -93,7 +93,7 @@ impl Builder {
 		});
 		let mut stub = self.create_stub();
 		for (id, texture) in texture_to_fit {
-			if !stub.insert(&id, &texture).is_ok() {
+			if stub.insert(&id, &texture).is_err() {
 				return false;
 			}
 		}
@@ -132,22 +132,20 @@ impl Builder {
 		let coord = self.next_coord.clone();
 		// But don't save entries if this is a stub.
 		if self.save_entries {
-			self.entries.insert(
-				id.clone(),
-				Entry {
-					coord: coord.clone(),
-					size: texture.size().clone(),
-					uv: Point2::new(
-						0.0, // coord.x as f32 / self.size.x as f32,
-						0.0, // coord.y as f32 / self.size.y as f32,
-					),
-					size_in_atlas: Vector2::new(
-						1.0, // texture.size().x as f32 / self.size.x as f32,
-						1.0, // texture.size().y as f32 / self.size.y as f32,
-					),
-					binary: texture.binary().clone(),
-				},
-			);
+			let entry = Entry {
+				coord: coord.clone(),
+				size: texture.size().clone(),
+				uv: Point2::new(
+					/*0.0,*/ coord.x as f32 / self.size.x as f32,
+					/*0.0,*/ coord.y as f32 / self.size.y as f32,
+				),
+				size_in_atlas: Vector2::new(
+					/*1.0,*/ texture.size().x as f32 / self.size.x as f32,
+					/*1.0,*/ texture.size().y as f32 / self.size.y as f32,
+				),
+				binary: texture.binary().clone(),
+			};
+			self.entries.insert(id.clone(), entry);
 		}
 
 		// It fits, lets bump the next coord to the next column.
@@ -167,8 +165,8 @@ impl Builder {
 		let mut binary = Vec::with_capacity(size);
 		binary.resize(size, 0);
 		for (_id, entry) in self.entries.iter() {
-			for y in 0..entry.coord.y {
-				for x in 0..entry.coord.x {
+			for y in 0..entry.size.y {
+				for x in 0..entry.size.x {
 					for channel in 0..4 {
 						let src = Vector2::new(x, y);
 						let dst = entry.coord + src;
