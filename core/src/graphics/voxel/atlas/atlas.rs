@@ -1,9 +1,15 @@
 use engine::{
 	asset,
-	graphics::Texture,
+	graphics::{
+		command, flags, image, image_view, structs,
+		utility::{BuildFromDevice, NameableBuilder, NamedObject},
+		RenderChain, TaskGpuCopy, Texture,
+	},
 	math::nalgebra::{Point2, Vector2},
+	task::{self, ScheduledTask},
+	utility::AnyError,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 struct Entry {
 	coord: Point2<usize>,
@@ -176,26 +182,72 @@ impl Builder {
 		binary
 	}
 
-	pub fn build(self) -> Atlas {
-		let binary = self.as_binary();
-		// TODO: make graphics image and view
-		Atlas {
-			size: self.size,
-			entries: self.entries,
-			binary,
-		}
+	pub fn build(
+		self,
+		render_chain: &RenderChain,
+		name: String,
+	) -> Result<(Atlas, Vec<Arc<command::Semaphore>>), AnyError> {
+		let mut gpu_signals = Vec::new();
+
+		let image = Arc::new(image::Image::create_gpu(
+			&render_chain.allocator(),
+			Some(name.clone()),
+			flags::format::SRGB_8BIT,
+			structs::Extent3D {
+				width: self.size.x as u32,
+				height: self.size.y as u32,
+				depth: 1,
+			},
+		)?);
+
+		TaskGpuCopy::new(image.wrap_name(|v| format!("Create({})", v)), &render_chain)?
+			.begin()?
+			.format_image_for_write(&image)
+			.stage(&self.as_binary()[..])?
+			.copy_stage_to_image(&image)
+			.format_image_for_read(&image)
+			.end()?
+			.add_signal_to(&mut gpu_signals)
+			.send_to(task::sender());
+
+		let view = Arc::new(
+			image_view::View::builder()
+				.with_optname(Some(format!("{}.View", name)))
+				.for_image(image)
+				.with_view_type(flags::ImageViewType::TYPE_2D)
+				.with_range(
+					structs::subresource::Range::default().with_aspect(flags::ImageAspect::COLOR),
+				)
+				.build(&render_chain.logical())?,
+		);
+
+		Ok((
+			Atlas {
+				size: self.size,
+				entries: self.entries,
+				view,
+			},
+			gpu_signals,
+		))
 	}
 }
 
 pub struct Atlas {
 	size: Vector2<usize>,
 	entries: EntryMap,
-	binary: Vec<u8>,
-	// TODO: graphics image & view
+	view: Arc<image_view::View>,
 }
 impl Atlas {
 	pub fn builder_2k() -> Builder {
 		Builder::default().with_size(Vector2::new(2048, 2048))
+	}
+
+	pub fn size(&self) -> &Vector2<usize> {
+		&self.size
+	}
+
+	pub fn view(&self) -> &Arc<image_view::View> {
+		&self.view
 	}
 
 	pub fn get(&self, id: &asset::Id) -> Option<super::AtlasTexCoord> {

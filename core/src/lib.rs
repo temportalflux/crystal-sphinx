@@ -136,16 +136,14 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			);
 		}
 
-		let model_cache = graphics::voxel::model::Cache::new().arclocked();
-		graphics::voxel::model::Load::start(&model_cache);
-
+		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
-		graphics::voxel::RenderVoxel::add_state_listener(
+		graphics::voxel::model::Load::start(
 			&app_state,
 			&engine.render_chain().unwrap(),
-			&model_cache,
 			&arc_camera,
 		);
+
 		graphics::chunk_boundary::Render::add_state_listener(
 			&app_state,
 			&engine.render_chain().unwrap(),

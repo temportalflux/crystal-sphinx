@@ -23,12 +23,10 @@ pub type ArcLockRenderVoxel = Arc<RwLock<RenderVoxel>>;
 pub struct RenderVoxel {
 	pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	drawable: Drawable,
-	vertex_buffer: Arc<buffer::Buffer>,
-	index_buffer: Arc<buffer::Buffer>,
 	instance_buffer: Arc<buffer::Buffer>,
 	camera_uniform: Uniform,
 	camera: Arc<RwLock<camera::Camera>>,
-	model_cache: model::ArcLockCache,
+	model_cache: Arc<model::Cache>,
 }
 
 impl RenderVoxel {
@@ -39,8 +37,9 @@ impl RenderVoxel {
 	pub fn add_state_listener(
 		app_state: &ArcLockMachine,
 		render_chain: &ArcRenderChain,
-		model_cache: &model::ArcLockCache,
 		camera: &Arc<RwLock<camera::Camera>>,
+		model_cache: Arc<model::Cache>,
+		mut gpu_signals: Vec<Arc<command::Semaphore>>,
 	) {
 		use state::{
 			storage::{Event::*, Storage},
@@ -50,8 +49,9 @@ impl RenderVoxel {
 		};
 
 		let callback_render_chain = render_chain.clone();
-		let callback_model_cache = model_cache.clone();
+		let callback_model_cache = model_cache;
 		let callback_camera = Arc::downgrade(&camera);
+		let pending_gpu_signals = gpu_signals.drain(..).collect::<Vec<_>>();
 		Storage::<ArcLockRenderVoxel>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
@@ -60,7 +60,12 @@ impl RenderVoxel {
 			.create_callbacks(&app_state, move || {
 				let mut render_chain = callback_render_chain.write().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
-				match Self::create(&mut render_chain, &callback_model_cache, arc_camera) {
+				match Self::create(
+					&mut render_chain,
+					arc_camera,
+					&callback_model_cache,
+					pending_gpu_signals.clone(),
+				) {
 					Ok(arclocked) => Some(arclocked),
 					Err(err) => {
 						log::error!(target: ID, "{}", err);
@@ -72,19 +77,22 @@ impl RenderVoxel {
 
 	fn create(
 		render_chain: &mut RenderChain,
-		model_cache: &model::ArcLockCache,
 		camera: Arc<RwLock<camera::Camera>>,
+		model_cache: &Arc<model::Cache>,
+		gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<ArcLockRenderVoxel, AnyError> {
 		let subpass_id = Self::subpass_id();
-		let render_chunks = Self::new(&render_chain, model_cache.clone(), camera)?.arclocked();
+		let render_chunks =
+			Self::new(&render_chain, camera, model_cache.clone(), gpu_signals)?.arclocked();
 		render_chain.add_render_chain_element(Some(subpass_id.as_string()), &render_chunks)?;
 		Ok(render_chunks)
 	}
 
 	fn new(
 		render_chain: &RenderChain,
-		model_cache: model::ArcLockCache,
 		camera: Arc<RwLock<camera::Camera>>,
+		model_cache: Arc<model::Cache>,
+		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<Self, AnyError> {
 		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
@@ -92,21 +100,6 @@ impl RenderVoxel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/fragment"))?;
 
 		let max_instances = 1; // TODO: what to do with this?
-		let (vbuffer_size, ibuffer_size) = {
-			let model_cache = model_cache.read().unwrap();
-			(
-				model_cache.vertex_buffer_size(),
-				model_cache.index_buffer_size(),
-			)
-		};
-
-		let vertex_buffer = buffer::Buffer::create_gpu(
-			Some(format!("RenderVoxel.VertexBuffer")),
-			&render_chain.allocator(),
-			flags::BufferUsage::VERTEX_BUFFER,
-			vbuffer_size,
-			None,
-		)?;
 
 		let instance_buffer = buffer::Buffer::create_gpu(
 			Some(format!("RenderVoxel.InstanceBuffer")),
@@ -116,23 +109,13 @@ impl RenderVoxel {
 			None,
 		)?;
 
-		let index_buffer = buffer::Buffer::create_gpu(
-			Some(format!("RenderVoxel.IndexBuffer")),
-			&render_chain.allocator(),
-			flags::BufferUsage::INDEX_BUFFER,
-			ibuffer_size,
-			Some(flags::IndexType::UINT32),
-		)?;
-
 		let camera_uniform =
 			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
 
 		Ok(Self {
-			pending_gpu_signals: Vec::new(),
+			pending_gpu_signals,
 			drawable,
-			vertex_buffer,
 			instance_buffer,
-			index_buffer,
 			camera_uniform,
 			camera,
 			model_cache,
@@ -164,9 +147,6 @@ impl RenderChainElement for RenderVoxel {
 		self.drawable.create_shaders(render_chain)?;
 		self.camera_uniform.write_descriptor_sets(render_chain);
 
-		let model_cache = self.model_cache.read().unwrap();
-		let (vertices, indices) = model_cache.buffer_data();
-
 		let instances: Vec<Instance> = vec![Instance {
 			chunk_coordinate: Vector3::default().into(),
 			model_matrix: Translation3::new(0.0, 0.0, 0.0).to_homogeneous().into(),
@@ -175,28 +155,6 @@ impl RenderChainElement for RenderVoxel {
 			}
 			.into(),
 		}];
-
-		graphics::TaskGpuCopy::new(
-			self.vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
-		)?
-		.begin()?
-		.stage(&vertices[..])?
-		.copy_stage_to_buffer(&self.vertex_buffer)
-		.end()?
-		.add_signal_to(&mut self.pending_gpu_signals)
-		.send_to(task::sender());
-
-		graphics::TaskGpuCopy::new(
-			self.index_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
-		)?
-		.begin()?
-		.stage(&indices[..])?
-		.copy_stage_to_buffer(&self.index_buffer)
-		.end()?
-		.add_signal_to(&mut self.pending_gpu_signals)
-		.send_to(task::sender());
 
 		graphics::TaskGpuCopy::new(
 			self.instance_buffer.wrap_name(|v| format!("Write({})", v)),
@@ -221,7 +179,10 @@ impl RenderChainElement for RenderVoxel {
 		use graphics::pipeline::{state::*, Pipeline};
 		Ok(self.drawable.create_pipeline(
 			render_chain,
-			vec![self.camera_uniform.layout()],
+			vec![
+				self.camera_uniform.layout(),
+				self.model_cache.descriptor_layout(),
+			],
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
@@ -259,18 +220,35 @@ impl RenderChainElement for RenderVoxel {
 
 	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<(), AnyError> {
 		use graphics::debug;
+		profiling::scope!("record:RenderVoxel");
 
-		buffer.begin_label("Draw:Debug", debug::LABEL_COLOR_DRAW);
+		buffer.begin_label("Draw:Voxel", debug::LABEL_COLOR_DRAW);
 		{
 			self.drawable.bind_pipeline(buffer);
-			self.drawable
-				.bind_descriptors(buffer, vec![&self.camera_uniform.get_set(frame).unwrap()]);
 
-			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
+			buffer.bind_vertex_buffers(0, vec![&self.model_cache.vertex_buffer], vec![0]);
 			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer], vec![0]);
-			buffer.bind_index_buffer(&self.index_buffer, 0);
+			buffer.bind_index_buffer(&self.model_cache.index_buffer, 0);
 
-			buffer.draw(36, 0, 1, 0, 0);
+			let id = asset::Id::new("vanilla", "blocks/dirt");
+			if let Some((model, index_start, vertex_offset)) = self.model_cache.get(&id) {
+				let label = format!("Draw:Voxel({})", id);
+				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
+				
+				// Bind the texture-atlas and camera descriptors
+				self.drawable.bind_descriptors(
+					buffer,
+					vec![
+						&self.camera_uniform.get_set(frame).unwrap(),
+						&model.descriptor_set(),
+					],
+				);
+				// Draw based on the model
+				buffer.draw(model.index_count(), *index_start, 1, 0, *vertex_offset);
+
+				buffer.end_label();
+			}
+
 		}
 		buffer.end_label();
 

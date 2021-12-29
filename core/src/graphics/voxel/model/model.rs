@@ -6,8 +6,14 @@ use crate::graphics::{
 		Face, VertexFlags,
 	},
 };
-use engine::math::nalgebra::{Matrix4x2, Vector2, Vector4};
-use std::{collections::HashMap, sync::Arc};
+use engine::{
+	graphics::{descriptor, sampler::Sampler},
+	math::nalgebra::{Matrix4x2, Vector2, Vector4},
+};
+use std::{
+	collections::HashMap,
+	sync::{Arc, Weak},
+};
 
 #[rustfmt::skip]
 static TL_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
@@ -41,9 +47,9 @@ static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 #[derive(Default)]
 pub struct Builder {
 	faces: HashMap<Face, AtlasTexCoord>,
-	atlas: Option<Arc<Atlas>>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
+	atlas: Option<(Arc<Atlas>, Arc<Sampler>, Weak<descriptor::Set>)>,
 }
 
 impl Builder {
@@ -51,8 +57,13 @@ impl Builder {
 		self.faces.insert(face, tex_coord);
 	}
 
-	pub fn set_atlas(&mut self, atlas: Arc<Atlas>) {
-		self.atlas = Some(atlas);
+	pub fn set_atlas(
+		&mut self,
+		atlas: Arc<Atlas>,
+		sampler: Arc<Sampler>,
+		descriptor_set: Weak<descriptor::Set>,
+	) {
+		self.atlas = Some((atlas, sampler, descriptor_set));
 	}
 
 	pub fn build(mut self) -> Model {
@@ -64,8 +75,11 @@ impl Builder {
 		for (face, tex_coord) in coords.into_iter() {
 			self.push_face(face, &tex_coord);
 		}
+		let (atlas, sampler, descriptor_set) = self.atlas.unwrap();
 		Model {
-			atlas: self.atlas.unwrap(),
+			atlas,
+			sampler,
+			descriptor_set,
 			vertices: self.vertices,
 			indices: self.indices,
 		}
@@ -143,13 +157,24 @@ impl Builder {
 pub struct Model {
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
+	#[allow(dead_code)]
 	atlas: Arc<Atlas>,
-	// TODO: texture descriptor sets
+	#[allow(dead_code)]
+	sampler: Arc<Sampler>,
+	descriptor_set: Weak<descriptor::Set>,
 }
 
 impl Model {
 	pub fn builder() -> Builder {
 		Builder::default()
+	}
+
+	pub fn index_count(&self) -> usize {
+		self.indices.len()
+	}
+
+	pub fn descriptor_set(&self) -> Arc<descriptor::Set> {
+		self.descriptor_set.upgrade().unwrap()
 	}
 }
 

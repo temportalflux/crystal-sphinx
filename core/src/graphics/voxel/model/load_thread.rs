@@ -1,17 +1,22 @@
 use crate::{
+	app::state::ArcLockMachine,
 	block::Block,
-	graphics::voxel::{atlas, model, Face},
+	graphics::voxel::{atlas, camera, model, Face, RenderVoxel},
 };
 use engine::{
 	asset,
-	graphics::Texture,
+	graphics::{
+		descriptor, flags, sampler,
+		utility::{BuildFromDevice, NameableBuilder},
+		ArcRenderChain, DescriptorCache, Texture,
+	},
 	task::{ArctexState, ScheduledTask},
 	utility::{self, VoidResult},
 };
 use std::{
 	collections::{HashMap, HashSet},
 	pin::Pin,
-	sync::Arc,
+	sync::{Arc, RwLock},
 	task::{Context, Poll},
 };
 
@@ -36,11 +41,17 @@ impl futures::future::Future for Load {
 }
 
 impl Load {
-	pub fn start(model_cache: &model::ArcLockCache) -> Self {
+	pub fn start(
+		app_state: &ArcLockMachine,
+		render_chain: &ArcRenderChain,
+		camera: &Arc<RwLock<camera::Camera>>,
+	) -> Self {
 		let state = ArctexState::default();
 
 		let thread_state = state.clone();
-		let thread_model_cache = model_cache.clone();
+		let thread_app_state = app_state.clone();
+		let thread_render_chain = render_chain.clone();
+		let thread_camera = camera.clone();
 		utility::spawn_thread(LOG, move || -> VoidResult {
 			// Gather asset ids for all block assets
 			let block_ids = match asset::Library::read().get_ids_of_type::<Block>() {
@@ -67,6 +78,13 @@ impl Load {
 				blocks.push((asset_id, block));
 			}
 
+			let mut block_ids = blocks
+				.iter()
+				.map(|(id, _block)| format!("{}", id))
+				.collect::<Vec<_>>();
+			block_ids.sort();
+			log::debug!(target: LOG, "Block assets: [{}]", block_ids.join(", "));
+
 			// Load all block textures
 			log::debug!(
 				target: LOG,
@@ -82,7 +100,7 @@ impl Load {
 				}
 			}
 
-			let mut model_cache = thread_model_cache.write().unwrap();
+			let mut cache_builder = model::Cache::builder();
 
 			// The textures for each block are now loaded.
 			// Now they must be stitched into textures such that
@@ -116,24 +134,123 @@ impl Load {
 				atlas.insert_all(&textures)?;
 			}
 
+			log::debug!(target: LOG, "Creating block texture descriptor cache");
+			let mut atlas_descriptor_cache = {
+				let render_chain = thread_render_chain.read().unwrap();
+				DescriptorCache::<(usize, usize)>::new(
+					descriptor::layout::SetLayout::builder()
+						.with_name("RenderVoxel.Atlas.DescriptorLayout")
+						.with_binding(
+							0,
+							flags::DescriptorKind::COMBINED_IMAGE_SAMPLER,
+							1,
+							flags::ShaderKind::Fragment,
+						)
+						.build(&render_chain.logical())?,
+				)
+			};
+
+			// NOTE: Eventually blocks may want to specify their sampler by asset id.
+			// When that becomes the case, we will need a dedicated sampler cache keyed by asset id.
+			// For now, all blocks use the nearest-neighbor sampler.
+			log::debug!(target: LOG, "Building atlas sampler");
+			let atlas_sampler = Arc::new({
+				let render_chain = thread_render_chain.read().unwrap();
+				let max_anisotropy = render_chain.physical().max_sampler_anisotropy();
+				sampler::Builder::default()
+					.with_optname(Some("RenderVoxel.Atlas.Sampler".to_owned()))
+					.with_magnification(flags::Filter::NEAREST)
+					.with_minification(flags::Filter::NEAREST)
+					.with_address_modes([flags::SamplerAddressMode::CLAMP_TO_EDGE; 3])
+					.with_max_anisotropy(Some(max_anisotropy.min(16.0)))
+					.with_border_color(flags::BorderColor::INT_OPAQUE_BLACK)
+					.with_compare_op(Some(flags::CompareOp::ALWAYS))
+					.with_mips(flags::SamplerMipmapMode::LINEAR, 0.0, 0.0..0.0)
+					.build(&render_chain.logical())?
+			});
+
 			log::debug!(target: LOG, "Compiling atlas binary");
-			let atlas = Arc::new(atlas.build());
+			let mut gpu_signals = Vec::new();
+			let atlas = {
+				let render_chain = thread_render_chain.read().unwrap();
+				let (atlas, mut signals) =
+					atlas.build(&render_chain, "RenderVoxel.Atlas.0".to_owned())?;
+				gpu_signals.append(&mut signals);
+				Arc::new(atlas)
+			};
+
+			// Create the descriptor set for the texture/atlas
+			let descriptor_set = {
+				use descriptor::update::*;
+				let render_chain = thread_render_chain.read().unwrap();
+				let descriptor_set = atlas_descriptor_cache.insert(
+					(0, 0), // NOTE: This should be the id of the atlas and sampler in their respective caches
+					Some(format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0)),
+					&render_chain,
+				)?;
+
+				Queue::default()
+					.with(Operation::Write(WriteOp {
+						destination: Descriptor {
+							set: descriptor_set.clone(),
+							binding_index: 0,
+							array_element: 0,
+						},
+						kind: flags::DescriptorKind::COMBINED_IMAGE_SAMPLER,
+						object: ObjectKind::Image(vec![ImageKind {
+							view: atlas.view().clone(),
+							sampler: atlas_sampler.clone(),
+							layout: flags::ImageLayout::ShaderReadOnlyOptimal,
+						}]),
+					}))
+					.apply(&render_chain.logical());
+
+				descriptor_set
+			};
+
+			log::debug!(target: LOG, "Creating block models");
 			let mut models = HashMap::new();
 			for (block_id, block) in blocks.into_iter() {
 				// Create the model for the block
 				let mut builder = model::Model::builder();
-				builder.set_atlas(atlas.clone());
+
+				// Block models "own" the atlases. If no blocks reference the atlas, it is dropped.
+				builder.set_atlas(atlas.clone(), atlas_sampler.clone(), descriptor_set.clone());
+
 				for (side, texture_id) in block.textures() {
 					for face in side.as_side_list().into_iter().map(|side| Face::from(side)) {
 						let tex_coord = atlas.get(&texture_id).unwrap();
 						builder.insert(face, tex_coord);
 					}
 				}
+
 				models.insert(block_id, builder.build());
 			}
+
+			cache_builder.set_atlas_descriptor_cache(atlas_descriptor_cache);
+
+			log::debug!(target: LOG, "Saving block models");
+			// Move the block model data into the cache
 			for (block_id, model) in models.into_iter() {
-				model_cache.insert(block_id, model);
+				cache_builder.insert(block_id, model);
 			}
+
+			log::debug!(target: LOG, "Finalizing model cache");
+			let model_cache = {
+				let render_chain = thread_render_chain.read().unwrap();
+				let (model_cache, mut signals) = cache_builder.build(&render_chain)?;
+				gpu_signals.append(&mut signals);
+				model_cache
+			};
+
+			log::debug!(target: LOG, "Registering block renderer");
+			RenderVoxel::add_state_listener(
+				&thread_app_state,
+				&thread_render_chain,
+				&thread_camera,
+				Arc::new(model_cache),
+				gpu_signals,
+			);
 
 			thread_state.lock().unwrap().mark_complete();
 			Ok(())
