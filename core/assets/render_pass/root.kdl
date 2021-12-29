@@ -1,5 +1,9 @@
 asset-type "render-pass"
 
+attachments \
+	"crystal-sphinx:render_pass/frame_image" \
+	"crystal-sphinx:render_pass/depth_image"
+
 // An ordered list of subpasses that are processed in the render pass
 subpasses {
 	world "crystal-sphinx:render_pass/world_subpass"
@@ -10,19 +14,45 @@ subpasses {
 
 dependencies {
 	link {
-		first stage=(PipelineStage)"ColorAttachmentOutput"
-		then "world" stage=(PipelineStage)"ColorAttachmentOutput" access=(Access)"ColorAttachmentWrite"
+		first {
+			stage (PipelineStage)"ColorAttachmentOutput"
+			stage (PipelineStage)"EarlyFragmentTests"
+		}
+		then "world" {
+			stage (PipelineStage)"ColorAttachmentOutput"
+			stage (PipelineStage)"EarlyFragmentTests"
+			access (Access)"ColorAttachmentWrite"
+			access (Access)"DepthStencilAttachmentWrite"
+		}
 	}
 	link {
-		first "world" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
-		then "debug" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+		first "world" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
+		then "debug" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
 	}
 	link {
-		first "debug" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
-		then "ui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+		first "debug" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
+		then "ui" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
 	}
 	link {
-		first "ui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
-		then "egui" stage="ColorAttachmentOutput" access="ColorAttachmentWrite"
+		first "ui" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
+		then "egui" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
 	}
 }

@@ -1,15 +1,6 @@
 {
 	"asset_type": "render-attachment",
-	"format": {
-		"color": [
-			"B",
-			"G",
-			"R",
-			"A"
-		],
-		"bits": "Bit8",
-		"data": "SRGB"
-	},
+	"format": "Viewport",
 	"operations": {
 		"general": {
 			"load": "Clear",

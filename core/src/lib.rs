@@ -126,14 +126,15 @@ pub fn run(config: plugin::Config) -> VoidResult {
 			.with_resizable(true)
 			.with_application::<CrystalSphinx>()
 			.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
+			.with_depth_attachment()
 			.build(&mut engine)?;
 		if let Some(mut render_chain) = engine.render_chain_write() {
-			render_chain.set_render_pass_info(
-				engine::asset::Loader::load_sync(&CrystalSphinx::get_asset_id("render_pass/root"))?
-					.downcast::<engine::graphics::render_pass::Pass>()
-					.unwrap()
-					.as_graphics()?,
-			);
+			let asset_id = CrystalSphinx::get_asset_id("render_pass/root");
+			let asset = engine::asset::Loader::load_sync(&asset_id)?
+				.downcast::<engine::graphics::render_pass::Pass>()
+				.unwrap();
+			let render_pass = asset.as_graphics(&asset_id, &render_chain)?;
+			render_chain.set_render_pass_info(render_pass);
 		}
 
 		// TODO: wait for the thread to finish before allowing the user in the world.

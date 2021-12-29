@@ -222,6 +222,13 @@ impl RenderChainElement for RenderVoxel {
 				.set_color_blending(
 					color_blend::ColorBlend::default()
 						.add_attachment(color_blend::Attachment::default()),
+				)
+				.with_depth_stencil(
+					DepthStencil::default()
+						.with_depth_test()
+						.with_depth_write()
+						.with_depth_bounds(0.0, 1.0)
+						.with_depth_compare_op(flags::CompareOp::LESS),
 				),
 			subpass_id,
 		)?)
