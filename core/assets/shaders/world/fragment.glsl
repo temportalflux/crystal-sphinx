@@ -12,7 +12,7 @@ layout(location = 0) out vec4 outColor;
 
 void main()
 {
-	if (floor(fragFlags.x) == 0) discard;
+	if (fragFlags.x == 0) discard;
 	// Actual
 	outColor = fragColor * texture(texSampler, fragTexCoord);
 }

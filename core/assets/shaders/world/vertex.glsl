@@ -60,7 +60,7 @@ void main()
 	// aka is the face this vertex is on enabled for the instance.
 	// 0.0 means the face/vertex is not visible and should be discarded.
 	// 1.0 means the face IS visible and should be draw.
-	fragFlags.x = float(faceMask & faceEnabledBits);
+	fragFlags.x = float(ceil(faceMask & faceEnabledBits));
 	
 	// NOTE: Will eventually be used to colorize voxel faces based on biome
 	fragColor = vec4(1, 1, 1, 1);
