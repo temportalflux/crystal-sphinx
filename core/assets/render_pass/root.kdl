@@ -27,12 +27,15 @@ dependencies {
 	}
 	link {
 		first "world" {
-			stage "ColorAttachmentOutput"
-			access "ColorAttachmentWrite"
+			stage (PipelineStage)"ColorAttachmentOutput"
+			stage (PipelineStage)"EarlyFragmentTests"
+			access (Access)"ColorAttachmentWrite"
 		}
 		then "debug" {
-			stage "ColorAttachmentOutput"
-			access "ColorAttachmentWrite"
+			stage (PipelineStage)"ColorAttachmentOutput"
+			stage (PipelineStage)"EarlyFragmentTests"
+			access (Access)"ColorAttachmentWrite"
+			access (Access)"DepthStencilAttachmentRead"
 		}
 	}
 	link {

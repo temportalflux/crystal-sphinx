@@ -407,6 +407,11 @@ impl RenderChainElement for Render {
 				.set_color_blending(
 					color_blend::ColorBlend::default()
 						.add_attachment(color_blend::Attachment::default()),
+				)
+				.with_depth_stencil(
+					DepthStencil::default()
+						.with_depth_test()
+						.with_depth_compare_op(flags::CompareOp::LESS),
 				),
 			subpass_id,
 		)?)
