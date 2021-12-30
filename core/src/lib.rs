@@ -81,6 +81,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let mut engine = engine::Engine::new()?;
 	crate::register_asset_types();
 	engine.scan_paks()?;
+	block::Lookup::initialize();
 
 	entity::component::register_types();
 
