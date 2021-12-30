@@ -1,4 +1,7 @@
-use crate::{block, world::chunk::{Chunk, self}};
+use crate::{
+	block,
+	world::chunk::{self, Chunk},
+};
 use engine::{asset, math::nalgebra::Point3};
 use std::collections::HashMap;
 
@@ -41,13 +44,23 @@ impl Flat {
 
 	pub fn generate_chunk(&self, coordinate: Point3<i64>) -> Chunk {
 		let mut chunk = Chunk::new(coordinate);
+
+		// TEMPORARY FILTER
+		if coordinate != Point3::new(0, 0, 0) {
+			return chunk;
+		}
+
 		if let Some(layers) = self.layers.get(&coordinate.y) {
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
 					for x in 0..chunk::SIZE_I.x {
 						for z in 0..chunk::SIZE_I.z {
+							// TEMPORARY FILTER
+							if x != 0 || z != 0 {
+								continue;
+							}
 							chunk.set_block_id(Point3::new(x, y, z), Some(block_id));
-						}	
+						}
 					}
 				}
 			}

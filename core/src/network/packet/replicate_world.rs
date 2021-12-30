@@ -98,9 +98,6 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 					for coord in relevancy.old_chunks.iter() {
 						cache.remove(&coord);
 					}
-					for &coord in relevancy.new_chunks.iter() {
-						cache.insert_pending(coord);
-					}
 				}
 			}
 			WorldUpdate::Chunk(client_chunk) => {

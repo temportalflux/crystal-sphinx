@@ -11,7 +11,7 @@ impl Server {
 		builder.add(Position::default());
 		builder.add(Orientation::default());
 		builder.add(chunk::TicketOwner::default().with_load_radius(2));
-		builder.add(chunk::Relevancy::default().with_radius(5));
+		builder.add(chunk::Relevancy::default().with_radius(5)); // TODO: This radius should match the radius in the graphics instance buffer
 		Self(builder)
 	}
 

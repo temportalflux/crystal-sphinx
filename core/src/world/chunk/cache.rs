@@ -20,12 +20,14 @@ pub type ArcLockClientCache = Arc<RwLock<ClientCache>>;
 
 pub struct Cache<TArcLockChunk> {
 	pending: HashSet<Point3<i64>>,
+	removed: HashSet<Point3<i64>>,
 	loaded_chunks: HashMap<Point3<i64>, TArcLockChunk>,
 }
 impl<TArcLockChunk> Cache<TArcLockChunk> {
 	pub(crate) fn new() -> Self {
 		Self {
 			pending: HashSet::new(),
+			removed: HashSet::new(),
 			loaded_chunks: HashMap::new(),
 		}
 	}
@@ -34,17 +36,28 @@ impl<TArcLockChunk> Cache<TArcLockChunk> {
 		self.loaded_chunks.get(coordinate)
 	}
 
-	pub(crate) fn insert_pending(&mut self, coordinate: Point3<i64>) {
-		self.pending.insert(coordinate);
+	pub(crate) fn take_pending(&mut self) -> (Vec<TArcLockChunk>, HashSet<Point3<i64>>)
+	where
+		TArcLockChunk: Clone,
+	{
+		let pending = self.pending.drain().collect::<HashSet<_>>();
+		let pending = pending
+			.into_iter()
+			.filter_map(|coord| self.find(&coord))
+			.cloned()
+			.collect();
+		let removed = self.removed.drain().collect();
+		(pending, removed)
 	}
 
 	pub(crate) fn insert(&mut self, coordinate: &Point3<i64>, chunk: TArcLockChunk) {
-		self.pending.remove(&coordinate);
 		let _ = self.loaded_chunks.insert(*coordinate, chunk);
+		self.pending.insert(coordinate.clone());
 	}
 
 	pub(crate) fn remove(&mut self, coordinate: &Point3<i64>) {
-		self.pending.remove(&coordinate);
 		let _ = self.loaded_chunks.remove(coordinate);
+		self.pending.remove(coordinate);
+		self.removed.insert(coordinate.clone());
 	}
 }

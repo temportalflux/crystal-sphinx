@@ -142,6 +142,7 @@ pub fn run(config: plugin::Config) -> VoidResult {
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::model::Load::start(
 			&app_state,
+			Arc::downgrade(&network_storage),
 			&engine.render_chain().unwrap(),
 			&arc_camera,
 		);

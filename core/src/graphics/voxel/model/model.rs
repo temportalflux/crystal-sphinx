@@ -2,8 +2,8 @@ use crate::graphics::{
 	model::{Model as ModelTrait, ModelBuilder},
 	voxel::{
 		atlas::{Atlas, AtlasTexCoord},
-		model::Vertex,
-		Face, VertexFlags,
+		model::{self, Vertex},
+		Face,
 	},
 };
 use engine::{
@@ -127,7 +127,7 @@ impl ModelBuilder for Builder {
 
 impl Builder {
 	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord) {
-		let flags: Vector4<f32> = VertexFlags { face }.into();
+		let flags: Vector4<f32> = model::Flags { face }.into();
 
 		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, flags);
 		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, flags);

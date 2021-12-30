@@ -1,9 +1,12 @@
-use crate::{world::{chunk::Level, generator}, block};
-use engine::{math::nalgebra::Point3, asset};
+use crate::{
+	block,
+	world::{chunk::Level, generator},
+};
+use engine::{asset, math::nalgebra::Point3};
 use serde::{Deserialize, Serialize};
 use std::{
-	path::PathBuf,
 	collections::HashMap,
+	path::PathBuf,
 	sync::{Arc, RwLock},
 };
 
@@ -29,11 +32,18 @@ pub struct Chunk {
 
 impl Chunk {
 	pub fn new(coordinate: Point3<i64>) -> Self {
-		Self { coordinate, block_ids: HashMap::new() }
+		Self {
+			coordinate,
+			block_ids: HashMap::new(),
+		}
 	}
 
 	pub fn coordinate(&self) -> &Point3<i64> {
 		&self.coordinate
+	}
+
+	pub fn block_ids(&self) -> &HashMap<Point3<usize>, block::LookupId> {
+		&self.block_ids
 	}
 
 	pub fn set_block(&mut self, point: Point3<usize>, id: Option<&asset::Id>) {
@@ -57,7 +67,6 @@ impl Chunk {
 			}
 		}
 	}
-
 }
 
 impl ServerChunk {

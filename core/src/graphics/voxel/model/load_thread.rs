@@ -2,6 +2,7 @@ use crate::{
 	app::state::ArcLockMachine,
 	block::Block,
 	graphics::voxel::{atlas, camera, model, Face, RenderVoxel},
+	network::storage::Storage,
 };
 use engine::{
 	asset,
@@ -16,7 +17,7 @@ use engine::{
 use std::{
 	collections::{HashMap, HashSet},
 	pin::Pin,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 	task::{Context, Poll},
 };
 
@@ -43,6 +44,7 @@ impl futures::future::Future for Load {
 impl Load {
 	pub fn start(
 		app_state: &ArcLockMachine,
+		storage: Weak<RwLock<Storage>>,
 		render_chain: &ArcRenderChain,
 		camera: &Arc<RwLock<camera::Camera>>,
 	) -> Self {
@@ -50,6 +52,7 @@ impl Load {
 
 		let thread_state = state.clone();
 		let thread_app_state = app_state.clone();
+		let thread_storage = storage.clone();
 		let thread_render_chain = render_chain.clone();
 		let thread_camera = camera.clone();
 		utility::spawn_thread(LOG, move || -> VoidResult {
@@ -248,6 +251,7 @@ impl Load {
 			log::debug!(target: LOG, "Registering block renderer");
 			RenderVoxel::add_state_listener(
 				&thread_app_state,
+				thread_storage.clone(),
 				&thread_render_chain,
 				&thread_camera,
 				Arc::new(model_cache),
