@@ -1,6 +1,8 @@
-use crate::graphics::voxel::model::{Model, Vertex};
+use crate::{
+	block,
+	graphics::voxel::model::{Model, Vertex},
+};
 use engine::{
-	asset,
 	graphics::{
 		buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
 		RenderChain, TaskGpuCopy,
@@ -13,7 +15,7 @@ use std::{collections::HashMap, sync::Arc};
 #[derive(Default)]
 pub struct CacheBuilder {
 	models: HashMap<
-		asset::Id,
+		block::LookupId,
 		(
 			Model,
 			/*index start*/ usize,
@@ -26,7 +28,7 @@ pub struct CacheBuilder {
 }
 
 impl CacheBuilder {
-	pub fn insert(&mut self, block_id: asset::Id, model: Model) {
+	pub fn insert(&mut self, block_id: block::LookupId, model: Model) {
 		use crate::graphics::model::Model;
 		let index_start = self.indices.len();
 		let vertex_offset = self.vertices.len();
@@ -50,7 +52,7 @@ impl CacheBuilder {
 
 pub struct Cache {
 	models: HashMap<
-		asset::Id,
+		block::LookupId,
 		(
 			Model,
 			/*index start*/ usize,
@@ -134,7 +136,7 @@ impl Cache {
 
 	pub fn get(
 		&self,
-		id: &asset::Id,
+		id: &block::LookupId,
 	) -> Option<&(
 		Model,
 		/*index start*/ usize,

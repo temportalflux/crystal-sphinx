@@ -1,6 +1,6 @@
 use crate::{
 	app::state::ArcLockMachine,
-	block::Block,
+	block::{self, Block},
 	graphics::voxel::{atlas, camera, model, Face, RenderVoxel},
 	network::storage::Storage,
 };
@@ -237,6 +237,7 @@ impl Load {
 			log::debug!(target: LOG, "Saving block models");
 			// Move the block model data into the cache
 			for (block_id, model) in models.into_iter() {
+				let block_id = block::Lookup::lookup_value(&block_id).unwrap();
 				cache_builder.insert(block_id, model);
 			}
 

@@ -52,6 +52,10 @@ impl Lookup {
 		value
 	}
 
+	pub fn count(&self) -> usize {
+		self.ordered_ids.len()
+	}
+
 	pub fn lookup_value(id: &asset::Id) -> Option<LookupId> {
 		Self::get()
 			.map(|lookup| lookup.id_values.get(&id).cloned())

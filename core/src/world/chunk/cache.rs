@@ -36,6 +36,10 @@ impl<TArcLockChunk> Cache<TArcLockChunk> {
 		self.loaded_chunks.get(coordinate)
 	}
 
+	pub fn count(&self) -> usize {
+		self.loaded_chunks.len()
+	}
+
 	pub(crate) fn take_pending(&mut self) -> (Vec<TArcLockChunk>, HashSet<Point3<i64>>)
 	where
 		TArcLockChunk: Clone,

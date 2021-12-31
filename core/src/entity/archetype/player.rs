@@ -10,8 +10,8 @@ impl Server {
 		let mut builder = hecs::EntityBuilder::default();
 		builder.add(Position::default());
 		builder.add(Orientation::default());
-		builder.add(chunk::TicketOwner::default().with_load_radius(2));
-		builder.add(chunk::Relevancy::default().with_radius(5)); // TODO: This radius should match the radius in the graphics instance buffer
+		builder.add(chunk::TicketOwner::default().with_load_radius(3));
+		builder.add(chunk::Relevancy::default().with_radius(2)); // TODO: This radius should match the radius in the graphics instance buffer
 		Self(builder)
 	}
 

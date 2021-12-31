@@ -83,10 +83,12 @@ impl Relevancy {
 		let diameter = 2 * self.radius + 1;
 		let mut coordinates = HashSet::with_capacity(diameter.pow(3));
 		let diameter = diameter as i64;
+		let centering_offset =
+			Vector3::new(self.radius as i64, self.radius as i64, self.radius as i64);
 		for y in 0..diameter {
 			for x in 0..diameter {
 				for z in 0..diameter {
-					coordinates.insert(origin + Vector3::new(x, y, z));
+					coordinates.insert(origin + Vector3::new(x, y, z) - centering_offset);
 				}
 			}
 		}
@@ -100,8 +102,8 @@ impl Relevancy {
 		new: &HashSet<Point3<i64>>,
 	) {
 		self.replicated_origin = origin;
-		self.pending_chunks.clear();
 		for coord in old.iter() {
+			self.pending_chunks.remove(&coord);
 			self.replicated_chunks.remove(&coord);
 		}
 		for coord in new.iter() {

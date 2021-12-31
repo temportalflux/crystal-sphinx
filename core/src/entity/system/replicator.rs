@@ -84,20 +84,20 @@ impl Replicator {
 			let chunks_to_replicate = relevancy.take_pending_chunks();
 			let mut updates = Vec::with_capacity(chunks_to_replicate.len());
 			if let Ok(chunk_cache) = self.chunk_cache.upgrade().unwrap().read() {
-				for coordinate in chunks_to_replicate.iter() {
+				for coordinate in chunks_to_replicate.into_iter() {
 					// If the chunk is in the cache, then the server has it loaded (to some degree).
 					// If not, it needs to go back on the component for the next update cycle.
 					match chunk_cache.find(&coordinate) {
 						Some(weak_chunk) => {
-							if let Ok(server_chunk) = weak_chunk.upgrade().unwrap().read() {
-								// Conver the chunk into replication data and add it to the list of things to send.
-								let client_chunk = server_chunk.chunk.clone();
-								updates.push(ReplicateWorld(WorldUpdate::Chunk(client_chunk)));
-								relevancy.mark_as_replicated(*coordinate);
-							}
+							let arc_chunk = weak_chunk.upgrade().unwrap();
+							let server_chunk = arc_chunk.read().unwrap();
+							// Conver the chunk into replication data and add it to the list of things to send.
+							let client_chunk = server_chunk.chunk.clone();
+							updates.push(ReplicateWorld(WorldUpdate::Chunk(client_chunk)));
+							relevancy.mark_as_replicated(coordinate);
 						}
 						None => {
-							relevancy.mark_as_pending(*coordinate);
+							relevancy.mark_as_pending(coordinate);
 						}
 					}
 				}

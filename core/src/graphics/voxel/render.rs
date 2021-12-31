@@ -242,23 +242,24 @@ impl RenderChainElement for RenderVoxel {
 		{
 			self.drawable.bind_pipeline(buffer);
 
+			let submitted_instances = self.instance_buffer.submitted();
 			buffer.bind_vertex_buffers(0, vec![&self.model_cache.vertex_buffer], vec![0]);
-			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer.buffer()], vec![0]);
+			buffer.bind_vertex_buffers(1, vec![&submitted_instances.buffer], vec![0]);
 			buffer.bind_index_buffer(&self.model_cache.index_buffer, 0);
 
-			let instance_ids = self.instance_buffer.ids().iter().filter_map(|(lookup_id, instance_indices)| {
-				match block::Lookup::lookup_id(*lookup_id) {
-					Some(asset_id) => Some((asset_id, instance_indices.clone())),
-					None => None,
+			for instances in submitted_instances.categories.iter() {
+				if instances.count < 1 {
+					continue;
 				}
-			}).collect::<Vec<_>>();
-
-			for (id, instance_indices) in instance_ids.into_iter() {
-				let (model, index_start, vertex_offset) = match self.model_cache.get(&id) {
+				let (model, index_start, vertex_offset) = match self.model_cache.get(&instances.id)
+				{
 					Some(entry) => entry,
 					None => continue,
 				};
-				let label = format!("Draw:Voxel({})", id);
+				let label = format!(
+					"Draw:Voxel({})",
+					block::Lookup::lookup_id(instances.id).unwrap()
+				);
 				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
 
 				// Bind the texture-atlas and camera descriptors
@@ -276,15 +277,13 @@ impl RenderChainElement for RenderVoxel {
 				);
 
 				// Draw based on the model
-				for instance_start in instance_indices.into_iter() {
-					buffer.draw(
-						model.index_count(),
-						*index_start,
-						1, // *instance_count,
-						instance_start,
-						*vertex_offset,
-					);
-				}
+				buffer.draw(
+					model.index_count(),
+					*index_start,
+					instances.count,
+					instances.start,
+					*vertex_offset,
+				);
 
 				buffer.end_label();
 			}
