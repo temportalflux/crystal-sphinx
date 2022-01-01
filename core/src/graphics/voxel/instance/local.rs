@@ -216,23 +216,21 @@ impl Description {
 		chunk: &Point3<i64>,
 		block_ids: &HashMap<Point3<usize>, block::LookupId>,
 	) {
-		let _scope_tag = format!("<{}, {}, {}>", chunk.x, chunk.y, chunk.z);
-		profiling::scope!("insert_chunk", _scope_tag.as_str());
+		profiling::scope!(
+			"insert_chunk",
+			&format!("<{}, {}, {}>", chunk.x, chunk.y, chunk.z)
+		);
 
 		self.chunks.insert(*chunk, ChunkDesc::default());
 
 		let mut points = HashSet::with_capacity(chunk::DIAMETER.pow(3));
-		let chunk_center = Point3::new(chunk::RADIUS, chunk::RADIUS, chunk::RADIUS);
-		chunk::Ticket::visit_hollow_cube(chunk::RADIUS as usize, |vec| {
-			points.insert(BlockPoint::new(*chunk, chunk_center + vec.cast::<i8>()));
-		});
-
 		for (point, block_id) in block_ids.iter() {
 			points.insert(BlockPoint::new(*chunk, point.cast::<i8>()));
 			self.set_block_id(&chunk, &point.cast::<i8>(), Some(*block_id), false);
 		}
-
-		self.update_proximity(points);
+		if !points.is_empty() {
+			self.update_proximity(points);
+		}
 	}
 
 	pub fn set_block_id(
@@ -439,7 +437,7 @@ impl Description {
 							// If the point being processed isn't loaded, then it was
 							// some point adjacent to the original given list
 							// that we dont care about right now.
-							BlockDescId::ChunkNotLoaded => false,
+							BlockDescId::ChunkNotLoaded => true,
 							// Block doesnt exist at this point, its air/empty.
 							BlockDescId::Empty => true,
 							BlockDescId::Id(id) => match model_cache.get(&id) {

@@ -85,7 +85,8 @@ impl Buffer {
 			while weak_handle.strong_count() > 0 {
 				let unable_to_lock_delay_ms = 1;
 				let no_chunks_to_proccess_delay_ms = 1000;
-				let delay_between_update = 100;
+				let operation_batch_size = 5;
+				let delay_between_batches = 10;
 
 				// Fetch any chunks that might have come into the cache since the last check
 				if let Some(arc_cache) = chunk_cache.upgrade() {
@@ -120,19 +121,26 @@ impl Buffer {
 				if !operations.is_empty() {
 					profiling::scope!("process");
 					if let Ok(mut description) = arc_description.try_lock() {
-						match operations.remove(0) {
-							Operation::Remove(coord) => {
-								description.remove_chunk(&coord);
-							}
-							Operation::Insert(weak_chunk) => {
-								if let Some(arc_chunk) = weak_chunk.upgrade() {
-									let chunk = arc_chunk.read().unwrap();
-									let coord = chunk.coordinate();
-									description.insert_chunk(coord, chunk.block_ids());
+						delay_ms = delay_between_batches;
+						let mut operation_count = 0;
+						loop {
+							match operations.remove(0) {
+								Operation::Remove(coord) => {
+									description.remove_chunk(&coord);
+								}
+								Operation::Insert(weak_chunk) => {
+									if let Some(arc_chunk) = weak_chunk.upgrade() {
+										let chunk = arc_chunk.read().unwrap();
+										let coord = chunk.coordinate();
+										description.insert_chunk(coord, chunk.block_ids());
+									}
 								}
 							}
+							operation_count += 1;
+							if operations.is_empty() || operation_count >= operation_batch_size {
+								break;
+							}
 						}
-						delay_ms = delay_between_update;
 					} else {
 						delay_ms = unable_to_lock_delay_ms;
 					}

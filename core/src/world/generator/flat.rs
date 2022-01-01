@@ -44,22 +44,11 @@ impl Flat {
 
 	pub fn generate_chunk(&self, coordinate: Point3<i64>) -> Chunk {
 		let mut chunk = Chunk::new(coordinate);
-
-		// TEMPORARY FILTER
-		if coordinate != Point3::new(0, 0, 0) {
-			return chunk;
-		}
-
 		if let Some(layers) = self.layers.get(&coordinate.y) {
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
 					for x in 0..chunk::SIZE_I.x {
 						for z in 0..chunk::SIZE_I.z {
-							// TEMPORARY
-							if y >= 1 && y <= 4 && x >= 5 && x <= 11 && z >= 5 && z <= 11 {
-								continue;
-							}
-
 							chunk.set_block_id(Point3::new(x, y, z), Some(block_id));
 						}
 					}
