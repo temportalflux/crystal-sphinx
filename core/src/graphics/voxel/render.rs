@@ -130,7 +130,11 @@ impl RenderVoxel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/fragment"))?;
 
-		let instance_buffer = instance::Buffer::new(&render_chain, chunk_cache)?;
+		let instance_buffer = instance::Buffer::new(
+			&render_chain,
+			Arc::downgrade(&model_cache),
+			Arc::downgrade(&chunk_cache),
+		)?;
 
 		let camera_uniform =
 			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
@@ -226,12 +230,13 @@ impl RenderChainElement for RenderVoxel {
 		let data = self.camera.read().unwrap().as_uniform_data(resolution);
 		self.camera_uniform.write_data(frame, &data)?;
 
-		let mut instance_signals = self.instance_buffer.prerecord_update(&render_chain)?;
-		let instances_changed = !instance_signals.is_empty();
+		let (was_able_to_lock, mut instance_signals) =
+			self.instance_buffer.prerecord_update(&render_chain)?;
+		let should_record = !was_able_to_lock || !instance_signals.is_empty();
 		self.pending_gpu_signals.append(&mut instance_signals);
 
 		// If the instances change, we need to re-record the render
-		Ok(instances_changed)
+		Ok(should_record)
 	}
 
 	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<(), AnyError> {

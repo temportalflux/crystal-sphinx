@@ -1,25 +1,35 @@
 use crate::{
-	graphics::voxel::instance::{local, submitted, Instance},
-	world::chunk::{self, ArcLockClientCache},
+	graphics::voxel::{
+		instance::{local, submitted, Instance},
+		model,
+	},
+	world::chunk::{self, ClientCache},
 };
 use engine::{
 	graphics::{command, RenderChain},
-	utility::AnyError,
+	math::nalgebra::Point3,
+	utility::{self, AnyError, VoidResult},
 };
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 /// Controls the instance buffer data for rendering voxels.
 /// Keeps track of what chunks and blocks are old and updates the instances accordingly.
 pub struct Buffer {
-	chunk_cache: ArcLockClientCache,
-	local_description: local::Description,
+	local_description: Arc<Mutex<local::Description>>,
 	submitted_description: submitted::Description,
+	_thread_handle: Arc<()>,
+}
+
+enum Operation {
+	Remove(Point3<i64>),
+	Insert(Weak<RwLock<chunk::Chunk>>),
 }
 
 impl Buffer {
 	pub fn new(
 		render_chain: &RenderChain,
-		chunk_cache: ArcLockClientCache,
+		model_cache: Weak<model::Cache>,
+		chunk_cache: Weak<RwLock<ClientCache>>,
 	) -> Result<Self, AnyError> {
 		// TODO: Get this value from settings
 		let render_radius = 5;
@@ -47,15 +57,94 @@ impl Buffer {
 
 		log::debug!("Initializing voxel instance buffer: chunk_radius={} total_chunk_count={}, buffer_size={}(bytes)", render_radius, rendered_chunk_count, instance_buffer_size);
 
-		let local_description = local::Description::new();
+		let local_description = Arc::new(Mutex::new(local::Description::new(model_cache)));
 		let submitted_description =
 			submitted::Description::new(&render_chain, instance_buffer_size)?;
 
+		let _thread_handle = Self::start_thread(chunk_cache, Arc::downgrade(&local_description));
+
 		Ok(Self {
-			chunk_cache,
+			_thread_handle,
 			local_description,
 			submitted_description,
 		})
+	}
+
+	fn start_thread(
+		chunk_cache: Weak<RwLock<ClientCache>>,
+		description: Weak<Mutex<local::Description>>,
+	) -> Arc<()> {
+		static LOG: &'static str = "voxel-instance-buffer";
+		let handle = Arc::new(());
+		let weak_handle = Arc::downgrade(&handle);
+		utility::spawn_thread(LOG, move || -> VoidResult {
+			use std::thread::sleep;
+			use std::time::Duration;
+			log::info!(target: LOG, "Starting thread");
+			let mut operations = Vec::new();
+			while weak_handle.strong_count() > 0 {
+				let unable_to_lock_delay_ms = 1;
+				let no_chunks_to_proccess_delay_ms = 1000;
+				let delay_between_update = 100;
+
+				// Fetch any chunks that might have come into the cache since the last check
+				if let Some(arc_cache) = chunk_cache.upgrade() {
+					profiling::scope!("poll");
+					let chunks_pending = match arc_cache.try_read() {
+						Ok(chunk_cache) => chunk_cache.has_pending(),
+						_ => false,
+					};
+					if chunks_pending {
+						profiling::scope!("take");
+						if let Ok(mut chunk_cache) = arc_cache.try_write() {
+							let (pending, removed) = chunk_cache.take_pending();
+							for coord in removed.into_iter() {
+								operations.push(Operation::Remove(coord));
+							}
+							for arc_chunk in pending.into_iter() {
+								operations.push(Operation::Insert(Arc::downgrade(&arc_chunk)));
+							}
+						}
+					}
+				}
+
+				let arc_description = match description.upgrade() {
+					Some(arc) => arc,
+					None => {
+						sleep(Duration::from_millis(unable_to_lock_delay_ms));
+						continue;
+					}
+				};
+
+				let delay_ms;
+				if !operations.is_empty() {
+					profiling::scope!("process");
+					if let Ok(mut description) = arc_description.try_lock() {
+						match operations.remove(0) {
+							Operation::Remove(coord) => {
+								description.remove_chunk(&coord);
+							}
+							Operation::Insert(weak_chunk) => {
+								if let Some(arc_chunk) = weak_chunk.upgrade() {
+									let chunk = arc_chunk.read().unwrap();
+									let coord = chunk.coordinate();
+									description.insert_chunk(coord, chunk.block_ids());
+								}
+							}
+						}
+						delay_ms = delay_between_update;
+					} else {
+						delay_ms = unable_to_lock_delay_ms;
+					}
+				} else {
+					delay_ms = no_chunks_to_proccess_delay_ms;
+				}
+				sleep(Duration::from_millis(delay_ms));
+			}
+			log::info!(target: LOG, "Ending thread");
+			Ok(())
+		});
+		handle
 	}
 
 	pub fn submitted(&self) -> &submitted::Description {
@@ -65,38 +154,21 @@ impl Buffer {
 	pub fn prerecord_update(
 		&mut self,
 		render_chain: &RenderChain,
-	) -> Result<Vec<Arc<command::Semaphore>>, AnyError> {
+	) -> Result<(bool, Vec<Arc<command::Semaphore>>), AnyError> {
+		profiling::scope!("update_voxel_instances");
 		let mut pending_gpu_signals = Vec::new();
-
-		let (pending, removed) = match self.chunk_cache.write() {
-			Ok(mut cache) => cache.take_pending(),
-			_ => return Ok(pending_gpu_signals),
-		};
-
-		if !removed.is_empty() {
-			for coord in removed.into_iter() {
-				self.local_description.remove_chunk(&coord);
+		let mut was_able_to_lock = false;
+		if let Ok(mut local_description) = self.local_description.try_lock() {
+			was_able_to_lock = true;
+			if local_description.take_has_changes() {
+				log::debug!("recording changes");
+				self.submitted_description.submit(
+					&local_description,
+					&render_chain,
+					&mut pending_gpu_signals,
+				)?;
 			}
 		}
-		if !pending.is_empty() {
-			for arc_chunk in pending.into_iter() {
-				let chunk = arc_chunk.read().unwrap();
-				let coord = chunk.coordinate();
-				for (point, block_id) in chunk.block_ids().iter() {
-					self.local_description
-						.set_block_id(&coord, point, Some(*block_id));
-				}
-			}
-		}
-
-		if self.local_description.take_has_changes() {
-			self.submitted_description.submit(
-				&self.local_description,
-				&render_chain,
-				&mut pending_gpu_signals,
-			)?;
-		}
-
-		Ok(pending_gpu_signals)
+		Ok((was_able_to_lock, pending_gpu_signals))
 	}
 }

@@ -1,13 +1,13 @@
 use crate::graphics::voxel::Face;
-use engine::{graphics::types::Vec4, math::nalgebra::Vector4};
+use engine::math::nalgebra::Vector4;
 use enumset::EnumSet;
 
 pub struct Flags {
 	pub faces: EnumSet<Face>,
 }
 
-impl Into<Vector4<f32>> for Flags {
-	fn into(self) -> Vector4<f32> {
+impl Flags {
+	pub fn build(&self) -> Vector4<f32> {
 		let mut flags = Vector4::default();
 
 		let mut faces_enabled_bitfield: u32 = 0;
@@ -21,9 +21,11 @@ impl Into<Vector4<f32>> for Flags {
 	}
 }
 
-impl Into<Vec4> for Flags {
-	fn into(self) -> Vec4 {
-		let data: Vector4<f32> = self.into();
-		data.into()
+impl From<Vector4<f32>> for Flags {
+	fn from(flags: Vector4<f32>) -> Self {
+		let faces_enabled_bitfield = unsafe { std::mem::transmute(flags[0]) };
+		Self {
+			faces: Face::parse_model_bit(faces_enabled_bitfield),
+		}
 	}
 }

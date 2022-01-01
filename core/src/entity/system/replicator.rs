@@ -78,10 +78,22 @@ impl Replicator {
 			// Server side, update the component directly
 			relevancy.update_replicated_chunks(current_chunk, &old_chunks, &new_chunks);
 
+			log::debug!(
+				"update chunks: {} new, {} old",
+				new_chunks.len(),
+				old_chunks.len()
+			);
+
 			// Get all the coordinates that should be replicated once they are available/loaded.
 			// This might be some number of updates after the user moves to a new chunk,
 			// so there may be a list of pending chunks for some amount of time.
 			let chunks_to_replicate = relevancy.take_pending_chunks();
+			let mut chunks_to_replicate = chunks_to_replicate.into_iter().collect::<Vec<_>>();
+			chunks_to_replicate.sort_by(|a, b| {
+				let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
+				let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
+				a_dist.partial_cmp(&b_dist).unwrap()
+			});
 			let mut updates = Vec::with_capacity(chunks_to_replicate.len());
 			if let Ok(chunk_cache) = self.chunk_cache.upgrade().unwrap().read() {
 				for coordinate in chunks_to_replicate.into_iter() {
@@ -102,6 +114,9 @@ impl Replicator {
 					}
 				}
 			}
+
+			log::debug!("Replicating {} chunk updates", updates.len());
+
 			// CotoS skip
 			//if *owner.address() == *Network::local_data().address() {
 			//	continue;

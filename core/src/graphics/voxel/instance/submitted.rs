@@ -68,7 +68,7 @@ impl Description {
 			.add_signal_to(pending_gpu_signals)
 			.send_to(task::sender());
 		}
-		
+
 		Ok(())
 	}
 }

@@ -2,8 +2,9 @@ use engine::{
 	math::nalgebra::{Matrix3x4, Vector3},
 	world::{global_forward, global_right, global_up},
 };
+use enumset::{EnumSet, EnumSetType};
 
-#[derive(Debug, Hash, enumset::EnumSetType)]
+#[derive(Debug, Hash, EnumSetType)]
 pub enum Face {
 	Right,
 	Left,
@@ -41,6 +42,17 @@ impl Face {
 			Self::Front => 0b010000,
 			Self::Back =>  0b100000,
 		}
+	}
+
+	pub fn parse_model_bit(faces_enabled_bitfield: u32) -> EnumSet<Face> {
+		let mut faces = EnumSet::empty();
+		for face in EnumSet::<Face>::all().iter() {
+			let bit_mask = face.model_bit();
+			if faces_enabled_bitfield & bit_mask == bit_mask {
+				faces |= face;
+			}
+		}
+		faces
 	}
 
 	/// Returns a vector representing what is considered the "up" direction for determining the face's vertex positions.
@@ -109,6 +121,28 @@ impl Face {
 			Self::Up => *global_up(),
 			Self::Front => Vector3::default(),
 			Self::Back => *-global_forward(),
+		}
+	}
+
+	pub fn direction(&self) -> Vector3<i8> {
+		match self {
+			Self::Left => Vector3::new(-1, 0, 0),
+			Self::Right => Vector3::new(1, 0, 0),
+			Self::Down => Vector3::new(0, -1, 0),
+			Self::Up => Vector3::new(0, 1, 0),
+			Self::Front => Vector3::new(0, 0, -1),
+			Self::Back => Vector3::new(0, 0, 1),
+		}
+	}
+
+	pub fn inverse(&self) -> Self {
+		match self {
+			Self::Left => Self::Right,
+			Self::Right => Self::Left,
+			Self::Down => Self::Up,
+			Self::Up => Self::Down,
+			Self::Front => Self::Back,
+			Self::Back => Self::Front,
 		}
 	}
 }

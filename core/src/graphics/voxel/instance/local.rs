@@ -1,10 +1,80 @@
-use crate::{block, graphics::voxel::instance::Instance};
-use engine::math::nalgebra::Point3;
-use std::collections::{HashMap, HashSet};
+use crate::{
+	block,
+	graphics::voxel::{instance::Instance, model, Face},
+	world::chunk,
+};
+use engine::math::nalgebra::{Point3, Vector3};
+use enumset::EnumSet;
+use std::{
+	collections::{HashMap, HashSet},
+	sync::{Arc, Weak},
+};
 
 /// Wrapper struct containing the chunk coordinate and offset within the chunk for a given block.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct BlockPoint(Point3<i64>, Point3<usize>);
+struct BlockPoint(Point3<i64>, Point3<i8>);
+impl std::fmt::Debug for BlockPoint {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		<Self as std::fmt::Display>::fmt(&self, f)
+	}
+}
+impl std::fmt::Display for BlockPoint {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(
+			f,
+			"<{}'{}, {}'{}, {}'{}>",
+			self.0.x, self.1.x, self.0.y, self.1.y, self.0.z, self.1.z,
+		)
+	}
+}
+impl std::ops::Add<Vector3<i8>> for BlockPoint {
+	type Output = Self;
+	fn add(mut self, other: Vector3<i8>) -> Self::Output {
+		self.1 += other;
+		self.align();
+		self
+	}
+}
+impl std::ops::Sub<BlockPoint> for BlockPoint {
+	type Output = Self;
+	fn sub(self, rhs: BlockPoint) -> Self::Output {
+		Self(self.0 - rhs.0.coords, self.1 - rhs.1.coords)
+	}
+}
+impl BlockPoint {
+	pub fn new(chunk: Point3<i64>, offset: Point3<i8>) -> Self {
+		let mut point = Self(chunk, offset);
+		point.align();
+		point
+	}
+
+	fn align(&mut self) {
+		let chunk = &mut self.0;
+		let offset = &mut self.1;
+		let size = chunk::SIZE_I;
+		for i in 0..size.len() {
+			let size = size[i] as i8;
+			if offset[i] < 0 {
+				let amount = (offset[i].abs() / size) + 1;
+				chunk[i] -= amount as i64;
+				offset[i] += amount * size;
+			}
+			if offset[i] >= size {
+				let amount = offset[i].abs() / size;
+				chunk[i] += amount as i64;
+				offset[i] -= amount * size;
+			}
+		}
+	}
+
+	fn chunk(&self) -> &Point3<i64> {
+		&self.0
+	}
+
+	fn offset(&self) -> &Point3<i8> {
+		&self.1
+	}
+}
 
 /// The description of the local block instance data in the local-memory of the program.
 /// This data is mutable between frames. When the [`instance buffer`](super::Buffer)
@@ -19,15 +89,24 @@ pub struct Description {
 	//   Whenever an instances changes from one type to another (or to empty or completely hidden), it would be shuffled along the
 	//   instances vec and the start indicies of each categoryy would be updated.
 	//   For the sake of getting the system up and running though, thats an optimization that can be figured out at a later time.
+	model_cache: Weak<model::Cache>,
 	categories: HashMap<block::LookupId, Category>,
 	chunks: HashMap<Point3<i64>, ChunkDesc>,
 	has_changes: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum InstanceReference {
 	Active(usize),
 	Disabled(usize),
+}
+impl InstanceReference {
+	fn is_active(&self) -> bool {
+		match self {
+			Self::Active(_) => true,
+			Self::Disabled(_) => false,
+		}
+	}
 }
 impl std::ops::Deref for InstanceReference {
 	type Target = usize;
@@ -61,21 +140,30 @@ pub struct Category {
 #[derive(Default)]
 struct ChunkDesc {
 	/// Lookup instance index by block offset point.
-	blocks: HashMap<Point3<usize>, ChunkBlock>,
+	blocks: HashMap<Point3<i8>, ChunkBlock>,
 }
 
+#[derive(Clone, Debug)]
 struct ChunkBlock {
 	id: block::LookupId,
 	redirector: InstanceReference,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum BlockDescId {
+	ChunkNotLoaded,
+	Empty,
+	Id(block::LookupId),
+}
+
 impl Description {
-	pub fn new() -> Self {
+	pub fn new(model_cache: Weak<model::Cache>) -> Self {
 		let mut categories = HashMap::new();
 		for id in Self::ordered_ids() {
 			categories.insert(id, Category::default());
 		}
 		Self {
+			model_cache,
 			categories,
 			chunks: HashMap::new(),
 			has_changes: false,
@@ -98,15 +186,67 @@ impl Description {
 		changed
 	}
 
+	fn get_instance_redirector(&self, point: &BlockPoint) -> Option<ChunkBlock> {
+		match self.chunks.get(point.chunk()) {
+			Some(chunk_desc) => chunk_desc.blocks.get(point.offset()).cloned(),
+			None => None,
+		}
+	}
+
+	fn get_instance_mut(&mut self, block_desc: &ChunkBlock) -> Option<&mut Instance> {
+		let category = self.categories.get_mut(&block_desc.id).unwrap();
+		match block_desc.redirector {
+			InstanceReference::Active(idx) => category.active_instances.get_mut(idx),
+			InstanceReference::Disabled(idx) => category.disabled_instances.get_mut(idx),
+		}
+	}
+
+	fn get_block_id(&self, point: &BlockPoint) -> BlockDescId {
+		match self.chunks.get(point.chunk()) {
+			Some(chunk_desc) => match chunk_desc.blocks.get(point.offset()) {
+				Some(desc) => BlockDescId::Id(desc.id),
+				None => BlockDescId::Empty,
+			},
+			None => BlockDescId::ChunkNotLoaded,
+		}
+	}
+
+	pub fn insert_chunk(
+		&mut self,
+		chunk: &Point3<i64>,
+		block_ids: &HashMap<Point3<usize>, block::LookupId>,
+	) {
+		let _scope_tag = format!("<{}, {}, {}>", chunk.x, chunk.y, chunk.z);
+		profiling::scope!("insert_chunk", _scope_tag.as_str());
+
+		self.chunks.insert(*chunk, ChunkDesc::default());
+
+		let mut points = HashSet::with_capacity(chunk::DIAMETER.pow(3));
+		let chunk_center = Point3::new(chunk::RADIUS, chunk::RADIUS, chunk::RADIUS);
+		chunk::Ticket::visit_hollow_cube(chunk::RADIUS as usize, |vec| {
+			points.insert(BlockPoint::new(*chunk, chunk_center + vec.cast::<i8>()));
+		});
+
+		for (point, block_id) in block_ids.iter() {
+			points.insert(BlockPoint::new(*chunk, point.cast::<i8>()));
+			self.set_block_id(&chunk, &point.cast::<i8>(), Some(*block_id), false);
+		}
+
+		self.update_proximity(points);
+	}
+
 	pub fn set_block_id(
 		&mut self,
 		chunk: &Point3<i64>,
-		offset: &Point3<usize>,
+		offset: &Point3<i8>,
 		id: Option<block::LookupId>,
+		update_neighbors: bool,
 	) {
-		if !self.chunks.contains_key(&chunk) {
-			self.chunks.insert(chunk.clone(), ChunkDesc::default());
-		}
+		assert!(self.chunks.contains_key(&chunk));
+		let point = BlockPoint::new(*chunk, *offset);
+
+		let _scope_tag = format!("{} {:?}", point, id);
+		profiling::scope!("set_block_id", _scope_tag.as_str());
 
 		// Early returns if the desired change is a no-op,
 		// otherwise returns the remove block description (if it exists).
@@ -128,10 +268,10 @@ impl Description {
 			chunk_desc.blocks.remove(&offset)
 		};
 
-		let instance = if let Some(block_desc) = removed_block_desc {
-			Some(self.remove(&block_desc))
+		let (point, instance) = if let Some(block_desc) = removed_block_desc {
+			self.remove(&block_desc)
 		} else {
-			None
+			(point, Instance::from(&chunk, &offset))
 		};
 
 		let block_id = match id {
@@ -139,28 +279,17 @@ impl Description {
 			None => return,
 			Some(id) => id,
 		};
-		let instance = instance.unwrap_or(Instance::from(&chunk, &offset));
-		let point = BlockPoint(*chunk, *offset);
-		let redirector = self.insert(&block_id, point, instance);
+		self.insert(&block_id, point, instance, true);
 
-		{
-			let chunk_desc = self.chunks.get_mut(&chunk).unwrap();
-			chunk_desc.blocks.insert(
-				offset.clone(),
-				ChunkBlock {
-					id: block_id,
-					redirector,
-				},
-			);
+		if update_neighbors {
+			self.update_proximity(HashSet::from([point]));
 		}
-
-		self.update_proximity(&HashSet::from([point]));
 	}
 
 	fn take_first_block_in_chunk(
 		&mut self,
 		coord: &Point3<i64>,
-	) -> Option<(Point3<usize>, ChunkBlock)> {
+	) -> Option<(Point3<i8>, ChunkBlock)> {
 		if let Some(chunk_desc) = self.chunks.get_mut(&coord) {
 			if let Some(offset) = chunk_desc.blocks.keys().next().cloned() {
 				return chunk_desc.blocks.remove(&offset).map(|desc| (offset, desc));
@@ -170,6 +299,9 @@ impl Description {
 	}
 
 	pub fn remove_chunk(&mut self, coord: &Point3<i64>) {
+		let _scope_tag = format!("<{}, {}, {}>", coord.x, coord.y, coord.z);
+		profiling::scope!("remove_chunk", _scope_tag.as_str());
+
 		let block_count = match self.chunks.get(&coord) {
 			Some(chunk_desc) => chunk_desc.blocks.len(),
 			None => return,
@@ -178,14 +310,14 @@ impl Description {
 		let mut offsets = HashSet::with_capacity(block_count);
 		while let Some((offset, block_desc)) = self.take_first_block_in_chunk(&coord) {
 			let _instance = self.remove(&block_desc);
-			offsets.insert(BlockPoint(*coord, offset));
+			offsets.insert(BlockPoint::new(*coord, offset));
 		}
 
 		let chunk_desc = self.chunks.remove(&coord);
 		assert!(chunk_desc.is_some());
 		assert!(chunk_desc.unwrap().blocks.is_empty());
 
-		self.update_proximity(&offsets);
+		self.update_proximity(offsets);
 	}
 
 	fn insert(
@@ -193,32 +325,51 @@ impl Description {
 		block_id: &block::LookupId,
 		point: BlockPoint,
 		instance: Instance,
-	) -> InstanceReference {
+		is_active: bool,
+	) {
 		let category = self.categories.get_mut(&block_id).unwrap();
-		let idx = category.active_instances.len();
-
-		category.active_instances.push(instance);
-		category.active_points.push(point);
 		self.has_changes = true;
 
-		InstanceReference::Active(idx)
+		let redirector = match is_active {
+			true => {
+				let idx = category.active_instances.len();
+				category.active_instances.push(instance);
+				category.active_points.push(point);
+				InstanceReference::Active(idx)
+			}
+			false => {
+				let idx = category.disabled_instances.len();
+				category.disabled_instances.push(instance);
+				category.disabled_points.push(point);
+				InstanceReference::Disabled(idx)
+			}
+		};
+
+		let chunk_desc = self.chunks.get_mut(point.chunk()).unwrap();
+		chunk_desc.blocks.insert(
+			point.offset().clone(),
+			ChunkBlock {
+				id: *block_id,
+				redirector,
+			},
+		);
 	}
 
-	fn remove(&mut self, desc: &ChunkBlock) -> Instance {
+	fn remove(&mut self, desc: &ChunkBlock) -> (BlockPoint, Instance) {
 		let category = self.categories.get_mut(&desc.id).unwrap();
 
-		let (idx, swapped_point, removed_instance) = match desc.redirector {
+		let (idx, swapped_point, removed) = match desc.redirector {
 			InstanceReference::Active(idx) => {
 				let swapped_point = category.active_points.last().cloned();
-				let _removed_point = category.active_points.swap_remove(idx);
+				let removed_point = category.active_points.swap_remove(idx);
 				let removed_instance = category.active_instances.swap_remove(idx);
-				(idx, swapped_point, removed_instance)
+				(idx, swapped_point, (removed_point, removed_instance))
 			}
 			InstanceReference::Disabled(idx) => {
 				let swapped_point = category.disabled_points.last().cloned();
-				let _removed_point = category.disabled_points.swap_remove(idx);
+				let removed_point = category.disabled_points.swap_remove(idx);
 				let removed_instance = category.disabled_instances.swap_remove(idx);
-				(idx, swapped_point, removed_instance)
+				(idx, swapped_point, (removed_point, removed_instance))
 			}
 		};
 
@@ -236,10 +387,87 @@ impl Description {
 
 		self.has_changes = true;
 
-		removed_instance
+		removed
 	}
 
-	fn update_proximity(&mut self, points: &HashSet<BlockPoint>) {
-		// TODO: Update the face data for all blocks adjacent to the provided points (and the points themselves)
+	fn update_proximity(&mut self, points: HashSet<BlockPoint>) {
+		profiling::scope!("update_proximity");
+
+		let model_cache = self.model_cache.upgrade().unwrap();
+
+		let all_faces = EnumSet::<Face>::all();
+		for &point1 in points.iter() {
+			profiling::scope!("update-faces", &format!("{}", point1));
+			let point1_id = self.get_block_id(&point1);
+			let mut face_ids = Vec::with_capacity(all_faces.len());
+			for point1_face in all_faces.iter() {
+				profiling::scope!("face", &format!("{}", point1_face));
+				let point2 = point1 + point1_face.direction();
+				let point2_id = self.get_block_id(&point2);
+				face_ids.push((point1_face, point2, point2_id));
+				if !points.contains(&point2) {
+					let point2_face = point1_face.inverse();
+					if self.update_instance_flags(
+						point2,
+						vec![(point2_face, point1, point1_id)],
+						&model_cache,
+					) {
+						self.has_changes = true;
+					}
+				}
+			}
+			if self.update_instance_flags(point1, face_ids, &model_cache) {
+				self.has_changes = true;
+			}
+		}
+	}
+
+	fn update_instance_flags(
+		&mut self,
+		point: BlockPoint,
+		faces: Vec<(Face, BlockPoint, BlockDescId)>,
+		model_cache: &Arc<model::Cache>,
+	) -> bool {
+		let mut has_changed = false;
+		if let Some(block_desc) = self.get_instance_redirector(&point) {
+			profiling::scope!("update_instance_flags", &format!("{}", point));
+			let should_be_enabled = match self.get_instance_mut(&block_desc) {
+				Some(instance) => {
+					let mut point_faces = instance.faces();
+					for (face, _, desc_id) in faces.into_iter() {
+						let face_is_enabled = match desc_id {
+							// If the point being processed isn't loaded, then it was
+							// some point adjacent to the original given list
+							// that we dont care about right now.
+							BlockDescId::ChunkNotLoaded => false,
+							// Block doesnt exist at this point, its air/empty.
+							BlockDescId::Empty => true,
+							BlockDescId::Id(id) => match model_cache.get(&id) {
+								Some((model, _, _)) => !model.is_opaque(),
+								None => true,
+							},
+						};
+
+						if face_is_enabled {
+							point_faces.insert(face);
+						} else {
+							point_faces.remove(face);
+						}
+					}
+					if instance.faces() != point_faces {
+						has_changed = true;
+						instance.set_faces(point_faces);
+					}
+					!point_faces.is_empty()
+				}
+				None => false,
+			};
+			if block_desc.redirector.is_active() != should_be_enabled {
+				let (point, instance) = self.remove(&block_desc);
+				self.insert(&block_desc.id, point, instance, should_be_enabled);
+				has_changed = true;
+			}
+		}
+		has_changed
 	}
 }

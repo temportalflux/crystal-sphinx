@@ -71,7 +71,7 @@ impl Ticket {
 		points
 	}
 
-	fn visit_hollow_cube<F>(radius: usize, mut callback: F)
+	pub fn visit_hollow_cube<F>(radius: usize, mut callback: F)
 	where
 		F: FnMut(Vector3<i64>),
 	{

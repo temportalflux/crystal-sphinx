@@ -101,6 +101,12 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 				}
 			}
 			WorldUpdate::Chunk(client_chunk) => {
+				log::debug!(
+					"received chunk <{}, {}, {}>",
+					client_chunk.coordinate().x,
+					client_chunk.coordinate().y,
+					client_chunk.coordinate().z
+				);
 				if let Ok(mut cache) = self.chunk_cache().write() {
 					cache.insert(
 						&client_chunk.coordinate(),

@@ -180,6 +180,10 @@ impl Model {
 	pub fn descriptor_set(&self) -> Arc<descriptor::Set> {
 		self.descriptor_set.upgrade().unwrap()
 	}
+
+	pub fn is_opaque(&self) -> bool {
+		true
+	}
 }
 
 impl ModelTrait for Model {

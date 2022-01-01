@@ -83,8 +83,7 @@ impl Relevancy {
 		let diameter = 2 * self.radius + 1;
 		let mut coordinates = HashSet::with_capacity(diameter.pow(3));
 		let diameter = diameter as i64;
-		let centering_offset =
-			Vector3::new(self.radius as i64, self.radius as i64, self.radius as i64);
+		let centering_offset = Vector3::new(self.radius, self.radius, self.radius).cast::<i64>();
 		for y in 0..diameter {
 			for x in 0..diameter {
 				for z in 0..diameter {
