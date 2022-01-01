@@ -75,8 +75,10 @@ impl Load {
 						return Ok(());
 					}
 				};
-				for (_face, (id, _use_biome_color)) in block.textures().iter() {
-					texture_ids.insert(id.clone());
+				for (entry, _faces) in block.textures().iter() {
+					for texture_id in entry.texture_ids().iter() {
+						texture_ids.insert(texture_id.clone());
+					}
 				}
 				blocks.push((asset_id, block));
 			}
@@ -120,12 +122,13 @@ impl Load {
 			log::debug!(target: LOG, "Stitching block textures");
 			let mut atlas = atlas::Atlas::builder_2k();
 			for (block_id, block) in blocks.iter() {
-				let textures = block
-					.textures()
-					.iter()
-					.map(|(_face, (id, _use_biome_color))| (id, textures.get(&id).unwrap()))
-					.collect::<HashMap<_, _>>();
-				if !atlas.contains_or_fits_all(&textures) {
+				let mut texture_map = HashMap::new();
+				for (entry, _faces) in block.textures().iter() {
+					for texture_id in entry.texture_ids().iter() {
+						texture_map.insert(texture_id, textures.get(&texture_id).unwrap());
+					}
+				}
+				if !atlas.contains_or_fits_all(&texture_map) {
 					log::error!(
 						target: LOG,
 						"Cannot fit textures for block {} in atlas",
@@ -134,7 +137,7 @@ impl Load {
 					continue;
 				}
 				// Actually insert the textures
-				atlas.insert_all(&textures)?;
+				atlas.insert_all(&texture_map)?;
 			}
 
 			log::debug!(target: LOG, "Creating block texture descriptor cache");
@@ -222,9 +225,28 @@ impl Load {
 				// Block models "own" the atlases. If no blocks reference the atlas, it is dropped.
 				builder.set_atlas(atlas.clone(), atlas_sampler.clone(), descriptor_set.clone());
 
-				for (face, (texture_id, use_biome_color)) in block.textures() {
-					let tex_coord = atlas.get(&texture_id).unwrap();
-					builder.insert(*face, tex_coord, *use_biome_color);
+				if block.textures().is_empty() {
+					log::warn!(target: LOG, "Block {} has no texture entries", block_id);
+				}
+				for (entry, faces) in block.textures() {
+					let main_tex = atlas.get(&entry.texture_id).unwrap();
+					let biome_color_tex = entry
+						.biome_color
+						.1
+						.as_ref()
+						.map(|id| atlas.get(&id))
+						.flatten();
+					for face in faces.iter() {
+						builder.insert(model::FaceData {
+							main_tex,
+							biome_color_tex,
+							flags: model::Flags {
+								face,
+								biome_color_enabled: entry.biome_color.0,
+								biome_color_masked: biome_color_tex.is_some(),
+							},
+						});
+					}
 				}
 
 				models.insert(block_id, builder.build());

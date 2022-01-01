@@ -169,7 +169,6 @@ impl Buffer {
 		if let Ok(mut local_description) = self.local_description.try_lock() {
 			was_able_to_lock = true;
 			if local_description.take_has_changes() {
-				log::debug!("recording changes");
 				self.submitted_description.submit(
 					&local_description,
 					&render_chain,

@@ -16,7 +16,7 @@ impl std::fmt::Display for AtlasTexCoord {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(
 			f,
-			"texture::Coord(offset=<{}, {}> size=<{}, {}>)",
+			"AtlasCoord(offset=<{}, {}> size=<{}, {}>)",
 			self.offset.x, self.offset.y, self.size.x, self.size.y
 		)
 	}

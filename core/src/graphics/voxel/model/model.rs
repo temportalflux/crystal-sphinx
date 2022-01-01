@@ -1,19 +1,15 @@
 use crate::graphics::{
 	model::{Model as ModelTrait, ModelBuilder},
 	voxel::{
-		atlas::{Atlas, AtlasTexCoord},
+		atlas::Atlas,
 		model::{self, Vertex},
-		Face,
 	},
 };
 use engine::{
 	graphics::{descriptor, sampler::Sampler},
-	math::nalgebra::{Matrix4x2, Vector2, Vector4},
+	math::nalgebra::{Matrix4x2, Point2, Vector2, Vector4},
 };
-use std::{
-	collections::HashMap,
-	sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
 // Top-Left UV is -Horizontal & -Vertical
 #[rustfmt::skip]
@@ -50,15 +46,15 @@ static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 
 #[derive(Default)]
 pub struct Builder {
-	faces: HashMap<Face, (AtlasTexCoord, bool)>,
+	faces: Vec<model::FaceData>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 	atlas: Option<(Arc<Atlas>, Arc<Sampler>, Weak<descriptor::Set>)>,
 }
 
 impl Builder {
-	pub fn insert(&mut self, face: Face, tex_coord: AtlasTexCoord, use_biome_color: bool) {
-		self.faces.insert(face, (tex_coord, use_biome_color));
+	pub fn insert(&mut self, face_data: model::FaceData) {
+		self.faces.push(face_data);
 	}
 
 	pub fn set_atlas(
@@ -75,10 +71,12 @@ impl Builder {
 		// each face needs its own vectors because the texture data is embedded in each vertex
 		self.vertices = Vec::with_capacity(face_count * 4); // 4 corners per face
 		self.indices = Vec::with_capacity(face_count * 6); // two tris per face
-		let coords = self.faces.drain().collect::<Vec<_>>();
-		for (face, (tex_coord, use_biome_color)) in coords.into_iter() {
-			self.push_face(face, &tex_coord, use_biome_color);
+
+		let entries = self.faces.drain(..).collect::<Vec<_>>();
+		for face_data in entries.into_iter() {
+			self.push_face(&face_data);
 		}
+
 		let (atlas, sampler, descriptor_set) = self.atlas.unwrap();
 		Model {
 			atlas,
@@ -92,19 +90,7 @@ impl Builder {
 
 impl std::fmt::Debug for Builder {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		let face_string_list = self
-			.faces
-			.iter()
-			.map(|(face, (tex_coord, use_biome_color))| {
-				let tex_offset = tex_coord.offset;
-				let tex_size = tex_coord.size;
-				format!(
-					"{} => (offset:<{}, {}>, size:<{}, {}>, use_biome_color={})",
-					face, tex_offset[0], tex_offset[1], tex_size[0], tex_size[1], use_biome_color
-				)
-			})
-			.collect::<Vec<_>>();
-		write!(f, "[{}]", face_string_list.join(", "))
+		write!(f, "{:?}", self.faces)
 	}
 }
 
@@ -126,33 +112,41 @@ impl ModelBuilder for Builder {
 }
 
 impl Builder {
-	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord, use_biome_color: bool) {
-		let flags: Vector4<f32> = model::Flags {
-			face,
-			use_biome_color,
-		}
-		.into();
+	fn push_face(&mut self, face_data: &model::FaceData) {
+		let unified_flags: Vector4<f32> = face_data.flags.clone().into();
 
-		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, flags);
-		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, flags);
-		let idx_br = self.push_masked_vertex(face, &tex_coord, &BR_MATRIX, flags);
-		let idx_bl = self.push_masked_vertex(face, &tex_coord, &BL_MATRIX, flags);
+		let idx_tl = self.push_masked_vertex(&face_data, &TL_MATRIX, unified_flags);
+		let idx_tr = self.push_masked_vertex(&face_data, &TR_MATRIX, unified_flags);
+		let idx_br = self.push_masked_vertex(&face_data, &BR_MATRIX, unified_flags);
+		let idx_bl = self.push_masked_vertex(&face_data, &BL_MATRIX, unified_flags);
 		self.push_tri((idx_tl, idx_tr, idx_br));
 		self.push_tri((idx_br, idx_bl, idx_tl));
 	}
 
 	fn push_masked_vertex(
 		&mut self,
-		face: Face,
-		tex_coord: &AtlasTexCoord,
+		face_data: &model::FaceData,
 		mask_mat: &Matrix4x2<f32>,
 		model_flags: Vector4<f32>,
 	) -> u32 {
 		let offset_mask: Vector4<f32> = mask_mat.column(1).into();
 		let tex_coord_mask: Vector2<f32> = mask_mat.column(0).fixed_rows::<2>(0).into();
 
-		let position = (face.model_offset_matrix() * offset_mask) + face.model_axis();
-		let tex_coord = tex_coord.offset + tex_coord.size.component_mul(&tex_coord_mask);
+		let mut position = face_data.flags.face.model_offset_matrix() * offset_mask;
+		position += face_data.flags.face.model_axis();
+
+		let main_tex =
+			face_data.main_tex.offset + face_data.main_tex.size.component_mul(&tex_coord_mask);
+		let biome_color_mask = match face_data.biome_color_tex {
+			Some(coord) => coord.offset + coord.size.component_mul(&tex_coord_mask),
+			None => Point2::new(0.0, 0.0),
+		};
+		let tex_coord = Vector4::new(
+			main_tex.x,
+			main_tex.y,
+			biome_color_mask.x,
+			biome_color_mask.y,
+		);
 
 		self.push_vertex(Vertex {
 			position: position.into(),

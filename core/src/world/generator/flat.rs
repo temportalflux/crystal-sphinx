@@ -25,7 +25,7 @@ impl Flat {
 		cfg.insert((0, 4), &dirt);
 		cfg.insert((0, 5), &dirt);
 
-		cfg.insert((0, 6), &asset::Id::new("vanilla", "blocks/grass"));
+		cfg.insert((0, 6), &asset::Id::new("vanilla", "blocks/grass/default"));
 
 		cfg
 	}

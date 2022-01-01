@@ -1,3 +1,4 @@
+use crate::graphics::voxel::Face;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, Serialize, Deserialize)]
@@ -35,10 +36,10 @@ impl Side {
 		]
 	}
 
-	pub fn as_side_list(&self) -> Vec<Self> {
+	pub fn as_face_set(&self) -> enumset::EnumSet<Face> {
 		match self {
-			Self::Side => vec![Self::Front, Self::Back, Self::Left, Self::Right],
-			_ => vec![*self],
+			Self::Side => Face::Front | Face::Back | Face::Left | Face::Right,
+			_ => Face::from(*self).into(),
 		}
 	}
 

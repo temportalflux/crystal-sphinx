@@ -14,7 +14,7 @@ layout(set = 0, binding = 0) uniform CameraUniform {
 
 // Model attributes - changes based on the block type being drawn
 layout(location = 0) in vec3 position;
-layout(location = 1) in vec2 tex_coord;
+layout(location = 1) in vec4 tex_coord;
 layout(location = 2) in vec4 model_flags;
 
 // Instance attributes - changes based on a specific block being drawn
@@ -22,9 +22,10 @@ layout(location = 3) in vec3 chunk_coordinate;
 layout(location = 4) in mat4 model_matrix; // slots [4,8)
 layout(location = 8) in vec4 instance_flags;
 
-layout(location = 0) out vec4 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out vec4 fragFlags;
+layout(location = 0) out vec4 frag_biome_color;
+layout(location = 1) out vec2 frag_main_tex_coord;
+layout(location = 2) out vec2 frag_biome_color_tex_coord;
+layout(location = 3) out vec4 frag_flags;
 
 highp int bitSubset(int field, int size, int start, int end)
 {
@@ -63,23 +64,22 @@ void main()
 	// aka is the face this vertex is on enabled for the instance.
 	// 0.0 means the face/vertex is not visible and should be discarded.
 	// 1.0 means the face IS visible and should be draw.
-	fragFlags.x = float(ceil(faceMask & faceEnabledBits));
+	frag_flags.r = float(ceil(faceMask & faceEnabledBits));
 
 	// Extract the flag indicating if the vertex supports colorizing
-	int colorizing_bit = 1 << 6; // the bit directly after the face-mask bits
+	int biome_color_enabled = model_flags1 & (1 << 6); // the bit directly after the face-mask bits
+	int biome_color_masked = model_flags1 & (1 << 7);
 	// 0.0 if colorizing is disabled
 	// 1.0 if colorizing is enabled
-	colorizing_bit = model_flags1 & colorizing_bit;
-	float colorizing_enabled = float(min(colorizing_bit, 1));
+	float colorizing_enabled = float(min(biome_color_enabled, 1));
+	frag_flags.g = float(min(biome_color_enabled, 1));
+	frag_flags.b = float(min(biome_color_masked, 1));
 	
 	// NOTE: Will eventually be used to colorize voxel faces based on biome
 	vec3 biome_color = vec3(85.0 / 255.0, 201.0 / 255.5, 63.0 / 255.0); // 0x55C93F
-	vec3 default_color = vec3(1, 1, 1);
-	fragColor = vec4(
-		((1 - colorizing_enabled) * default_color.rgb) + (colorizing_enabled * biome_color.rgb),
-		1.0
-	);
+	frag_biome_color = vec4(biome_color, 1.0);
 
 	// Copy over the texture coordinate for sampling from atlas
-	fragTexCoord = tex_coord;
+	frag_main_tex_coord = tex_coord.rg;
+	frag_biome_color_tex_coord = tex_coord.ba;
 }

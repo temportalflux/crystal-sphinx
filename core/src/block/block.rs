@@ -3,12 +3,23 @@ use crate::graphics::voxel::Face;
 use engine::asset::{self, AssetResult, TypeMetadata};
 use enumset::EnumSet;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TextureEntry {
+	pub texture_id: asset::Id,
+	pub all_texture_ids: Vec<asset::Id>,
+	pub biome_color: (bool, Option<asset::Id>),
+}
+impl TextureEntry {
+	pub fn texture_ids(&self) -> &Vec<asset::Id> {
+		&self.all_texture_ids
+	}
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Block {
 	asset_type: String,
-	textures: HashMap<Face, (asset::Id, bool)>,
+	textures: Vec<(TextureEntry, EnumSet<Face>)>,
 }
 
 impl asset::Asset for Block {
@@ -18,39 +29,69 @@ impl asset::Asset for Block {
 }
 
 impl Block {
-	pub fn textures(&self) -> &HashMap<Face, (asset::Id, bool)> {
+	pub fn textures(&self) -> &Vec<(TextureEntry, EnumSet<Face>)> {
 		&self.textures
 	}
 
 	fn set_textures(&mut self, node: &kdl::KdlNode) {
-		use engine::utility::kdl::value_as_asset_id;
+		use engine::utility::kdl::{value_as_asset_id, value_map_asset_id};
 		use std::convert::TryFrom;
 		self.textures.clear();
-		for texture_node in node.children.iter() {
-			let side_opt = Side::try_from(texture_node.name.as_str()).ok();
-			let id_opt = value_as_asset_id(texture_node, 0);
-			let use_biome_color = match texture_node.properties.get("use_biome_color") {
-				Some(kdl::KdlValue::Boolean(b)) => *b,
-				_ => false,
+		let mut found_faces = EnumSet::empty();
+
+		fn parse_texture_node(node: &kdl::KdlNode) -> Option<TextureEntry> {
+			let texture_id = match value_as_asset_id(&node, 0) {
+				Some(id) => id,
+				None => return None,
 			};
-			if let Some((side, asset_id)) = side_opt.zip(id_opt) {
-				for side in side.as_side_list().into_iter() {
-					self.textures
-						.insert(side.into(), (asset_id.clone(), use_biome_color));
+
+			let mut entry = TextureEntry {
+				all_texture_ids: vec![texture_id.clone()],
+				texture_id,
+				biome_color: (false, None),
+			};
+
+			for node in node.children.iter() {
+				match node.name.as_str() {
+					"biome_color" => {
+						entry.biome_color.0 = match node.properties.get("enabled") {
+							Some(kdl::KdlValue::Boolean(b)) => *b,
+							_ => false,
+						};
+						entry.biome_color.1 = match node.properties.get("mask") {
+							Some(kdl::KdlValue::String(v)) => value_map_asset_id(Some(&v)),
+							_ => None,
+						};
+						if let Some(id) = &entry.biome_color.1 {
+							entry.all_texture_ids.push(id.clone());
+						}
+					}
+					_ => {}
 				}
+			}
+
+			Some(entry)
+		}
+
+		for node in node.children.iter() {
+			match node.name.as_str() {
+				"sides" => {
+					for texture_node in node.children.iter() {
+						if let Some(entry) = parse_texture_node(&texture_node) {
+							if let Some(side) = Side::try_from(texture_node.name.as_str()).ok() {
+								let faces = side.as_face_set();
+								found_faces.insert_all(faces.clone());
+								self.textures.push((entry, faces));
+							}
+						}
+					}
+				}
+				_ => {}
 			}
 		}
-		let use_biome_color = match node.properties.get("use_biome_color") {
-			Some(kdl::KdlValue::Boolean(b)) => *b,
-			_ => false,
-		};
-		if let Some(default_texture) = value_as_asset_id(node, 0) {
-			for face in EnumSet::<Face>::all().into_iter() {
-				if !self.textures.contains_key(&face) {
-					self.textures
-						.insert(face, (default_texture.clone(), use_biome_color));
-				}
-			}
+
+		if let Some(entry) = parse_texture_node(&node) {
+			self.textures.push((entry, found_faces.complement()));
 		}
 	}
 }
@@ -58,15 +99,41 @@ impl Block {
 impl engine::asset::kdl::Asset<Block> for Block {
 	fn kdl_schema() -> kdl_schema::Schema<Block> {
 		use kdl_schema::*;
-		fn sided_texture(name: &'static str) -> Node<Block> {
+		fn biome_color() -> Node<Block> {
+			Node {
+				name: Name::Defined("biome_color"),
+				properties: vec![
+					Property {
+						name: "enabled",
+						value: Value::Boolean,
+						optional: false,
+					},
+					Property {
+						name: "mask",
+						value: Value::String(None),
+						optional: true,
+					},
+				],
+				..Default::default()
+			}
+		}
+		fn texture_node(name: &'static str) -> Node<Block> {
 			Node {
 				name: Name::Defined(name),
-				values: Items::Ordered(vec![Value::String(None)]),
-				properties: vec![Property {
-					name: "use_biome_color",
-					value: Value::Boolean,
-					optional: true,
-				}],
+				values: Items::Select(vec![Value::String(None)]),
+				children: Items::Select(vec![biome_color()]),
+				..Default::default()
+			}
+		}
+		fn texture_sides() -> Node<Block> {
+			Node {
+				name: Name::Defined("sides"),
+				children: Items::Select(
+					Side::all()
+						.into_iter()
+						.map(|side| texture_node(side.as_str()))
+						.collect(),
+				),
 				..Default::default()
 			}
 		}
@@ -76,21 +143,9 @@ impl engine::asset::kdl::Asset<Block> for Block {
 					asset.asset_type = asset::kdl::asset_type::get(node);
 				}),
 				Node {
-					name: Name::Defined("textures"),
-					values: Items::Select(vec![Value::String(None)]),
-					properties: vec![Property {
-						name: "use_biome_color",
-						value: Value::Boolean,
-						optional: true,
-					}],
-					children: Items::Select(
-						Side::all()
-							.into_iter()
-							.map(|side| sided_texture(side.as_str()))
-							.collect(),
-					),
+					children: Items::Select(vec![biome_color(), texture_sides()]),
 					on_validation_successful: Some(Block::set_textures),
-					..Default::default()
+					..texture_node("textures")
 				},
 			]),
 			..Default::default()

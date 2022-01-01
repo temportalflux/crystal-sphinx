@@ -1,5 +1,7 @@
 mod cache;
 pub use cache::*;
+mod face_data;
+pub use face_data::*;
 mod flags;
 pub use flags::*;
 mod load_thread;
