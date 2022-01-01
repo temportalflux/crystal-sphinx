@@ -50,15 +50,15 @@ static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 
 #[derive(Default)]
 pub struct Builder {
-	faces: HashMap<Face, AtlasTexCoord>,
+	faces: HashMap<Face, (AtlasTexCoord, bool)>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 	atlas: Option<(Arc<Atlas>, Arc<Sampler>, Weak<descriptor::Set>)>,
 }
 
 impl Builder {
-	pub fn insert(&mut self, face: Face, tex_coord: AtlasTexCoord) {
-		self.faces.insert(face, tex_coord);
+	pub fn insert(&mut self, face: Face, tex_coord: AtlasTexCoord, use_biome_color: bool) {
+		self.faces.insert(face, (tex_coord, use_biome_color));
 	}
 
 	pub fn set_atlas(
@@ -76,8 +76,8 @@ impl Builder {
 		self.vertices = Vec::with_capacity(face_count * 4); // 4 corners per face
 		self.indices = Vec::with_capacity(face_count * 6); // two tris per face
 		let coords = self.faces.drain().collect::<Vec<_>>();
-		for (face, tex_coord) in coords.into_iter() {
-			self.push_face(face, &tex_coord);
+		for (face, (tex_coord, use_biome_color)) in coords.into_iter() {
+			self.push_face(face, &tex_coord, use_biome_color);
 		}
 		let (atlas, sampler, descriptor_set) = self.atlas.unwrap();
 		Model {
@@ -95,12 +95,12 @@ impl std::fmt::Debug for Builder {
 		let face_string_list = self
 			.faces
 			.iter()
-			.map(|(face, tex_coord)| {
+			.map(|(face, (tex_coord, use_biome_color))| {
 				let tex_offset = tex_coord.offset;
 				let tex_size = tex_coord.size;
 				format!(
-					"{} => (offset:<{}, {}>, size:<{}, {}>)",
-					face, tex_offset[0], tex_offset[1], tex_size[0], tex_size[1]
+					"{} => (offset:<{}, {}>, size:<{}, {}>, use_biome_color={})",
+					face, tex_offset[0], tex_offset[1], tex_size[0], tex_size[1], use_biome_color
 				)
 			})
 			.collect::<Vec<_>>();
@@ -126,8 +126,12 @@ impl ModelBuilder for Builder {
 }
 
 impl Builder {
-	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord) {
-		let flags: Vector4<f32> = model::Flags { face }.into();
+	fn push_face(&mut self, face: Face, tex_coord: &AtlasTexCoord, use_biome_color: bool) {
+		let flags: Vector4<f32> = model::Flags {
+			face,
+			use_biome_color,
+		}
+		.into();
 
 		let idx_tl = self.push_masked_vertex(face, &tex_coord, &TL_MATRIX, flags);
 		let idx_tr = self.push_masked_vertex(face, &tex_coord, &TR_MATRIX, flags);

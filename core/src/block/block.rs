@@ -1,12 +1,14 @@
 use super::Side;
+use crate::graphics::voxel::Face;
 use engine::asset::{self, AssetResult, TypeMetadata};
+use enumset::EnumSet;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Block {
 	asset_type: String,
-	textures: HashMap<Side, asset::Id>,
+	textures: HashMap<Face, (asset::Id, bool)>,
 }
 
 impl asset::Asset for Block {
@@ -16,7 +18,7 @@ impl asset::Asset for Block {
 }
 
 impl Block {
-	pub fn textures(&self) -> &HashMap<Side, asset::Id> {
+	pub fn textures(&self) -> &HashMap<Face, (asset::Id, bool)> {
 		&self.textures
 	}
 
@@ -27,16 +29,26 @@ impl Block {
 		for texture_node in node.children.iter() {
 			let side_opt = Side::try_from(texture_node.name.as_str()).ok();
 			let id_opt = value_as_asset_id(texture_node, 0);
+			let use_biome_color = match texture_node.properties.get("use_biome_color") {
+				Some(kdl::KdlValue::Boolean(b)) => *b,
+				_ => false,
+			};
 			if let Some((side, asset_id)) = side_opt.zip(id_opt) {
 				for side in side.as_side_list().into_iter() {
-					self.textures.insert(side, asset_id.clone());
+					self.textures
+						.insert(side.into(), (asset_id.clone(), use_biome_color));
 				}
 			}
 		}
+		let use_biome_color = match node.properties.get("use_biome_color") {
+			Some(kdl::KdlValue::Boolean(b)) => *b,
+			_ => false,
+		};
 		if let Some(default_texture) = value_as_asset_id(node, 0) {
-			for side in Side::all_real().iter() {
-				if !self.textures.contains_key(&side) {
-					self.textures.insert(*side, default_texture.clone());
+			for face in EnumSet::<Face>::all().into_iter() {
+				if !self.textures.contains_key(&face) {
+					self.textures
+						.insert(face, (default_texture.clone(), use_biome_color));
 				}
 			}
 		}
@@ -50,6 +62,11 @@ impl engine::asset::kdl::Asset<Block> for Block {
 			Node {
 				name: Name::Defined(name),
 				values: Items::Ordered(vec![Value::String(None)]),
+				properties: vec![Property {
+					name: "use_biome_color",
+					value: Value::Boolean,
+					optional: true,
+				}],
 				..Default::default()
 			}
 		}
@@ -61,6 +78,11 @@ impl engine::asset::kdl::Asset<Block> for Block {
 				Node {
 					name: Name::Defined("textures"),
 					values: Items::Select(vec![Value::String(None)]),
+					properties: vec![Property {
+						name: "use_biome_color",
+						value: Value::Boolean,
+						optional: true,
+					}],
 					children: Items::Select(
 						Side::all()
 							.into_iter()

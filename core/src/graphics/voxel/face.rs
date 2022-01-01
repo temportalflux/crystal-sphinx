@@ -3,8 +3,9 @@ use engine::{
 	world::{global_forward, global_right, global_up},
 };
 use enumset::{EnumSet, EnumSetType};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Hash, EnumSetType)]
+#[derive(Serialize, Deserialize, Debug, Hash, EnumSetType)]
 pub enum Face {
 	Right,
 	Left,

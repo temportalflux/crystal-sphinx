@@ -47,8 +47,8 @@ impl Flat {
 		if let Some(layers) = self.layers.get(&coordinate.y) {
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
-					for x in 0..chunk::SIZE_I.x {
-						for z in 0..chunk::SIZE_I.z {
+					for x in 1..chunk::SIZE_I.x - 1 {
+						for z in 1..chunk::SIZE_I.z - 1 {
 							chunk.set_block_id(Point3::new(x, y, z), Some(block_id));
 						}
 					}

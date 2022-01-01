@@ -1,7 +1,7 @@
 use crate::{
 	app::state::ArcLockMachine,
 	block::{self, Block},
-	graphics::voxel::{atlas, camera, model, Face, RenderVoxel},
+	graphics::voxel::{atlas, camera, model, RenderVoxel},
 	network::storage::Storage,
 };
 use engine::{
@@ -75,7 +75,7 @@ impl Load {
 						return Ok(());
 					}
 				};
-				for (_side, id) in block.textures().iter() {
+				for (_face, (id, _use_biome_color)) in block.textures().iter() {
 					texture_ids.insert(id.clone());
 				}
 				blocks.push((asset_id, block));
@@ -123,7 +123,7 @@ impl Load {
 				let textures = block
 					.textures()
 					.iter()
-					.map(|(_side, id)| (id, textures.get(&id).unwrap()))
+					.map(|(_face, (id, _use_biome_color))| (id, textures.get(&id).unwrap()))
 					.collect::<HashMap<_, _>>();
 				if !atlas.contains_or_fits_all(&textures) {
 					log::error!(
@@ -222,11 +222,9 @@ impl Load {
 				// Block models "own" the atlases. If no blocks reference the atlas, it is dropped.
 				builder.set_atlas(atlas.clone(), atlas_sampler.clone(), descriptor_set.clone());
 
-				for (side, texture_id) in block.textures() {
-					for face in side.as_side_list().into_iter().map(|side| Face::from(side)) {
-						let tex_coord = atlas.get(&texture_id).unwrap();
-						builder.insert(face, tex_coord);
-					}
+				for (face, (texture_id, use_biome_color)) in block.textures() {
+					let tex_coord = atlas.get(&texture_id).unwrap();
+					builder.insert(*face, tex_coord, *use_biome_color);
 				}
 
 				models.insert(block_id, builder.build());
