@@ -1,7 +1,5 @@
 use engine::ui::egui::Element;
 
-// TODO: Bound to the position the camera uses so that info changes when the user disassociates.
-
 /// In-Game debug window for examining information about a chunk in the world.
 pub struct ChunkInspector {
 	is_open: bool,
