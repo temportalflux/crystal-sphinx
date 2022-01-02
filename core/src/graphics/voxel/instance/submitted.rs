@@ -43,15 +43,19 @@ impl Description {
 		pending_gpu_signals: &mut Vec<Arc<command::Semaphore>>,
 	) -> VoidResult {
 		self.categories.clear();
+
 		let mut all_instances: Vec<Instance> = Vec::new();
-		for id in LocalDescription::ordered_ids() {
-			let mut id_instances = local.get_instances(&id).clone();
-			self.categories.push(Category {
-				id,
-				start: all_instances.len(),
-				count: id_instances.len(),
-			});
-			all_instances.append(&mut id_instances);
+		{
+			profiling::scope!("gather-instances");
+			for id in LocalDescription::ordered_ids() {
+				let mut id_instances = local.get_instances(&id).clone();
+				self.categories.push(Category {
+					id,
+					start: all_instances.len(),
+					count: id_instances.len(),
+				});
+				all_instances.append(&mut id_instances);
+			}
 		}
 
 		// If there are no blocks at all, thats ok, we dont have to write anything.
