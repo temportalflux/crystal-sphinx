@@ -29,7 +29,7 @@ pub enum WorldUpdate {
 pub struct ChunkRelevancy {
 	pub entity: hecs::Entity,
 	/// Chunks which used to be, but are no longer, relevant to this client.
-	pub old_chunks: HashSet<Point3<i64>>,
+	pub old_chunks: Vec<Point3<i64>>,
 	/// The new "center" of the relevant-chunks list.
 	pub origin: Point3<i64>,
 	/// Chunks which are now relevant to this client.

@@ -78,6 +78,13 @@ impl Replicator {
 			// Server side, update the component directly
 			relevancy.update_replicated_chunks(current_chunk, &old_chunks, &new_chunks);
 
+			let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
+			old_chunks.sort_by(|a, b| {
+				let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
+				let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
+				b_dist.partial_cmp(&a_dist).unwrap()
+			});
+
 			log::debug!(
 				"update chunks: {} new, {} old",
 				new_chunks.len(),

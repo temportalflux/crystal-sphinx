@@ -32,7 +32,7 @@ impl Buffer {
 		chunk_cache: Weak<RwLock<ClientCache>>,
 	) -> Result<Self, AnyError> {
 		// TODO: Get this value from settings
-		let render_radius = 5;
+		let render_radius = 6;
 		// square diameter of the cube surrounding the player
 		let render_diameter = render_radius * 2 + 1;
 		let rendered_chunk_count = render_diameter * render_diameter * render_diameter;
