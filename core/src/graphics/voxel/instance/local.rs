@@ -3,78 +3,12 @@ use crate::{
 	graphics::voxel::{instance::Instance, model, Face},
 	world::chunk,
 };
-use engine::math::nalgebra::{Point3, Vector3};
+use engine::math::nalgebra::{Point3};
 use enumset::EnumSet;
 use std::{
 	collections::{HashMap, HashSet},
 	sync::{Arc, Weak},
 };
-
-/// Wrapper struct containing the chunk coordinate and offset within the chunk for a given block.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct BlockPoint(Point3<i64>, Point3<i8>);
-impl std::fmt::Debug for BlockPoint {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for BlockPoint {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(
-			f,
-			"<{}'{}, {}'{}, {}'{}>",
-			self.0.x, self.1.x, self.0.y, self.1.y, self.0.z, self.1.z,
-		)
-	}
-}
-impl std::ops::Add<Vector3<i8>> for BlockPoint {
-	type Output = Self;
-	fn add(mut self, other: Vector3<i8>) -> Self::Output {
-		self.1 += other;
-		self.align();
-		self
-	}
-}
-impl std::ops::Sub<BlockPoint> for BlockPoint {
-	type Output = Self;
-	fn sub(self, rhs: BlockPoint) -> Self::Output {
-		Self(self.0 - rhs.0.coords, self.1 - rhs.1.coords)
-	}
-}
-impl BlockPoint {
-	pub fn new(chunk: Point3<i64>, offset: Point3<i8>) -> Self {
-		let mut point = Self(chunk, offset);
-		point.align();
-		point
-	}
-
-	fn align(&mut self) {
-		let chunk = &mut self.0;
-		let offset = &mut self.1;
-		let size = chunk::SIZE_I;
-		for i in 0..size.len() {
-			let size = size[i] as i8;
-			if offset[i] < 0 {
-				let amount = (offset[i].abs() / size) + 1;
-				chunk[i] -= amount as i64;
-				offset[i] += amount * size;
-			}
-			if offset[i] >= size {
-				let amount = offset[i].abs() / size;
-				chunk[i] += amount as i64;
-				offset[i] -= amount * size;
-			}
-		}
-	}
-
-	fn chunk(&self) -> &Point3<i64> {
-		&self.0
-	}
-
-	fn offset(&self) -> &Point3<i8> {
-		&self.1
-	}
-}
 
 /// The description of the local block instance data in the local-memory of the program.
 /// This data is mutable between frames. When the [`instance buffer`](super::Buffer)
@@ -131,10 +65,10 @@ pub struct Category {
 	/// Instances which have at least 1 face adjacent to a non-opague block (or no block).
 	/// These instances are written to the GPU and rendered.
 	active_instances: Vec<Instance>,
-	active_points: Vec<BlockPoint>,
+	active_points: Vec<block::Point>,
 	/// Instances which have all faces disabled (because each faces is adjacent to an opague block).
 	disabled_instances: Vec<Instance>,
-	disabled_points: Vec<BlockPoint>,
+	disabled_points: Vec<block::Point>,
 }
 
 #[derive(Default)]
@@ -186,7 +120,7 @@ impl Description {
 		changed
 	}
 
-	fn get_instance_redirector(&self, point: &BlockPoint) -> Option<ChunkBlock> {
+	fn get_instance_redirector(&self, point: &block::Point) -> Option<ChunkBlock> {
 		match self.chunks.get(point.chunk()) {
 			Some(chunk_desc) => chunk_desc.blocks.get(point.offset()).cloned(),
 			None => None,
@@ -201,7 +135,7 @@ impl Description {
 		}
 	}
 
-	fn get_block_id(&self, point: &BlockPoint) -> BlockDescId {
+	fn get_block_id(&self, point: &block::Point) -> BlockDescId {
 		match self.chunks.get(point.chunk()) {
 			Some(chunk_desc) => match chunk_desc.blocks.get(point.offset()) {
 				Some(desc) => BlockDescId::Id(desc.id),
@@ -225,7 +159,7 @@ impl Description {
 
 		let mut points = HashSet::with_capacity(chunk::DIAMETER.pow(3));
 		for (point, block_id) in block_ids.iter() {
-			points.insert(BlockPoint::new(*chunk, point.cast::<i8>()));
+			points.insert(block::Point::new(*chunk, point.cast::<i8>()));
 			self.set_block_id(&chunk, &point.cast::<i8>(), Some(*block_id), false);
 		}
 		if !points.is_empty() {
@@ -241,7 +175,7 @@ impl Description {
 		update_neighbors: bool,
 	) {
 		assert!(self.chunks.contains_key(&chunk));
-		let point = BlockPoint::new(*chunk, *offset);
+		let point = block::Point::new(*chunk, *offset);
 
 		let _scope_tag = format!("{} {:?}", point, id);
 		profiling::scope!("set_block_id", _scope_tag.as_str());
@@ -308,7 +242,7 @@ impl Description {
 		let mut offsets = HashSet::with_capacity(block_count);
 		while let Some((offset, block_desc)) = self.take_first_block_in_chunk(&coord) {
 			let _instance = self.remove(&block_desc);
-			offsets.insert(BlockPoint::new(*coord, offset));
+			offsets.insert(block::Point::new(*coord, offset));
 		}
 
 		let chunk_desc = self.chunks.remove(&coord);
@@ -321,7 +255,7 @@ impl Description {
 	fn insert(
 		&mut self,
 		block_id: &block::LookupId,
-		point: BlockPoint,
+		point: block::Point,
 		instance: Instance,
 		is_active: bool,
 	) {
@@ -353,7 +287,7 @@ impl Description {
 		);
 	}
 
-	fn remove(&mut self, desc: &ChunkBlock) -> (BlockPoint, Instance) {
+	fn remove(&mut self, desc: &ChunkBlock) -> (block::Point, Instance) {
 		let category = self.categories.get_mut(&desc.id).unwrap();
 
 		let (idx, swapped_point, removed) = match desc.redirector {
@@ -374,9 +308,9 @@ impl Description {
 		// The block that was at the end of the vec is now at `idx`,
 		// so the redirector in the chunk desc's needs to be updated.
 		if let Some(swapped_point) = swapped_point {
-			let swapped_chunk = self.chunks.get_mut(&swapped_point.0);
+			let swapped_chunk = self.chunks.get_mut(&swapped_point.chunk());
 			let swapped_block = swapped_chunk
-				.map(|c| c.blocks.get_mut(&swapped_point.1))
+				.map(|c| c.blocks.get_mut(&swapped_point.offset()))
 				.flatten();
 			if let Some(swapped_block) = swapped_block {
 				*swapped_block.redirector = idx;
@@ -388,7 +322,7 @@ impl Description {
 		removed
 	}
 
-	fn update_proximity(&mut self, points: HashSet<BlockPoint>) {
+	fn update_proximity(&mut self, points: HashSet<block::Point>) {
 		profiling::scope!("update_proximity");
 
 		let model_cache = self.model_cache.upgrade().unwrap();
@@ -422,8 +356,8 @@ impl Description {
 
 	fn update_instance_flags(
 		&mut self,
-		point: BlockPoint,
-		faces: Vec<(Face, BlockPoint, BlockDescId)>,
+		point: block::Point,
+		faces: Vec<(Face, block::Point, BlockDescId)>,
 		model_cache: &Arc<model::Cache>,
 	) -> bool {
 		let mut has_changed = false;
