@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, RwLock, Weak};
 /// Controls the instance buffer data for rendering voxels.
 /// Keeps track of what chunks and blocks are old and updates the instances accordingly.
 pub struct Buffer {
-	local_description: Arc<Mutex<local::Description>>,
+	local_integrated_buffer: Arc<Mutex<local::IntegratedBuffer>>,
 	submitted_description: submitted::Description,
 	_thread_handle: Arc<()>,
 }
@@ -57,22 +57,26 @@ impl Buffer {
 
 		log::debug!("Initializing voxel instance buffer: chunk_radius={} total_chunk_count={}, buffer_size={}(bytes)", render_radius, rendered_chunk_count, instance_buffer_size);
 
-		let local_description = Arc::new(Mutex::new(local::Description::new(model_cache)));
+		let local_integrated_buffer = Arc::new(Mutex::new(local::IntegratedBuffer::new(
+			max_rendered_instances,
+			model_cache.clone(),
+		)));
 		let submitted_description =
 			submitted::Description::new(&render_chain, instance_buffer_size)?;
 
-		let _thread_handle = Self::start_thread(chunk_cache, Arc::downgrade(&local_description));
+		let _thread_handle =
+			Self::start_thread(chunk_cache, Arc::downgrade(&local_integrated_buffer));
 
 		Ok(Self {
 			_thread_handle,
-			local_description,
+			local_integrated_buffer,
 			submitted_description,
 		})
 	}
 
 	fn start_thread(
 		chunk_cache: Weak<RwLock<ClientCache>>,
-		description: Weak<Mutex<local::Description>>,
+		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> Arc<()> {
 		static LOG: &'static str = "voxel-instance-buffer";
 		let handle = Arc::new(());
@@ -166,10 +170,13 @@ impl Buffer {
 		profiling::scope!("update_voxel_instances");
 		let mut pending_gpu_signals = Vec::new();
 		let mut was_able_to_lock = false;
-		if let Ok(mut local_description) = self.local_description.try_lock() {
+		if let Ok(mut local_description) = self.local_integrated_buffer.try_lock() {
 			was_able_to_lock = true;
-			if local_description.take_has_changes() {
+
+			if let Some((changed_ranges, total_count)) = local_description.take_changed_indices() {
 				self.submitted_description.submit(
+					changed_ranges,
+					total_count,
 					&local_description,
 					&render_chain,
 					&mut pending_gpu_signals,

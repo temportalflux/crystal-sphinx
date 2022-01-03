@@ -253,18 +253,18 @@ impl RenderChainElement for RenderVoxel {
 			buffer.bind_index_buffer(&self.model_cache.index_buffer, 0);
 
 			for instances in submitted_instances.categories.iter() {
-				if instances.count < 1 {
+				let id = match instances.id {
+					Some(id) => id,
+					None => continue,
+				};
+				if instances.count() < 1 {
 					continue;
 				}
-				let (model, index_start, vertex_offset) = match self.model_cache.get(&instances.id)
-				{
+				let (model, index_start, vertex_offset) = match self.model_cache.get(&id) {
 					Some(entry) => entry,
 					None => continue,
 				};
-				let label = format!(
-					"Draw:Voxel({})",
-					block::Lookup::lookup_id(instances.id).unwrap()
-				);
+				let label = format!("Draw:Voxel({})", block::Lookup::lookup_id(id).unwrap());
 				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
 
 				// Bind the texture-atlas and camera descriptors
@@ -285,8 +285,8 @@ impl RenderChainElement for RenderVoxel {
 				buffer.draw(
 					model.index_count(),
 					*index_start,
-					instances.count,
-					instances.start,
+					instances.count(),
+					instances.start(),
 					*vertex_offset,
 				);
 

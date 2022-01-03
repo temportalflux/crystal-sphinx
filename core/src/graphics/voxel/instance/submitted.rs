@@ -1,7 +1,4 @@
-use crate::{
-	block,
-	graphics::voxel::instance::{local::Description as LocalDescription, Instance},
-};
+use crate::graphics::voxel::instance::{local::IntegratedBuffer, Category, Instance};
 use engine::{
 	graphics::{self, buffer::Buffer, command, flags, utility::NamedObject, RenderChain},
 	task::{self, ScheduledTask},
@@ -12,12 +9,6 @@ use std::sync::Arc;
 pub struct Description {
 	pub(crate) categories: Vec<Category>,
 	pub(crate) buffer: Arc<Buffer>,
-}
-
-pub struct Category {
-	pub(crate) id: block::LookupId,
-	pub(crate) start: usize,
-	pub(crate) count: usize,
 }
 
 impl Description {
@@ -38,40 +29,54 @@ impl Description {
 
 	pub fn submit(
 		&mut self,
-		local: &LocalDescription,
+		changed_ranges: Vec<std::ops::Range<usize>>,
+		total_count: usize,
+		local: &IntegratedBuffer,
 		render_chain: &RenderChain,
 		pending_gpu_signals: &mut Vec<Arc<command::Semaphore>>,
 	) -> VoidResult {
 		self.categories.clear();
 
-		let mut all_instances: Vec<Instance> = Vec::new();
-		{
-			profiling::scope!("gather-instances");
-			for id in LocalDescription::ordered_ids() {
-				let mut id_instances = local.get_instances(&id).clone();
-				self.categories.push(Category {
-					id,
-					start: all_instances.len(),
-					count: id_instances.len(),
-				});
-				all_instances.append(&mut id_instances);
-			}
-		}
+		let mut ranges = Vec::with_capacity(changed_ranges.len());
+		let instance_size = std::mem::size_of::<Instance>();
 
-		// If there are no blocks at all, thats ok, we dont have to write anything.
-		// The metadata will prevent anything from being rendered.
-		if !all_instances.is_empty() {
-			graphics::TaskGpuCopy::new(
+		let mut task = {
+			profiling::scope!("prepare-task");
+			let mut task = graphics::TaskGpuCopy::new(
 				self.buffer.wrap_name(|v| format!("Write({})", v)),
 				&render_chain,
 			)?
-			.begin()?
-			.stage(&all_instances[..])?
-			.copy_stage_to_buffer(&self.buffer)
-			.end()?
-			.add_signal_to(pending_gpu_signals)
-			.send_to(task::sender());
+			.begin()?;
+			task.stage_start(total_count * instance_size)?;
+			task
+		};
+
+		{
+			profiling::scope!("gather-instances");
+			let mut staging_memory = task.staging_memory()?;
+			let mut staging_offset;
+			for range in changed_ranges.into_iter() {
+				let instance_offset = range.start;
+				let instance_count = range.end - range.start;
+				staging_offset = staging_memory.amount_written();
+				staging_memory.write_slice(&local.instances()[range])?;
+				ranges.push(command::CopyBufferRange {
+					start_in_src: staging_offset,
+					start_in_dst: instance_offset * instance_size,
+					size: instance_count * instance_size,
+				});
+			}
 		}
+
+		{
+			profiling::scope!("run-task");
+			task.copy_stage_to_buffer_ranges(&self.buffer, ranges)
+				.end()?
+				.add_signal_to(pending_gpu_signals)
+				.send_to(task::sender());
+		}
+
+		self.categories = local.get_categories().clone();
 
 		Ok(())
 	}

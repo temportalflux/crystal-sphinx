@@ -1,148 +1,199 @@
 use crate::{
 	block,
-	graphics::voxel::{instance::Instance, model, Face},
-	world::chunk,
+	graphics::voxel::{
+		instance::{Category, Instance},
+		model, Face,
+	},
 };
-use engine::math::nalgebra::{Point3};
+use engine::math::nalgebra::Point3;
 use enumset::EnumSet;
 use std::{
 	collections::{HashMap, HashSet},
 	sync::{Arc, Weak},
 };
 
-/// The description of the local block instance data in the local-memory of the program.
-/// This data is mutable between frames. When the [`instance buffer`](super::Buffer)
-/// copies instance data to the GPU buffer, this description is copied to the [`submitted description`](super::SubmittedDescription).
-pub struct Description {
-	// NOTES:
-	// - Each block-id should have a continugous section of the data written to buffer such that it has a start index and a count.
-	// - There are going to be instances for each block-id which have NO FACES to render,
-	//   these should just not be copied to the instance buffer at all (to save on space).
-	// IMPROVEMENTS:
-	// - There is a world in which we use strategic swapping of elements to reduce the amount of bytes written on change.
-	//   Whenever an instances changes from one type to another (or to empty or completely hidden), it would be shuffled along the
-	//   instances vec and the start indicies of each categoryy would be updated.
-	//   For the sake of getting the system up and running though, thats an optimization that can be figured out at a later time.
-	model_cache: Weak<model::Cache>,
-	categories: HashMap<block::LookupId, Category>,
-	chunks: HashMap<Point3<i64>, ChunkDesc>,
-	has_changes: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum InstanceReference {
-	Active(usize),
-	Disabled(usize),
-}
-impl InstanceReference {
-	fn is_active(&self) -> bool {
-		match self {
-			Self::Active(_) => true,
-			Self::Disabled(_) => false,
-		}
-	}
-}
-impl std::ops::Deref for InstanceReference {
-	type Target = usize;
-	fn deref(&self) -> &Self::Target {
-		match &self {
-			Self::Active(idx) => idx,
-			Self::Disabled(idx) => idx,
-		}
-	}
-}
-impl std::ops::DerefMut for InstanceReference {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		match self {
-			Self::Active(idx) => idx,
-			Self::Disabled(idx) => idx,
-		}
-	}
-}
-
-#[derive(Default)]
-pub struct Category {
-	/// Instances which have at least 1 face adjacent to a non-opague block (or no block).
-	/// These instances are written to the GPU and rendered.
-	active_instances: Vec<Instance>,
-	active_points: Vec<block::Point>,
-	/// Instances which have all faces disabled (because each faces is adjacent to an opague block).
-	disabled_instances: Vec<Instance>,
-	disabled_points: Vec<block::Point>,
-}
-
-#[derive(Default)]
-struct ChunkDesc {
-	/// Lookup instance index by block offset point.
-	blocks: HashMap<Point3<i8>, ChunkBlock>,
-}
-
-#[derive(Clone, Debug)]
-struct ChunkBlock {
-	id: block::LookupId,
-	redirector: InstanceReference,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum BlockDescId {
-	ChunkNotLoaded,
-	Empty,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum CategoryKey {
+	/// A category for a specific block-type.
 	Id(block::LookupId),
+	/// A unique category full of garbage data.
+	/// Holds the segment from which new voxel instances are allocated from.
+	Unallocated,
 }
 
-impl Description {
-	pub fn new(model_cache: Weak<model::Cache>) -> Self {
-		let mut categories = HashMap::new();
-		for id in Self::ordered_ids() {
-			categories.insert(id, Category::default());
+impl CategoryKey {
+	/// Determines the order of segments that need to be traversed in order to move an instance from `start` to `destination`.
+	/// If `start == destination`, the returned path will be None, otherwise the resulting path
+	/// will always contain `start` as the first value and `destingation` as the last value.
+	fn new_path(start: Self, destination: Self, max_id: block::LookupId) -> Option<Vec<Self>> {
+		use std::cmp::Ordering;
+		if start == destination {
+			return None;
 		}
+		let mut path = Vec::new();
+		let mut prev_key = start;
+		let mut next_key;
+		path.push(start);
+		while prev_key != destination {
+			next_key = match prev_key {
+				Self::Unallocated => Self::Id(max_id),
+				Self::Id(prev_id) => match prev_key.cmp(&destination) {
+					Ordering::Less => {
+						if prev_id < max_id {
+							Self::Id(prev_id + 1)
+						} else {
+							Self::Unallocated
+						}
+					}
+					Ordering::Greater => Self::Id(prev_id - 1),
+					Ordering::Equal => unimplemented!(),
+				},
+			};
+			path.push(next_key);
+			prev_key = next_key;
+		}
+		Some(path)
+	}
+}
+
+#[cfg(test)]
+mod category_key {
+	use super::*;
+
+	#[test]
+	fn new_path_unallocated_to_unallocated() {
+		let start = CategoryKey::Unallocated;
+		let destination = CategoryKey::Unallocated;
+		assert_eq!(CategoryKey::new_path(start, destination, 0), None);
+	}
+
+	#[test]
+	fn new_path_insert() {
+		let start = CategoryKey::Unallocated;
+		let destination = CategoryKey::Id(3);
+		let max_id = 5;
+		assert_eq!(
+			CategoryKey::new_path(start, destination, max_id),
+			Some(vec![
+				CategoryKey::Unallocated,
+				CategoryKey::Id(5),
+				CategoryKey::Id(4),
+				CategoryKey::Id(3),
+			])
+		);
+	}
+
+	#[test]
+	fn new_path_remove() {
+		let start = CategoryKey::Id(2);
+		let destination = CategoryKey::Unallocated;
+		let max_id = 6;
+		assert_eq!(
+			CategoryKey::new_path(start, destination, max_id),
+			Some(vec![
+				CategoryKey::Id(2),
+				CategoryKey::Id(3),
+				CategoryKey::Id(4),
+				CategoryKey::Id(5),
+				CategoryKey::Id(6),
+				CategoryKey::Unallocated,
+			])
+		);
+	}
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+enum IdPhase {
+	Active,
+	Inactive,
+}
+
+pub struct IntegratedBuffer {
+	model_cache: Weak<model::Cache>,
+	/// The ordered list of all instances in the buffer.
+	/// Some of these may be garbage data.
+	/// USe `category_keys` and `categories` to determine which instances belong to which category.
+	instances: Vec<Instance>,
+	block_type_count: block::LookupId,
+	/// The ordered list of categories, which determine what block-type each item in `instances` is.
+	categories: Vec<Category>,
+	/// Mapping of block::Point to the block-type it is.
+	/// If it is not in this mapping, the point is either empty (air), or exists in `inactive_instances` as a block without rendered faces.
+	active_points: HashMap<Point3<i64>, HashMap<Point3<i8>, (block::LookupId, usize)>>,
+	/// Mapping of block::Point to its instance, if the point cannot render any faces.
+	/// Does not include points which are empty (air).
+	inactive_points: HashMap<Point3<i64>, HashMap<Point3<i8>, (block::LookupId, Instance)>>,
+	changed_indices: HashSet<usize>,
+}
+
+impl IntegratedBuffer {
+	pub fn new(instance_capacity: usize, model_cache: Weak<model::Cache>) -> Self {
+		let block_type_count = block::Lookup::get().unwrap().count();
+		let categories = Self::create_categories(block_type_count, instance_capacity);
+		let instances = vec![Instance::default(); instance_capacity];
 		Self {
 			model_cache,
+			instances,
+			block_type_count,
 			categories,
-			chunks: HashMap::new(),
-			has_changes: false,
+			active_points: HashMap::new(),
+			inactive_points: HashMap::new(),
+			changed_indices: HashSet::new(),
 		}
 	}
 
-	/// Mapping of [`lookup id`](block::LookupId) to the asset id of the block.
-	/// The instances follow this order when writing instances to the submitted description.
-	pub(crate) fn ordered_ids() -> std::ops::Range<usize> {
-		0..block::Lookup::get().unwrap().count()
-	}
-
-	pub fn get_instances(&self, id: &block::LookupId) -> &Vec<Instance> {
-		&self.categories.get(&id).unwrap().active_instances
-	}
-
-	pub fn take_has_changes(&mut self) -> bool {
-		let changed = self.has_changes;
-		self.has_changes = false;
-		changed
-	}
-
-	fn get_instance_redirector(&self, point: &block::Point) -> Option<ChunkBlock> {
-		match self.chunks.get(point.chunk()) {
-			Some(chunk_desc) => chunk_desc.blocks.get(point.offset()).cloned(),
-			None => None,
+	fn create_categories(
+		block_type_count: block::LookupId,
+		instance_capacity: usize,
+	) -> Vec<Category> {
+		let mut values = Vec::with_capacity(block_type_count + 1);
+		for id in 0..block_type_count {
+			values.push(Category::new(Some(id), 0));
 		}
+		values.push(Category::new(None, instance_capacity));
+		values
+	}
+}
+
+impl IntegratedBuffer {
+	pub fn take_changed_indices(&mut self) -> Option<(Vec<std::ops::Range<usize>>, usize)> {
+		if self.changed_indices.is_empty() {
+			return None;
+		}
+		profiling::scope!("take_changed_indices");
+		let mut indices = self.changed_indices.drain().collect::<Vec<_>>();
+		indices.sort();
+
+		let total_count = indices.len();
+		let mut ranges = Vec::new();
+		let mut range: Option<std::ops::Range<usize>> = None;
+		for i in indices.into_iter() {
+			if let Some(range) = &mut range {
+				if i == range.end {
+					range.end += 1;
+					continue;
+				}
+			}
+			if let Some(range) = range {
+				ranges.push(range);
+			}
+			range = Some(std::ops::Range {
+				start: i,
+				end: i + 1,
+			});
+		}
+		if let Some(range) = range {
+			ranges.push(range);
+		}
+		Some((ranges, total_count))
 	}
 
-	fn get_instance_mut(&mut self, block_desc: &ChunkBlock) -> Option<&mut Instance> {
-		let category = self.categories.get_mut(&block_desc.id).unwrap();
-		match block_desc.redirector {
-			InstanceReference::Active(idx) => category.active_instances.get_mut(idx),
-			InstanceReference::Disabled(idx) => category.disabled_instances.get_mut(idx),
-		}
+	pub fn instances(&self) -> &Vec<Instance> {
+		&self.instances
 	}
 
-	fn get_block_id(&self, point: &block::Point) -> BlockDescId {
-		match self.chunks.get(point.chunk()) {
-			Some(chunk_desc) => match chunk_desc.blocks.get(point.offset()) {
-				Some(desc) => BlockDescId::Id(desc.id),
-				None => BlockDescId::Empty,
-			},
-			None => BlockDescId::ChunkNotLoaded,
-		}
+	pub fn get_categories(&self) -> &Vec<Category> {
+		&self.categories
 	}
 
 	pub fn insert_chunk(
@@ -155,251 +206,396 @@ impl Description {
 			&format!("<{}, {}, {}>", chunk.x, chunk.y, chunk.z)
 		);
 
-		self.chunks.insert(*chunk, ChunkDesc::default());
-
-		let mut points = HashSet::with_capacity(chunk::DIAMETER.pow(3));
+		let mut points = HashSet::with_capacity(block_ids.len());
 		for (point, block_id) in block_ids.iter() {
-			points.insert(block::Point::new(*chunk, point.cast::<i8>()));
-			self.set_block_id(&chunk, &point.cast::<i8>(), Some(*block_id), false);
+			let point = block::Point::new(*chunk, point.cast::<i8>());
+			self.insert_inactive(&point, *block_id, Instance::from(&point, EnumSet::empty()));
+			points.insert(point);
 		}
-		if !points.is_empty() {
-			self.update_proximity(points);
-		}
+		self.update_faces(points);
 	}
 
-	pub fn set_block_id(
-		&mut self,
-		chunk: &Point3<i64>,
-		offset: &Point3<i8>,
-		id: Option<block::LookupId>,
-		update_neighbors: bool,
-	) {
-		assert!(self.chunks.contains_key(&chunk));
-		let point = block::Point::new(*chunk, *offset);
-
-		let _scope_tag = format!("{} {:?}", point, id);
-		profiling::scope!("set_block_id", _scope_tag.as_str());
-
-		// Early returns if the desired change is a no-op,
-		// otherwise returns the remove block description (if it exists).
-		// Will be none if there was no block at that coordinate.
-		let removed_block_desc = {
-			let chunk_desc = self.chunks.get_mut(&chunk).unwrap();
-
-			// If the current block id of the instance at the point is already the desired id, then this function is a NO-OP.
-			match (chunk_desc.blocks.get(&offset), id.as_ref()) {
-				(Some(ChunkBlock { id, .. }), Some(desired_id)) if desired_id == id => return,
-				(None, None) => return,
-				// Resulting options:
-				// None -> Some(x): air becoming block
-				// Some(x) -> None: block becoming air
-				// Some(x) -> Some(y): block replacement
-				_ => {}
+	pub fn remove_chunk(&mut self, coord: &Point3<i64>) {
+		if let Some(active_points) = self.active_points.get(&coord).cloned() {
+			for (point_offset, (block_id, _instance_idx)) in active_points.into_iter() {
+				self.remove(&block::Point::new(*coord, point_offset), block_id);
 			}
+			assert_eq!(self.active_points.get(&coord).unwrap().len(), 0);
+		}
 
-			chunk_desc.blocks.remove(&offset)
-		};
+		let _ = self.active_points.remove(&coord);
+		let _ = self.inactive_points.remove(&coord);
+	}
 
-		let (point, instance) = if let Some(block_desc) = removed_block_desc {
-			self.remove(&block_desc)
-		} else {
-			(point, Instance::from(&chunk, &offset))
-		};
+	pub fn set_id_for(&mut self, point: &block::Point, id: Option<block::LookupId>) {
+		match self.get_block_id(&point) {
+			Some((_phase, prev_block_id)) => match id {
+				Some(next_block_id) => {
+					self.change_id(&point, prev_block_id, next_block_id);
+				}
+				None => {
+					self.remove(&point, prev_block_id);
+				}
+			},
+			None => {
+				if let Some(id) = id {
+					self.insert(&point, id);
+				}
+			}
+		}
+	}
+}
 
-		let block_id = match id {
-			// Block is being removed, we can return now and drop the instance.
-			None => return,
-			Some(id) => id,
-		};
-		self.insert(&block_id, point, instance, true);
+impl IntegratedBuffer {
+	fn max_block_id(&self) -> block::LookupId {
+		self.block_type_count - 1
+	}
 
-		if update_neighbors {
-			self.update_proximity(HashSet::from([point]));
+	fn get_category_idx(&self, key: CategoryKey) -> usize {
+		match key {
+			CategoryKey::Id(block_id) => block_id,
+			CategoryKey::Unallocated => self.block_type_count,
 		}
 	}
 
-	fn take_first_block_in_chunk(
+	fn get_category(&self, key: CategoryKey) -> &Category {
+		let idx = self.get_category_idx(key);
+		&self.categories[idx]
+	}
+
+	fn get_category_mut(&mut self, key: CategoryKey) -> &mut Category {
+		let idx = self.get_category_idx(key);
+		&mut self.categories[idx]
+	}
+
+	fn insert(&mut self, point: &block::Point, next_id: block::LookupId) {
+		self.insert_inactive(&point, next_id, Instance::from(&point, EnumSet::empty()));
+		self.update_faces(HashSet::from([*point]));
+	}
+
+	fn change_id(
 		&mut self,
-		coord: &Point3<i64>,
-	) -> Option<(Point3<i8>, ChunkBlock)> {
-		if let Some(chunk_desc) = self.chunks.get_mut(&coord) {
-			if let Some(offset) = chunk_desc.blocks.keys().next().cloned() {
-				return chunk_desc.blocks.remove(&offset).map(|desc| (offset, desc));
+		point: &block::Point,
+		prev_id: block::LookupId,
+		next_id: block::LookupId,
+	) {
+		self.change_category(&point, CategoryKey::Id(prev_id), CategoryKey::Id(next_id));
+	}
+
+	/// Deallocates the instance data and removes all reference to the point from the metadata (active AND inactive).
+	fn remove(&mut self, point: &block::Point, prev_id: block::LookupId) {
+		if let Some(idx) =
+			self.change_category(&point, CategoryKey::Id(prev_id), CategoryKey::Unallocated)
+		{
+			self.instances[idx] = Instance::default();
+		}
+	}
+
+	fn insert_inactive(&mut self, point: &block::Point, id: block::LookupId, instance: Instance) {
+		if !self.inactive_points.contains_key(point.chunk()) {
+			self.inactive_points.insert(*point.chunk(), HashMap::new());
+		}
+		let inactive_chunk_points = self.inactive_points.get_mut(point.chunk()).unwrap();
+		inactive_chunk_points.insert(*point.offset(), (id, instance));
+	}
+
+	fn get_block_id(&self, point: &block::Point) -> Option<(IdPhase, block::LookupId)> {
+		if let Some(chunk_points) = self.inactive_points.get(&point.chunk()) {
+			if let Some((id, _instance)) = chunk_points.get(&point.offset()) {
+				return Some((IdPhase::Inactive, *id));
+			}
+		}
+		if let Some(chunk_points) = self.active_points.get(&point.chunk()) {
+			if let Some((id, _instance_idx)) = chunk_points.get(&point.offset()) {
+				return Some((IdPhase::Active, *id));
 			}
 		}
 		None
 	}
 
-	pub fn remove_chunk(&mut self, coord: &Point3<i64>) {
-		let _scope_tag = format!("<{}, {}, {}>", coord.x, coord.y, coord.z);
-		profiling::scope!("remove_chunk", _scope_tag.as_str());
-
-		let block_count = match self.chunks.get(&coord) {
-			Some(chunk_desc) => chunk_desc.blocks.len(),
-			None => return,
-		};
-
-		let mut offsets = HashSet::with_capacity(block_count);
-		while let Some((offset, block_desc)) = self.take_first_block_in_chunk(&coord) {
-			let _instance = self.remove(&block_desc);
-			offsets.insert(block::Point::new(*coord, offset));
-		}
-
-		let chunk_desc = self.chunks.remove(&coord);
-		assert!(chunk_desc.is_some());
-		assert!(chunk_desc.unwrap().blocks.is_empty());
-
-		self.update_proximity(offsets);
-	}
-
-	fn insert(
+	fn change_category(
 		&mut self,
-		block_id: &block::LookupId,
-		point: block::Point,
-		instance: Instance,
-		is_active: bool,
-	) {
-		let category = self.categories.get_mut(&block_id).unwrap();
-		self.has_changes = true;
-
-		let redirector = match is_active {
-			true => {
-				let idx = category.active_instances.len();
-				category.active_instances.push(instance);
-				category.active_points.push(point);
-				InstanceReference::Active(idx)
-			}
-			false => {
-				let idx = category.disabled_instances.len();
-				category.disabled_instances.push(instance);
-				category.disabled_points.push(point);
-				InstanceReference::Disabled(idx)
-			}
+		point: &block::Point,
+		start: CategoryKey,
+		destination: CategoryKey,
+	) -> Option<usize> {
+		use std::cmp::Ordering;
+		let path = match CategoryKey::new_path(start, destination, self.max_block_id()) {
+			Some(path) => path,
+			None => return None,
 		};
-
-		let chunk_desc = self.chunks.get_mut(point.chunk()).unwrap();
-		chunk_desc.blocks.insert(
-			point.offset().clone(),
-			ChunkBlock {
-				id: *block_id,
-				redirector,
+		let direction = destination.cmp(&start);
+		let mut instance_idx = match start {
+			CategoryKey::Unallocated => self.get_category(start).start(),
+			_ => match self.active_points.get_mut(&point.chunk()) {
+				Some(chunk_points) => match chunk_points.remove(&point.offset()) {
+					Some((_id, instance_idx)) => instance_idx,
+					None => return None,
+				},
+				None => return None,
 			},
-		);
-	}
-
-	fn remove(&mut self, desc: &ChunkBlock) -> (block::Point, Instance) {
-		let category = self.categories.get_mut(&desc.id).unwrap();
-
-		let (idx, swapped_point, removed) = match desc.redirector {
-			InstanceReference::Active(idx) => {
-				let swapped_point = category.active_points.last().cloned();
-				let removed_point = category.active_points.swap_remove(idx);
-				let removed_instance = category.active_instances.swap_remove(idx);
-				(idx, swapped_point, (removed_point, removed_instance))
-			}
-			InstanceReference::Disabled(idx) => {
-				let swapped_point = category.disabled_points.last().cloned();
-				let removed_point = category.disabled_points.swap_remove(idx);
-				let removed_instance = category.disabled_instances.swap_remove(idx);
-				(idx, swapped_point, (removed_point, removed_instance))
-			}
 		};
+		let mut prev_key = start;
+		for key in path.into_iter() {
+			// The first item in the path is always the starting category.
+			if key == start {
+				assert!(self.get_category(key).count() > 0);
+				match direction {
+					// The destination is "less than"/"to the left of" the start category,
+					// so first we move the instance to the start of our current category.
+					Ordering::Less => {
+						let mut target_idx = self.get_category(key).start();
+						self.swap_instances(&mut instance_idx, &mut target_idx);
+					}
+					// The destination is "more than"/"to the right of" the start category,
+					// so first we move the instance to the end of our current category.
+					Ordering::Greater => {
+						let mut target_idx = self.get_category(key).last();
+						self.swap_instances(&mut instance_idx, &mut target_idx);
+					}
+					_ => unimplemented!(),
+				}
+			}
+			// We are somewhere in the middle of the path
+			else if key != destination {
+				// The item is either at the start or end of the previous category. We should shrink the previous
+				// category and expand our category such that the item at `instance_idx` is now in the next category over.
+				match direction {
+					Ordering::Less => {
+						// Move the item into the current category (its index in the instance list does not change).
+						self.get_category_mut(prev_key).shrink_right();
+						self.get_category_mut(key).expand_right();
+						// Now swap it to the start of the category because we have at least 1 more transition ahead
+						let mut target_idx = self.get_category(key).start();
+						self.swap_instances(&mut instance_idx, &mut target_idx);
+					}
+					Ordering::Greater => {
+						// Move the item into the current category (its index in the instance list does not change).
+						self.get_category_mut(prev_key).shrink_left();
+						self.get_category_mut(key).expand_left();
+						// Now swap it to the start of the category because we have at least 1 more transition ahead
+						let mut target_idx = self.get_category(key).last();
+						self.swap_instances(&mut instance_idx, &mut target_idx);
+					}
+					_ => unimplemented!(),
+				}
+			}
+			// The last item in the path is always the destination category
+			else {
+				match direction {
+					Ordering::Less => {
+						// Move the item into the current category (its index in the instance list does not change).
+						self.get_category_mut(prev_key).shrink_right();
+						self.get_category_mut(key).expand_right();
+					}
+					Ordering::Greater => {
+						// Move the item into the current category (its index in the instance list does not change).
+						self.get_category_mut(prev_key).shrink_left();
+						self.get_category_mut(key).expand_left();
+					}
+					_ => unimplemented!(),
+				}
+			}
+			prev_key = key;
+		}
 
-		// The block that was at the end of the vec is now at `idx`,
-		// so the redirector in the chunk desc's needs to be updated.
-		if let Some(swapped_point) = swapped_point {
-			let swapped_chunk = self.chunks.get_mut(&swapped_point.chunk());
-			let swapped_block = swapped_chunk
-				.map(|c| c.blocks.get_mut(&swapped_point.offset()))
-				.flatten();
-			if let Some(swapped_block) = swapped_block {
-				*swapped_block.redirector = idx;
+		if let CategoryKey::Id(block_id) = destination {
+			if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
+				let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
 			}
 		}
 
-		self.has_changes = true;
-
-		removed
+		Some(instance_idx)
 	}
 
-	fn update_proximity(&mut self, points: HashSet<block::Point>) {
-		profiling::scope!("update_proximity");
+	fn swap_instances(&mut self, a: &mut usize, b: &mut usize) {
+		if *a == *b {
+			return;
+		}
+		// Swap the instance data
+		self.instances.swap(*a, *b);
+		self.changed_indices.insert(*a);
+		self.changed_indices.insert(*b);
+		// Swap the actual indices provided
+		std::mem::swap(a, b);
+	}
 
+	fn get_instance_mut(
+		&mut self,
+		point: &block::Point,
+		phase: IdPhase,
+	) -> Option<(Option<usize>, &mut Instance)> {
+		match phase {
+			IdPhase::Active => match self.active_points.get_mut(&point.chunk()) {
+				Some(chunk_points) => match chunk_points.get_mut(&point.offset()) {
+					Some((_id, instance_idx)) => match self.instances.get_mut(*instance_idx) {
+						Some(instance) => Some((Some(*instance_idx), instance)),
+						None => None,
+					},
+					None => None,
+				},
+				None => None,
+			},
+			IdPhase::Inactive => match self.inactive_points.get_mut(&point.chunk()) {
+				Some(chunk_points) => match chunk_points.get_mut(&point.offset()) {
+					Some((_id, instance)) => Some((None, instance)),
+					None => None,
+				},
+				None => None,
+			},
+		}
+	}
+
+	#[profiling::function]
+	fn update_faces(&mut self, points: HashSet<block::Point>) {
 		let model_cache = self.model_cache.upgrade().unwrap();
 
 		let all_faces = EnumSet::<Face>::all();
-		for &point1 in points.iter() {
-			profiling::scope!("update-faces", &format!("{}", point1));
-			let point1_id = self.get_block_id(&point1);
+		// For each point in the set, check all of its faces (and update its neighbor if necessary)
+		for &primary_point in points.iter() {
+			profiling::scope!("update-faces", &format!("{}", primary_point));
+
+			// Get the category for this primary point
+			let primary_point_id = self.get_block_id(&primary_point);
+
+			// Gather the block-type of each voxel on a given face of the point
 			let mut face_ids = Vec::with_capacity(all_faces.len());
-			for point1_face in all_faces.iter() {
-				profiling::scope!("face", &format!("{}", point1_face));
-				let point2 = point1 + point1_face.direction();
-				let point2_id = self.get_block_id(&point2);
-				face_ids.push((point1_face, point2, point2_id));
-				if !points.contains(&point2) {
-					let point2_face = point1_face.inverse();
-					if self.update_instance_flags(
-						point2,
-						vec![(point2_face, point1, point1_id)],
-						&model_cache,
-					) {
-						self.has_changes = true;
+			for primary_point_face in all_faces.iter() {
+				profiling::scope!("face", &format!("{}", primary_point_face));
+				// Get the block::Point of the block on that face of the primary point
+				let secondary_point = primary_point + primary_point_face.direction();
+				// And get the block-type of that adjacent point
+				let secondary_point_id = self.get_block_id(&secondary_point);
+				// Save off the adjacent block information
+				face_ids.push((primary_point_face, secondary_point, secondary_point_id));
+				// The secondary point could be empty (air). If it is, then it doesnt have a block-id.
+				if let Some(secondary_point_id) = secondary_point_id {
+					// If the adjacent point is not a primary point, the face that
+					// is adjacent to the primary point should also be updated.
+					// If it IS a primary point, it has either already been
+					// visited or will be visited shortly.
+					if !points.contains(&secondary_point) {
+						let secondary_point_face = primary_point_face.inverse();
+						self.recalculate_faces(
+							secondary_point,
+							secondary_point_id,
+							vec![(secondary_point_face, primary_point, primary_point_id)],
+							&model_cache,
+						);
 					}
 				}
 			}
-			if self.update_instance_flags(point1, face_ids, &model_cache) {
-				self.has_changes = true;
+			// Update the faces for this primary point
+			if let Some(primary_point_id) = primary_point_id {
+				self.recalculate_faces(primary_point, primary_point_id, face_ids, &model_cache);
 			}
 		}
 	}
 
-	fn update_instance_flags(
+	fn recalculate_faces(
 		&mut self,
 		point: block::Point,
-		faces: Vec<(Face, block::Point, BlockDescId)>,
+		id: (IdPhase, block::LookupId),
+		faces: Vec<(Face, block::Point, Option<(IdPhase, block::LookupId)>)>,
 		model_cache: &Arc<model::Cache>,
-	) -> bool {
-		let mut has_changed = false;
-		if let Some(block_desc) = self.get_instance_redirector(&point) {
-			profiling::scope!("update_instance_flags", &format!("{}", point));
-			let should_be_enabled = match self.get_instance_mut(&block_desc) {
-				Some(instance) => {
-					let mut point_faces = instance.faces();
-					for (face, _, desc_id) in faces.into_iter() {
-						let face_is_enabled = match desc_id {
-							// If the point being processed isn't loaded, then it was
-							// some point adjacent to the original given list
-							// that we dont care about right now.
-							BlockDescId::ChunkNotLoaded => true,
-							// Block doesnt exist at this point, its air/empty.
-							BlockDescId::Empty => true,
-							BlockDescId::Id(id) => match model_cache.get(&id) {
-								Some((model, _, _)) => !model.is_opaque(),
-								None => true,
-							},
-						};
+	) {
+		profiling::scope!(
+			"recalculate_faces",
+			&format!("point:{} face-count:{}", point, faces.len())
+		);
 
-						if face_is_enabled {
-							point_faces.insert(face);
-						} else {
-							point_faces.remove(face);
-						}
-					}
-					if instance.faces() != point_faces {
-						has_changed = true;
-						instance.set_faces(point_faces);
-					}
-					!point_faces.is_empty()
+		let mut desired_phase = id.0;
+		if let Some((idx, instance)) = self.get_instance_mut(&point, id.0) {
+			let mut point_faces = instance.faces();
+			for (face, _adj_point, block_id) in faces.into_iter() {
+				let face_is_enabled = match block_id {
+					// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
+					None => true,
+					Some((_phase, id)) => match model_cache.get(&id) {
+						// Found a model, can base face visibility based on if the model is fully-opaque
+						Some((model, _, _)) => !model.is_opaque(),
+						// No model matches the id... x_x
+						None => true,
+					},
+				};
+
+				if face_is_enabled {
+					point_faces.insert(face);
+				} else {
+					point_faces.remove(face);
 				}
-				None => false,
-			};
-			if block_desc.redirector.is_active() != should_be_enabled {
-				let (point, instance) = self.remove(&block_desc);
-				self.insert(&block_desc.id, point, instance, should_be_enabled);
-				has_changed = true;
 			}
+			if instance.faces() != point_faces {
+				instance.set_faces(point_faces);
+				if let Some(idx) = idx {
+					self.changed_indices.insert(idx);
+				}
+			}
+
+			// The desired phase of the instance is based on
+			// if there are any faces that should be rendered.
+			desired_phase = if point_faces.is_empty() {
+				IdPhase::Inactive
+			} else {
+				IdPhase::Active
+			};
 		}
-		has_changed
+
+		// If it is currently active and no longer has faces to render or vice versa,
+		// we need to move it to the correct phase.
+		if desired_phase != id.0 {
+			self.change_phase(&point, id.0, desired_phase);
+		}
+	}
+
+	fn change_phase(&mut self, point: &block::Point, prev: IdPhase, next: IdPhase) {
+		profiling::scope!("change_phase", &format!("{} {:?}->{:?}", point, prev, next));
+		match (prev, next) {
+			// Deactivating a block, time to remove it from the buffered data.
+			(IdPhase::Active, IdPhase::Inactive) => {
+				let (id, instance_idx) = match self.active_points.get_mut(&point.chunk()) {
+					Some(chunk_points) => match chunk_points.remove(&point.offset()) {
+						Some((id, instance_idx)) => (id, instance_idx),
+						None => return,
+					},
+					None => return,
+				};
+				// Clone the instance out of the buffered data
+				let instance = self.instances.get(instance_idx).unwrap().clone();
+
+				// Move the instance data to the unallocated section
+				self.remove(&point, id);
+
+				// Insert the point and instance into the inactive thunk
+				if !self.inactive_points.contains_key(&point.chunk()) {
+					self.inactive_points.insert(*point.chunk(), HashMap::new());
+				}
+				if let Some(chunk_points) = self.inactive_points.get_mut(&point.chunk()) {
+					chunk_points.insert(*point.offset(), (id, instance));
+				}
+			}
+			(IdPhase::Inactive, IdPhase::Active) => {
+				// The voxel should be rendered! (at least 1 face).
+				// Extract from inactive thunk
+				let (id, instance) = match self.inactive_points.get_mut(&point.chunk()) {
+					Some(chunk_points) => match chunk_points.remove(&point.offset()) {
+						Some((id, instance)) => (id, instance),
+						None => return,
+					},
+					None => return,
+				};
+
+				let instance_idx = self
+					.change_category(&point, CategoryKey::Unallocated, CategoryKey::Id(id))
+					.unwrap();
+				match self.instances.get_mut(instance_idx) {
+					Some(target) => {
+						*target = instance;
+					}
+					None => return,
+				}
+			}
+			_ => unimplemented!(),
+		}
 	}
 }
