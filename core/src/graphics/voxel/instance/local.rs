@@ -160,30 +160,38 @@ impl IntegratedBuffer {
 		if self.changed_indices.is_empty() {
 			return None;
 		}
-		profiling::scope!("take_changed_indices");
-		let mut indices = self.changed_indices.drain().collect::<Vec<_>>();
-		indices.sort();
+		profiling::scope!("take_changed_indices", &format!("{} indices changed", self.changed_indices.len()));
+
+		let indices = {
+			profiling::scope!("take-and-sort");
+			let mut indices = self.changed_indices.drain().collect::<Vec<_>>();
+			indices.sort();
+			indices
+		};
 
 		let total_count = indices.len();
 		let mut ranges = Vec::new();
-		let mut range: Option<std::ops::Range<usize>> = None;
-		for i in indices.into_iter() {
-			if let Some(range) = &mut range {
-				if i == range.end {
-					range.end += 1;
-					continue;
+		{
+			profiling::scope!("fold-ranges");
+			let mut range: Option<std::ops::Range<usize>> = None;
+			for (_i, instance_idx) in indices.into_iter().enumerate() {
+				if let Some(range) = &mut range {
+					if instance_idx == range.end {
+						range.end += 1;
+						continue;
+					}
 				}
+				if let Some(range) = range {
+					ranges.push(range);
+				}
+				range = Some(std::ops::Range {
+					start: instance_idx,
+					end: instance_idx + 1,
+				});
 			}
 			if let Some(range) = range {
 				ranges.push(range);
 			}
-			range = Some(std::ops::Range {
-				start: i,
-				end: i + 1,
-			});
-		}
-		if let Some(range) = range {
-			ranges.push(range);
 		}
 		Some((ranges, total_count))
 	}
