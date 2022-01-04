@@ -1,7 +1,7 @@
 use crate::{
 	block,
 	graphics::voxel::{
-		instance::{Category, Instance},
+		instance::{Category, Instance, RangeSet},
 		model, Face,
 	},
 };
@@ -123,7 +123,7 @@ pub struct IntegratedBuffer {
 	/// Mapping of block::Point to its instance, if the point cannot render any faces.
 	/// Does not include points which are empty (air).
 	inactive_points: HashMap<Point3<i64>, HashMap<Point3<i8>, (block::LookupId, Instance)>>,
-	changed_indices: HashSet<usize>,
+	changed_ranges: RangeSet,
 }
 
 impl IntegratedBuffer {
@@ -138,7 +138,7 @@ impl IntegratedBuffer {
 			categories,
 			active_points: HashMap::new(),
 			inactive_points: HashMap::new(),
-			changed_indices: HashSet::new(),
+			changed_ranges: RangeSet::default(),
 		}
 	}
 
@@ -156,44 +156,12 @@ impl IntegratedBuffer {
 }
 
 impl IntegratedBuffer {
-	pub fn take_changed_indices(&mut self) -> Option<(Vec<std::ops::Range<usize>>, usize)> {
-		if self.changed_indices.is_empty() {
-			return None;
+	#[profiling::function]
+	pub fn take_changed_ranges(&mut self) -> Option<(Vec<std::ops::Range<usize>>, usize)> {
+		match self.changed_ranges.is_empty() {
+			true => None,
+			false => Some(self.changed_ranges.take()),
 		}
-		profiling::scope!("take_changed_indices", &format!("{} indices changed", self.changed_indices.len()));
-
-		let indices = {
-			profiling::scope!("take-and-sort");
-			let mut indices = self.changed_indices.drain().collect::<Vec<_>>();
-			indices.sort();
-			indices
-		};
-
-		let total_count = indices.len();
-		let mut ranges = Vec::new();
-		{
-			profiling::scope!("fold-ranges");
-			let mut range: Option<std::ops::Range<usize>> = None;
-			for (_i, instance_idx) in indices.into_iter().enumerate() {
-				if let Some(range) = &mut range {
-					if instance_idx == range.end {
-						range.end += 1;
-						continue;
-					}
-				}
-				if let Some(range) = range {
-					ranges.push(range);
-				}
-				range = Some(std::ops::Range {
-					start: instance_idx,
-					end: instance_idx + 1,
-				});
-			}
-			if let Some(range) = range {
-				ranges.push(range);
-			}
-		}
-		Some((ranges, total_count))
 	}
 
 	pub fn instances(&self) -> &Vec<Instance> {
@@ -422,8 +390,8 @@ impl IntegratedBuffer {
 		}
 		// Swap the instance data
 		self.instances.swap(*a, *b);
-		self.changed_indices.insert(*a);
-		self.changed_indices.insert(*b);
+		self.changed_ranges.insert(*a);
+		self.changed_ranges.insert(*b);
 		// Swap the actual indices provided
 		std::mem::swap(a, b);
 	}
@@ -536,7 +504,7 @@ impl IntegratedBuffer {
 			if instance.faces() != point_faces {
 				instance.set_faces(point_faces);
 				if let Some(idx) = idx {
-					self.changed_indices.insert(idx);
+					self.changed_ranges.insert(idx);
 				}
 			}
 

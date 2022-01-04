@@ -173,7 +173,7 @@ impl Buffer {
 		if let Ok(mut local_description) = self.local_integrated_buffer.try_lock() {
 			was_able_to_lock = true;
 
-			if let Some((changed_ranges, total_count)) = local_description.take_changed_indices() {
+			if let Some((changed_ranges, total_count)) = local_description.take_changed_ranges() {
 				self.submitted_description.submit(
 					changed_ranges,
 					total_count,
