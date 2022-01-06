@@ -16,10 +16,22 @@ impl TextureEntry {
 	}
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
 	asset_type: String,
 	textures: Vec<(TextureEntry, EnumSet<Face>)>,
+	/// True if the block's model is fully opaque/has no chance of seeing other blocks through it.
+	is_opaque: bool,
+}
+
+impl Default for Block {
+	fn default() -> Self {
+		Self {
+			asset_type: String::new(),
+			textures: Vec::new(),
+			is_opaque: true,
+		}
+	}
 }
 
 impl asset::Asset for Block {
@@ -29,6 +41,17 @@ impl asset::Asset for Block {
 }
 
 impl Block {
+	pub fn is_opaque(&self) -> bool {
+		self.is_opaque
+	}
+
+	fn set_is_opaque(&mut self, node: &kdl::KdlNode) {
+		self.is_opaque = match node.values.get(0) {
+			Some(kdl::KdlValue::Boolean(b)) => *b,
+			_ => true,
+		};
+	}
+
 	pub fn textures(&self) -> &Vec<(TextureEntry, EnumSet<Face>)> {
 		&self.textures
 	}
@@ -142,6 +165,12 @@ impl engine::asset::kdl::Asset<Block> for Block {
 				asset::kdl::asset_type::schema::<Block>(|asset, node| {
 					asset.asset_type = asset::kdl::asset_type::get(node);
 				}),
+				Node {
+					name: Name::Defined("is_opaque"),
+					values: Items::Ordered(vec![Value::Boolean]),
+					on_validation_successful: Some(Block::set_is_opaque),
+					..Default::default()
+				},
 				Node {
 					children: Items::Select(vec![biome_color(), texture_sides()]),
 					on_validation_successful: Some(Block::set_textures),

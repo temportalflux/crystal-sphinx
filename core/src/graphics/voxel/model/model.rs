@@ -46,6 +46,7 @@ static BR_MATRIX: Matrix4x2<f32> = Matrix4x2::new(
 
 #[derive(Default)]
 pub struct Builder {
+	is_opaque: bool,
 	faces: Vec<model::FaceData>,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
@@ -53,6 +54,10 @@ pub struct Builder {
 }
 
 impl Builder {
+	pub fn set_is_opaque(&mut self, is_opaque: bool) {
+		self.is_opaque = is_opaque;
+	}
+
 	pub fn insert(&mut self, face_data: model::FaceData) {
 		self.faces.push(face_data);
 	}
@@ -79,6 +84,7 @@ impl Builder {
 
 		let (atlas, sampler, descriptor_set) = self.atlas.unwrap();
 		Model {
+			is_opaque: self.is_opaque,
 			atlas,
 			sampler,
 			descriptor_set,
@@ -157,6 +163,7 @@ impl Builder {
 }
 
 pub struct Model {
+	is_opaque: bool,
 	vertices: Vec<Vertex>,
 	indices: Vec<u32>,
 	#[allow(dead_code)]
@@ -180,7 +187,7 @@ impl Model {
 	}
 
 	pub fn is_opaque(&self) -> bool {
-		true
+		self.is_opaque
 	}
 }
 

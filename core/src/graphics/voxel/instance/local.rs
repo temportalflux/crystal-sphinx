@@ -444,7 +444,7 @@ impl IntegratedBuffer {
 				// Save off the adjacent block information
 				face_ids.push((primary_point_face, secondary_point));
 				// The secondary point could be empty (air). If it is, then it doesnt have a block-id.
-				if let Some((secondary_point_phase, _)) = secondary_point_id {
+				if let Some((secondary_point_phase, secondary_point_id)) = secondary_point_id {
 					// If the adjacent point is not a primary point, the face that
 					// is adjacent to the primary point should also be updated.
 					// If it IS a primary point, it has either already been
@@ -454,6 +454,7 @@ impl IntegratedBuffer {
 						let desired_phase = self.recalculate_faces(
 							secondary_point,
 							secondary_point_phase,
+							secondary_point_id,
 							vec![(secondary_point_face, primary_point)],
 							&model_cache,
 						);
@@ -464,8 +465,13 @@ impl IntegratedBuffer {
 				}
 			}
 			// Update the faces for this primary point
-			if let Some((primary_point_phase, _)) = self.get_block_id(&primary_point) {
-				let desired_phase = self.recalculate_faces(primary_point, primary_point_phase, face_ids, &model_cache);
+			if let Some((primary_point_phase, primary_point_id)) = self.get_block_id(&primary_point) {
+				let desired_phase = self.recalculate_faces(
+					primary_point,
+					primary_point_phase,primary_point_id,
+					face_ids,
+					&model_cache,
+				);
 				if desired_phase != primary_point_phase {
 					changes.push((primary_point, primary_point_phase, desired_phase));
 				}
@@ -484,6 +490,7 @@ impl IntegratedBuffer {
 		&mut self,
 		point: block::Point,
 		phase: IdPhase,
+		id: block::LookupId,
 		faces: Vec<(Face, block::Point)>,
 		model_cache: &Arc<model::Cache>,
 	) -> IdPhase {
@@ -501,7 +508,29 @@ impl IntegratedBuffer {
 		if let Some((idx, instance)) = self.get_instance_mut(&point, phase) {
 			let mut point_faces = instance.faces();
 			for (face, block_id) in faces.into_iter() {
-				if Self::is_face_enabled_for_id(&block_id, &model_cache) {
+
+				let face_is_enabled = match block_id {
+					// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
+					None => true,
+					Some((_phase, block_id)) => match model_cache.get(&block_id) {
+						// Found a model, can base face visibility based on if the model is fully-opaque
+						Some((model, _, _)) => {
+							// The other block is opaque, our face should be shown.
+							if model.is_opaque() {
+								false
+							}
+							// The other block is not opaque, show our face only if the types are not the same.
+							// i.e. two adjacent glass blocks should not show their touching faces
+							else {
+								block_id != id
+							}
+						},
+						// No model matches the id... x_x
+						None => unimplemented!(),
+					},
+				};
+
+				if face_is_enabled {
 					point_faces.insert(face);
 				} else {
 					point_faces.remove(face);
@@ -524,19 +553,6 @@ impl IntegratedBuffer {
 		}
 
 		desired_phase
-	}
-
-	fn is_face_enabled_for_id(block_id: &Option<(IdPhase, block::LookupId)>, model_cache: &model::Cache) -> bool {
-		match block_id {
-			// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
-			None => true,
-			Some((_phase, id)) => match model_cache.get(&id) {
-				// Found a model, can base face visibility based on if the model is fully-opaque
-				Some((model, _, _)) => !model.is_opaque(),
-				// No model matches the id... x_x
-				None => unimplemented!(),
-			},
-		}
 	}
 
 	fn change_phase(&mut self, point: &block::Point, prev: IdPhase, next: IdPhase) {

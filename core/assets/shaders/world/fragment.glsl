@@ -40,5 +40,7 @@ void main()
 
 	outColor = biome_color * main_tex_color;
 
-	//outColor = vec4(use_biome_color, frag_flags.y, ceil(texture(texSampler, frag_biome_color_tex_coord).a), 1);
+	// Discard any fragments that are wholly transparent.
+	// TODO: Partial transparency will still write to depth buffer.
+	if (outColor.a <= 0) discard;
 }

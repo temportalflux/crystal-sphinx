@@ -222,6 +222,8 @@ impl Load {
 				// Create the model for the block
 				let mut builder = model::Model::builder();
 
+				builder.set_is_opaque(block.is_opaque());
+
 				// Block models "own" the atlases. If no blocks reference the atlas, it is dropped.
 				builder.set_atlas(atlas.clone(), atlas_sampler.clone(), descriptor_set.clone());
 

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub struct Flat {
 	layers: HashMap</*chunk-y*/ i64, HashMap</*block-y*/ usize, block::LookupId>>,
+	glass_id: block::LookupId,
 }
 
 impl Flat {
@@ -27,11 +28,17 @@ impl Flat {
 
 		cfg.insert((0, 6), &asset::Id::new("vanilla", "blocks/grass/default"));
 
+		cfg.glass_id = Self::lookup(&asset::Id::new("vanilla", "blocks/glass")).unwrap();
+
 		cfg
 	}
 
+	fn lookup(id: &asset::Id) -> Option<block::LookupId> {
+		block::Lookup::lookup_value(&id)
+	}
+
 	pub fn insert(&mut self, layer: (i64, usize), id: &asset::Id) {
-		let id = match block::Lookup::lookup_value(&id) {
+		let id = match Self::lookup(&id) {
 			Some(id) => id,
 			None => return,
 		};
@@ -43,15 +50,27 @@ impl Flat {
 	}
 
 	pub fn generate_chunk(&self, coordinate: Point3<i64>) -> Chunk {
+		use rand::prelude::*;
+		let mut rng = rand::thread_rng();
 		let mut chunk = Chunk::new(coordinate);
 		if let Some(layers) = self.layers.get(&coordinate.y) {
+
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
 					for x in 1..chunk::SIZE_I.x - 1 {
 						for z in 1..chunk::SIZE_I.z - 1 {
+
+							if y > 0 {
+								let chance = rng.gen::<usize>() % 100;
+								if chance < 15 {
+									chunk.set_block_id(Point3::new(x, y, z), Some(self.glass_id));
+									continue;
+								}
+							}
+
 							chunk.set_block_id(Point3::new(x, y, z), Some(block_id));
 						}
-					}
+					}		
 				}
 			}
 		}
