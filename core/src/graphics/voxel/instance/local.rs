@@ -426,13 +426,12 @@ impl IntegratedBuffer {
 	fn update_faces(&mut self, points: HashSet<block::Point>) {
 		let model_cache = self.model_cache.upgrade().unwrap();
 
+		let mut changes = Vec::new();
+
 		let all_faces = EnumSet::<Face>::all();
 		// For each point in the set, check all of its faces (and update its neighbor if necessary)
 		for &primary_point in points.iter() {
-			profiling::scope!("update-faces", &format!("{}", primary_point));
-
-			// Get the category for this primary point
-			let primary_point_id = self.get_block_id(&primary_point);
+			profiling::scope!("gather-faces", &format!("{}", primary_point));
 
 			// Gather the block-type of each voxel on a given face of the point
 			let mut face_ids = Vec::with_capacity(all_faces.len());
@@ -443,27 +442,40 @@ impl IntegratedBuffer {
 				// And get the block-type of that adjacent point
 				let secondary_point_id = self.get_block_id(&secondary_point);
 				// Save off the adjacent block information
-				face_ids.push((primary_point_face, secondary_point, secondary_point_id));
+				face_ids.push((primary_point_face, secondary_point));
 				// The secondary point could be empty (air). If it is, then it doesnt have a block-id.
-				if let Some(secondary_point_id) = secondary_point_id {
+				if let Some((secondary_point_phase, _)) = secondary_point_id {
 					// If the adjacent point is not a primary point, the face that
 					// is adjacent to the primary point should also be updated.
 					// If it IS a primary point, it has either already been
 					// visited or will be visited shortly.
 					if !points.contains(&secondary_point) {
 						let secondary_point_face = primary_point_face.inverse();
-						self.recalculate_faces(
+						let desired_phase = self.recalculate_faces(
 							secondary_point,
-							secondary_point_id,
-							vec![(secondary_point_face, primary_point, primary_point_id)],
+							secondary_point_phase,
+							vec![(secondary_point_face, primary_point)],
 							&model_cache,
 						);
+						if desired_phase != secondary_point_phase {
+							changes.push((secondary_point, secondary_point_phase, desired_phase));
+						}
 					}
 				}
 			}
 			// Update the faces for this primary point
-			if let Some(primary_point_id) = primary_point_id {
-				self.recalculate_faces(primary_point, primary_point_id, face_ids, &model_cache);
+			if let Some((primary_point_phase, _)) = self.get_block_id(&primary_point) {
+				let desired_phase = self.recalculate_faces(primary_point, primary_point_phase, face_ids, &model_cache);
+				if desired_phase != primary_point_phase {
+					changes.push((primary_point, primary_point_phase, desired_phase));
+				}
+			}
+		}
+
+		{
+			profiling::scope!("apply-phase-changes");
+			for (point, phase, desired_phase) in changes.into_iter() {
+				self.change_phase(&point, phase, desired_phase);
 			}
 		}
 	}
@@ -471,31 +483,25 @@ impl IntegratedBuffer {
 	fn recalculate_faces(
 		&mut self,
 		point: block::Point,
-		id: (IdPhase, block::LookupId),
-		faces: Vec<(Face, block::Point, Option<(IdPhase, block::LookupId)>)>,
+		phase: IdPhase,
+		faces: Vec<(Face, block::Point)>,
 		model_cache: &Arc<model::Cache>,
-	) {
+	) -> IdPhase {
 		profiling::scope!(
 			"recalculate_faces",
 			&format!("point:{} face-count:{}", point, faces.len())
 		);
 
-		let mut desired_phase = id.0;
-		if let Some((idx, instance)) = self.get_instance_mut(&point, id.0) {
-			let mut point_faces = instance.faces();
-			for (face, _adj_point, block_id) in faces.into_iter() {
-				let face_is_enabled = match block_id {
-					// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
-					None => true,
-					Some((_phase, id)) => match model_cache.get(&id) {
-						// Found a model, can base face visibility based on if the model is fully-opaque
-						Some((model, _, _)) => !model.is_opaque(),
-						// No model matches the id... x_x
-						None => true,
-					},
-				};
+		let faces = faces
+			.into_iter()
+			.map(|(face, adj_point)| (face, self.get_block_id(&adj_point)))
+			.collect::<Vec<_>>();
 
-				if face_is_enabled {
+		let mut desired_phase = phase;
+		if let Some((idx, instance)) = self.get_instance_mut(&point, phase) {
+			let mut point_faces = instance.faces();
+			for (face, block_id) in faces.into_iter() {
+				if Self::is_face_enabled_for_id(&block_id, &model_cache) {
 					point_faces.insert(face);
 				} else {
 					point_faces.remove(face);
@@ -517,10 +523,19 @@ impl IntegratedBuffer {
 			};
 		}
 
-		// If it is currently active and no longer has faces to render or vice versa,
-		// we need to move it to the correct phase.
-		if desired_phase != id.0 {
-			self.change_phase(&point, id.0, desired_phase);
+		desired_phase
+	}
+
+	fn is_face_enabled_for_id(block_id: &Option<(IdPhase, block::LookupId)>, model_cache: &model::Cache) -> bool {
+		match block_id {
+			// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
+			None => true,
+			Some((_phase, id)) => match model_cache.get(&id) {
+				// Found a model, can base face visibility based on if the model is fully-opaque
+				Some((model, _, _)) => !model.is_opaque(),
+				// No model matches the id... x_x
+				None => unimplemented!(),
+			},
 		}
 	}
 

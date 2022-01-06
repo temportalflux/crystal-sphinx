@@ -42,7 +42,7 @@ impl Instance {
 	}
 
 	pub fn set_faces(&mut self, faces: EnumSet<Face>) {
-		let mut flags: super::Flags = (*self.instance_flags).into();
+		let mut flags = super::Flags::from(*self.instance_flags);
 		flags.faces = faces;
 		self.instance_flags = flags.build().into();
 	}
