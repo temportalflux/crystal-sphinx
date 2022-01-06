@@ -60,12 +60,38 @@ pub fn init() -> ArcLockUser {
 						)
 						.bind(
 							AXIS_LOOK_HORIZONTAL,
-							Source::Mouse(Mouse::Move(MouseX))
-								+ ScreenPositionDelta + Multiplier(3.0),
+							[
+								(
+									device::Kind::Mouse,
+									Source::Mouse(Mouse::Move(MouseX))
+										+ ScreenPositionDelta + Multiplier(3.0),
+								),
+								(
+									device::Kind::Keyboard,
+									((Keyboard(Numpad4) + Multiplier(-1.0))
+										+ (Keyboard(Numpad6) + Multiplier(1.0)))
+									.with_behavior(Average)
+									.with_behavior(Multiplier(2.0))
+									.with_behavior(Multiplier(0.05)),
+								),
+							],
 						)
 						.bind(
 							AXIS_LOOK_VERTICAL,
-							Source::Mouse(Mouse::Move(MouseY)) + ScreenPositionDelta,
+							[
+								(
+									device::Kind::Mouse,
+									Source::Mouse(Mouse::Move(MouseY)) + ScreenPositionDelta,
+								),
+								(
+									device::Kind::Keyboard,
+									((Keyboard(Numpad5) + Multiplier(1.0))
+										+ (Keyboard(Numpad8) + Multiplier(-1.0)))
+									.with_behavior(Average)
+									.with_behavior(Multiplier(2.0))
+									.with_behavior(Multiplier(0.05)),
+								),
+							],
 						),
 				),
 			),
