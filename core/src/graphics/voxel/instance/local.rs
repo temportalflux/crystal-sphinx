@@ -376,9 +376,11 @@ impl IntegratedBuffer {
 		}
 
 		if let CategoryKey::Id(block_id) = destination {
-			if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
-				let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
+			if !self.active_points.contains_key(&point.chunk()) {
+				self.active_points.insert(*point.chunk(), HashMap::new());
 			}
+			let chunk_points = self.active_points.get_mut(&point.chunk()).unwrap();
+			let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
 		}
 
 		Some(instance_idx)
