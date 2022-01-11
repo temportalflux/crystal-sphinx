@@ -94,6 +94,7 @@ impl Relevancy {
 		coordinates
 	}
 
+	#[profiling::function]
 	pub(crate) fn update_replicated_chunks(
 		&mut self,
 		origin: Point3<i64>,

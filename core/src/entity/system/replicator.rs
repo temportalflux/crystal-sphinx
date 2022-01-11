@@ -60,7 +60,7 @@ impl Replicator {
 			&'c component::OwnedByConnection,
 			&'c mut component::chunk::Relevancy,
 		)>;
-		// TODO: Replicate relevant chunks to connections based on the position of owner entities
+
 		let mut world = arc_world.write().unwrap();
 		let mut query_bundle = QueryBundle::new();
 		for (entity, (position, owner, relevancy)) in query_bundle.query_mut(&mut world) {
@@ -74,16 +74,22 @@ impl Replicator {
 				continue;
 			}
 
+			profiling::scope!("replicate-chunks", &format!("entity={} address={}", entity.id(), owner.address()));
+
 			let (new_chunks, old_chunks) = relevancy.get_chunk_diff(&current_chunk);
 			// Server side, update the component directly
 			relevancy.update_replicated_chunks(current_chunk, &old_chunks, &new_chunks);
 
-			let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
-			old_chunks.sort_by(|a, b| {
-				let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
-				let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
-				b_dist.partial_cmp(&a_dist).unwrap()
-			});
+			let old_chunks = {
+				profiling::scope!("sort-old-chunks");
+				let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
+				old_chunks.sort_by(|a, b| {
+					let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
+					let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
+					b_dist.partial_cmp(&a_dist).unwrap()
+				});
+				old_chunks
+			};
 
 			log::debug!(
 				"update chunks: {} new, {} old",
@@ -95,15 +101,20 @@ impl Replicator {
 			// This might be some number of updates after the user moves to a new chunk,
 			// so there may be a list of pending chunks for some amount of time.
 			let chunks_to_replicate = relevancy.take_pending_chunks();
-			let mut chunks_to_replicate = chunks_to_replicate.into_iter().collect::<Vec<_>>();
-			chunks_to_replicate.sort_by(|a, b| {
-				let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
-				let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
-				a_dist.partial_cmp(&b_dist).unwrap()
-			});
+			let chunks_to_replicate = {
+				profiling::scope!("sort-pending-chunks");
+				let mut chunks_to_replicate = chunks_to_replicate.into_iter().collect::<Vec<_>>();
+				chunks_to_replicate.sort_by(|a, b| {
+					let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
+					let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
+					a_dist.partial_cmp(&b_dist).unwrap()
+				});
+				chunks_to_replicate
+			};
 			let mut updates = Vec::with_capacity(chunks_to_replicate.len());
 			if let Ok(chunk_cache) = self.chunk_cache.upgrade().unwrap().read() {
 				for coordinate in chunks_to_replicate.into_iter() {
+					profiling::scope!("create-chunk-packet", &format!("<{}, {}, {}>", coordinate.x, coordinate.y, coordinate.z));
 					// If the chunk is in the cache, then the server has it loaded (to some degree).
 					// If not, it needs to go back on the component for the next update cycle.
 					match chunk_cache.find(&coordinate) {
@@ -128,7 +139,8 @@ impl Replicator {
 			//if *owner.address() == *Network::local_data().address() {
 			//	continue;
 			//}
-			let _ = Network::send_packets(
+			let packets = {
+				profiling::scope!("build-packets");
 				Packet::builder()
 					.with_address(*owner.address())
 					.unwrap()
@@ -145,7 +157,10 @@ impl Replicator {
 					})))
 					// Send each chunk update in its own Reliably-Ordered packet,
 					// which is garunteed to be received by clients after the initial update.
-					.with_payloads(&updates[..]),
+					.with_payloads(&updates[..])
+			};
+			let _ = Network::send_packets(
+				packets
 			);
 		}
 	}
