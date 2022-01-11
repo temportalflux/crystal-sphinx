@@ -6,7 +6,7 @@ use engine::{
 		types::{Mat4, Vec3, Vec4},
 		vertex_object,
 	},
-	math::nalgebra::Translation3,
+	math::nalgebra::{Translation3, Point3},
 };
 use enumset::EnumSet;
 
@@ -34,6 +34,23 @@ impl Instance {
 				.into(),
 			instance_flags: flags.build().into(),
 		}
+	}
+
+	fn chunk(&self) -> Point3<f32> {
+		(*self.chunk_coordinate).into()
+	}
+
+	fn offset(&self) -> Point3<f32> {
+		(*self.model_matrix).transform_point(&Point3::new(0.0, 0.0, 0.0))
+	}
+
+	pub fn point(&self) -> block::Point {
+		let chunk_f32 = self.chunk();
+		let offset_f32 = self.offset();
+		block::Point::new(
+			Point3::new(chunk_f32.x as i64, chunk_f32.y as i64, chunk_f32.z as i64),
+			Point3::new(offset_f32.x as i8, offset_f32.y as i8, offset_f32.z as i8),
+		)
 	}
 
 	pub fn faces(&self) -> EnumSet<Face> {

@@ -1,7 +1,7 @@
 use crate::{
 	block,
 	graphics::voxel::{
-		instance::{Category, Instance, RangeSet},
+		instance::{category::{self, Category}, Instance, RangeSet},
 		model, Face,
 	},
 };
@@ -11,96 +11,6 @@ use std::{
 	collections::{HashMap, HashSet},
 	sync::{Arc, Weak},
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CategoryKey {
-	/// A category for a specific block-type.
-	Id(block::LookupId),
-	/// A unique category full of garbage data.
-	/// Holds the segment from which new voxel instances are allocated from.
-	Unallocated,
-}
-
-impl CategoryKey {
-	/// Determines the order of segments that need to be traversed in order to move an instance from `start` to `destination`.
-	/// If `start == destination`, the returned path will be None, otherwise the resulting path
-	/// will always contain `start` as the first value and `destingation` as the last value.
-	fn new_path(start: Self, destination: Self, max_id: block::LookupId) -> Option<Vec<Self>> {
-		use std::cmp::Ordering;
-		if start == destination {
-			return None;
-		}
-		let mut path = Vec::new();
-		let mut prev_key = start;
-		let mut next_key;
-		path.push(start);
-		while prev_key != destination {
-			next_key = match prev_key {
-				Self::Unallocated => Self::Id(max_id),
-				Self::Id(prev_id) => match prev_key.cmp(&destination) {
-					Ordering::Less => {
-						if prev_id < max_id {
-							Self::Id(prev_id + 1)
-						} else {
-							Self::Unallocated
-						}
-					}
-					Ordering::Greater => Self::Id(prev_id - 1),
-					Ordering::Equal => unimplemented!(),
-				},
-			};
-			path.push(next_key);
-			prev_key = next_key;
-		}
-		Some(path)
-	}
-}
-
-#[cfg(test)]
-mod category_key {
-	use super::*;
-
-	#[test]
-	fn new_path_unallocated_to_unallocated() {
-		let start = CategoryKey::Unallocated;
-		let destination = CategoryKey::Unallocated;
-		assert_eq!(CategoryKey::new_path(start, destination, 0), None);
-	}
-
-	#[test]
-	fn new_path_insert() {
-		let start = CategoryKey::Unallocated;
-		let destination = CategoryKey::Id(3);
-		let max_id = 5;
-		assert_eq!(
-			CategoryKey::new_path(start, destination, max_id),
-			Some(vec![
-				CategoryKey::Unallocated,
-				CategoryKey::Id(5),
-				CategoryKey::Id(4),
-				CategoryKey::Id(3),
-			])
-		);
-	}
-
-	#[test]
-	fn new_path_remove() {
-		let start = CategoryKey::Id(2);
-		let destination = CategoryKey::Unallocated;
-		let max_id = 6;
-		assert_eq!(
-			CategoryKey::new_path(start, destination, max_id),
-			Some(vec![
-				CategoryKey::Id(2),
-				CategoryKey::Id(3),
-				CategoryKey::Id(4),
-				CategoryKey::Id(5),
-				CategoryKey::Id(6),
-				CategoryKey::Unallocated,
-			])
-		);
-	}
-}
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum IdPhase {
@@ -227,19 +137,19 @@ impl IntegratedBuffer {
 		self.block_type_count - 1
 	}
 
-	fn get_category_idx(&self, key: CategoryKey) -> usize {
+	fn get_category_idx(&self, key: category::Key) -> usize {
 		match key {
-			CategoryKey::Id(block_id) => block_id,
-			CategoryKey::Unallocated => self.block_type_count,
+			category::Key::Id(block_id) => block_id,
+			category::Key::Unallocated => self.block_type_count,
 		}
 	}
 
-	fn get_category(&self, key: CategoryKey) -> &Category {
+	fn get_category(&self, key: category::Key) -> &Category {
 		let idx = self.get_category_idx(key);
 		&self.categories[idx]
 	}
 
-	fn get_category_mut(&mut self, key: CategoryKey) -> &mut Category {
+	fn get_category_mut(&mut self, key: category::Key) -> &mut Category {
 		let idx = self.get_category_idx(key);
 		&mut self.categories[idx]
 	}
@@ -255,15 +165,16 @@ impl IntegratedBuffer {
 		prev_id: block::LookupId,
 		next_id: block::LookupId,
 	) {
-		self.change_category(&point, CategoryKey::Id(prev_id), CategoryKey::Id(next_id));
+		self.change_category(&point, category::Key::Id(prev_id), category::Key::Id(next_id));
 	}
 
 	/// Deallocates the instance data and removes all reference to the point from the metadata (active AND inactive).
 	fn remove(&mut self, point: &block::Point, prev_id: block::LookupId) {
 		if let Some(idx) =
-			self.change_category(&point, CategoryKey::Id(prev_id), CategoryKey::Unallocated)
+			self.change_category(&point, category::Key::Id(prev_id), category::Key::Unallocated)
 		{
 			self.instances[idx] = Instance::default();
+			self.changed_ranges.insert(idx);
 		}
 	}
 
@@ -292,110 +203,76 @@ impl IntegratedBuffer {
 	fn change_category(
 		&mut self,
 		point: &block::Point,
-		start: CategoryKey,
-		destination: CategoryKey,
+		start: category::Key,
+		destination: category::Key,
 	) -> Option<usize> {
-		use std::cmp::Ordering;
-		let path = match CategoryKey::new_path(start, destination, self.max_block_id()) {
+		let path = match category::Key::new_path(start, destination, self.max_block_id()) {
 			Some(path) => path,
 			None => return None,
 		};
-		let direction = destination.cmp(&start);
+
 		let mut instance_idx = match start {
-			CategoryKey::Unallocated => self.get_category(start).start(),
+			category::Key::Unallocated => self.get_category(start).start(),
 			_ => match self.active_points.get_mut(&point.chunk()) {
 				Some(chunk_points) => match chunk_points.remove(&point.offset()) {
 					Some((_id, instance_idx)) => instance_idx,
-					None => return None,
+					None => unimplemented!(),
 				},
-				None => return None,
+				None => unimplemented!(),
 			},
 		};
-		let mut prev_key = start;
-		for key in path.into_iter() {
-			// The first item in the path is always the starting category.
-			if key == start {
-				assert!(self.get_category(key).count() > 0);
-				match direction {
-					// The destination is "less than"/"to the left of" the start category,
-					// so first we move the instance to the start of our current category.
-					Ordering::Less => {
-						let mut target_idx = self.get_category(key).start();
-						self.swap_instances(&mut instance_idx, &mut target_idx);
-					}
-					// The destination is "more than"/"to the right of" the start category,
-					// so first we move the instance to the end of our current category.
-					Ordering::Greater => {
-						let mut target_idx = self.get_category(key).last();
-						self.swap_instances(&mut instance_idx, &mut target_idx);
-					}
-					_ => unimplemented!(),
-				}
-			}
-			// We are somewhere in the middle of the path
-			else if key != destination {
-				// The item is either at the start or end of the previous category. We should shrink the previous
-				// category and expand our category such that the item at `instance_idx` is now in the next category over.
-				match direction {
-					Ordering::Less => {
-						// Move the item into the current category (its index in the instance list does not change).
-						self.get_category_mut(prev_key).shrink_right();
-						self.get_category_mut(key).expand_right();
-						// Now swap it to the start of the category because we have at least 1 more transition ahead
-						let mut target_idx = self.get_category(key).start();
-						self.swap_instances(&mut instance_idx, &mut target_idx);
-					}
-					Ordering::Greater => {
-						// Move the item into the current category (its index in the instance list does not change).
-						self.get_category_mut(prev_key).shrink_left();
-						self.get_category_mut(key).expand_left();
-						// Now swap it to the start of the category because we have at least 1 more transition ahead
-						let mut target_idx = self.get_category(key).last();
-						self.swap_instances(&mut instance_idx, &mut target_idx);
-					}
-					_ => unimplemented!(),
-				}
-			}
-			// The last item in the path is always the destination category
-			else {
-				match direction {
-					Ordering::Less => {
-						// Move the item into the current category (its index in the instance list does not change).
-						self.get_category_mut(prev_key).shrink_right();
-						self.get_category_mut(key).expand_right();
-					}
-					Ordering::Greater => {
-						// Move the item into the current category (its index in the instance list does not change).
-						self.get_category_mut(prev_key).shrink_left();
-						self.get_category_mut(key).expand_left();
-					}
-					_ => unimplemented!(),
-				}
-			}
-			prev_key = key;
-		}
+		
+		let direction = category::Direction::from(&start, &destination);
 
-		if let CategoryKey::Id(block_id) = destination {
+		let mut prev_key = start;
+		for next_key in path.into_iter() {
+
+			if next_key != start {
+				for (key, operation) in direction.operations(prev_key, next_key).into_iter() {
+					let category = self.get_category_mut(key);
+					category.apply(operation);
+				}
+			}
+
+			if next_key != destination {
+				let target_idx = self.get_category(next_key).index_at_position(direction.target_position());
+				
+				let target_point = self.instances[target_idx].point();
+				self.set_point_index(&target_point, instance_idx);
+
+				self.swap_instances(&mut instance_idx, target_idx);
+			}
+						
+			prev_key = next_key;
+		}
+		
+		if let category::Key::Id(block_id) = destination {
 			if !self.active_points.contains_key(&point.chunk()) {
 				self.active_points.insert(*point.chunk(), HashMap::new());
 			}
 			let chunk_points = self.active_points.get_mut(&point.chunk()).unwrap();
 			let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
 		}
-
+		
 		Some(instance_idx)
 	}
+	
+	fn set_point_index(&mut self, point: &block::Point, idx: usize) {
+		if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
+			if let Some((_id, instance_idx)) = chunk_points.get_mut(&point.offset()) {
+				*instance_idx = idx;
+			}
+		}
+	}
 
-	fn swap_instances(&mut self, a: &mut usize, b: &mut usize) {
-		if *a == *b {
+	fn swap_instances(&mut self, a: &mut usize, b: usize) {
+		if *a == b {
 			return;
 		}
-		// Swap the instance data
-		self.instances.swap(*a, *b);
+		self.instances.swap(*a, b);
 		self.changed_ranges.insert(*a);
-		self.changed_ranges.insert(*b);
-		// Swap the actual indices provided
-		std::mem::swap(a, b);
+		self.changed_ranges.insert(b);
+		*a = b;
 	}
 
 	fn get_instance_mut(
@@ -563,8 +440,8 @@ impl IntegratedBuffer {
 			// Deactivating a block, time to remove it from the buffered data.
 			(IdPhase::Active, IdPhase::Inactive) => {
 				let (id, instance_idx) = match self.active_points.get_mut(&point.chunk()) {
-					Some(chunk_points) => match chunk_points.remove(&point.offset()) {
-						Some((id, instance_idx)) => (id, instance_idx),
+					Some(chunk_points) => match chunk_points.get(&point.offset()) {
+						Some((id, instance_idx)) => (*id, *instance_idx),
 						None => return,
 					},
 					None => return,
@@ -595,11 +472,12 @@ impl IntegratedBuffer {
 				};
 
 				let instance_idx = self
-					.change_category(&point, CategoryKey::Unallocated, CategoryKey::Id(id))
+					.change_category(&point, category::Key::Unallocated, category::Key::Id(id))
 					.unwrap();
 				match self.instances.get_mut(instance_idx) {
 					Some(target) => {
 						*target = instance;
+						self.changed_ranges.insert(instance_idx);
 					}
 					None => return,
 				}

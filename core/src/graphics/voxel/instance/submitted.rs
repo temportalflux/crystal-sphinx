@@ -1,4 +1,4 @@
-use crate::graphics::voxel::instance::{local::IntegratedBuffer, Category, Instance};
+use crate::graphics::voxel::instance::{local::IntegratedBuffer, category::Category, Instance};
 use engine::{
 	graphics::{self, buffer::Buffer, command, flags, utility::NamedObject, RenderChain},
 	task::{self, ScheduledTask},
