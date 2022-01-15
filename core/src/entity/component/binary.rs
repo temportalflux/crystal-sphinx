@@ -2,7 +2,7 @@ use engine::utility::{AnyError, VoidResult};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SerializedEntity {
 	pub entity: hecs::Entity,
 	pub components: Vec<SerializedComponent>,

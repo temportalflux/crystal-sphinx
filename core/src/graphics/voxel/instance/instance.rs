@@ -6,7 +6,7 @@ use engine::{
 		types::{Mat4, Vec3, Vec4},
 		vertex_object,
 	},
-	math::nalgebra::{Translation3, Point3},
+	math::nalgebra::{Point3, Translation3},
 };
 use enumset::EnumSet;
 

@@ -54,12 +54,10 @@ impl Flat {
 		let mut rng = rand::thread_rng();
 		let mut chunk = Chunk::new(coordinate);
 		if let Some(layers) = self.layers.get(&coordinate.y) {
-
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
 					for x in 1..chunk::SIZE_I.x - 1 {
 						for z in 1..chunk::SIZE_I.z - 1 {
-
 							if y > 0 {
 								let chance = rng.gen::<usize>() % 100;
 								if chance < 15 {
@@ -70,7 +68,7 @@ impl Flat {
 
 							chunk.set_block_id(Point3::new(x, y, z), Some(block_id));
 						}
-					}		
+					}
 				}
 			}
 		}

@@ -1,4 +1,3 @@
-
 mod category;
 pub use category::*;
 mod direction;
@@ -6,8 +5,7 @@ pub use direction::*;
 mod key;
 pub use key::*;
 
-pub enum Operation
-{
+pub enum Operation {
 	/// Adjusts the start index of the category by some amount.
 	/// Does not change the expected size of the segment/index count.
 	Shift(i32),

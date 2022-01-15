@@ -5,8 +5,7 @@ pub use handshake::*;
 
 mod connection;
 
-mod replicate_entity;
-pub use replicate_entity::*;
+pub mod replicate_entity;
 
 mod replicate_world;
 pub use replicate_world::*;
@@ -35,6 +34,6 @@ pub fn register_types(
 		&app_state,
 		&entity_world,
 	);
-	ReplicateEntity::register(builder, &entity_world);
+	replicate_entity::Packet::register(builder, &entity_world);
 	ReplicateWorld::register(builder, &storage, &entity_world);
 }

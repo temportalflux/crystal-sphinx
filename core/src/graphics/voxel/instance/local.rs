@@ -1,7 +1,10 @@
 use crate::{
 	block,
 	graphics::voxel::{
-		instance::{category::{self, Category}, Instance, RangeSet},
+		instance::{
+			category::{self, Category},
+			Instance, RangeSet,
+		},
 		model, Face,
 	},
 };
@@ -165,14 +168,20 @@ impl IntegratedBuffer {
 		prev_id: block::LookupId,
 		next_id: block::LookupId,
 	) {
-		self.change_category(&point, category::Key::Id(prev_id), category::Key::Id(next_id));
+		self.change_category(
+			&point,
+			category::Key::Id(prev_id),
+			category::Key::Id(next_id),
+		);
 	}
 
 	/// Deallocates the instance data and removes all reference to the point from the metadata (active AND inactive).
 	fn remove(&mut self, point: &block::Point, prev_id: block::LookupId) {
-		if let Some(idx) =
-			self.change_category(&point, category::Key::Id(prev_id), category::Key::Unallocated)
-		{
+		if let Some(idx) = self.change_category(
+			&point,
+			category::Key::Id(prev_id),
+			category::Key::Unallocated,
+		) {
 			self.instances[idx] = Instance::default();
 			self.changed_ranges.insert(idx);
 		}
@@ -221,12 +230,11 @@ impl IntegratedBuffer {
 				None => unimplemented!(),
 			},
 		};
-		
+
 		let direction = category::Direction::from(&start, &destination);
 
 		let mut prev_key = start;
 		for next_key in path.into_iter() {
-
 			if next_key != start {
 				for (key, operation) in direction.operations(prev_key, next_key).into_iter() {
 					let category = self.get_category_mut(key);
@@ -235,17 +243,19 @@ impl IntegratedBuffer {
 			}
 
 			if next_key != destination {
-				let target_idx = self.get_category(next_key).index_at_position(direction.target_position());
-				
+				let target_idx = self
+					.get_category(next_key)
+					.index_at_position(direction.target_position());
+
 				let target_point = self.instances[target_idx].point();
 				self.set_point_index(&target_point, instance_idx);
 
 				self.swap_instances(&mut instance_idx, target_idx);
 			}
-						
+
 			prev_key = next_key;
 		}
-		
+
 		if let category::Key::Id(block_id) = destination {
 			if !self.active_points.contains_key(&point.chunk()) {
 				self.active_points.insert(*point.chunk(), HashMap::new());
@@ -253,10 +263,10 @@ impl IntegratedBuffer {
 			let chunk_points = self.active_points.get_mut(&point.chunk()).unwrap();
 			let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
 		}
-		
+
 		Some(instance_idx)
 	}
-	
+
 	fn set_point_index(&mut self, point: &block::Point, idx: usize) {
 		if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
 			if let Some((_id, instance_idx)) = chunk_points.get_mut(&point.offset()) {
@@ -344,10 +354,12 @@ impl IntegratedBuffer {
 				}
 			}
 			// Update the faces for this primary point
-			if let Some((primary_point_phase, primary_point_id)) = self.get_block_id(&primary_point) {
+			if let Some((primary_point_phase, primary_point_id)) = self.get_block_id(&primary_point)
+			{
 				let desired_phase = self.recalculate_faces(
 					primary_point,
-					primary_point_phase,primary_point_id,
+					primary_point_phase,
+					primary_point_id,
 					face_ids,
 					&model_cache,
 				);
@@ -387,7 +399,6 @@ impl IntegratedBuffer {
 		if let Some((idx, instance)) = self.get_instance_mut(&point, phase) {
 			let mut point_faces = instance.faces();
 			for (face, block_id) in faces.into_iter() {
-
 				let face_is_enabled = match block_id {
 					// Block doesnt exist at this point (its air/empty) or the chunk isn't loaded.
 					None => true,
@@ -403,7 +414,7 @@ impl IntegratedBuffer {
 							else {
 								block_id != id
 							}
-						},
+						}
 						// No model matches the id... x_x
 						None => unimplemented!(),
 					},

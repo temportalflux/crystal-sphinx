@@ -16,11 +16,17 @@ use std::sync::{Arc, RwLock, Weak};
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
-pub struct ReplicateEntity {
-	pub entities: Vec<component::binary::SerializedEntity>,
+pub struct Packet {
+	pub operations: Vec<Operation>,
 }
 
-impl ReplicateEntity {
+#[derive(Serialize, Deserialize)]
+pub enum Operation {
+	Replicate(component::binary::SerializedEntity),
+	Destroy(hecs::Entity),
+}
+
+impl Packet {
 	pub fn register(builder: &mut network::Builder, entity_world: &ArcLockEntityWorld) {
 		use mode::Kind::*;
 
@@ -52,11 +58,11 @@ impl Processor for ReceiveReplicatedEntity {
 	}
 }
 
-impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
+impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 	fn process_packet(
 		&self,
 		_kind: &event::Kind,
-		data: &mut ReplicateEntity,
+		data: &mut Packet,
 		_connection: &Connection,
 		_guarantee: &packet::Guarantee,
 		_local_data: &network::LocalData,
@@ -69,30 +75,50 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 		};
 
 		let registry = component::Registry::read();
-		let mut updates = Vec::new();
+		let mut entities_to_spawn = Vec::new();
+		let mut entities_to_despawn = Vec::new();
 
-		for serialized in data.entities.iter() {
-			let scope_tag = format!("entity-id:{}", serialized.entity.id());
-			profiling::scope!("deserialize-components", scope_tag.as_str());
+		for operation in data.operations.iter() {
+			match operation {
+				Operation::Replicate(serialized) => {
+					profiling::scope!(
+						"deserialize-components",
+						&format!("entity-id:{}", serialized.entity.id())
+					);
 
-			let mut builder = hecs::EntityBuilder::default();
-			for comp_data in serialized.components.clone().into_iter() {
-				let type_id = registry.get_type_id(&comp_data.id).unwrap();
-				if let Some(registered) = registry.find(&type_id) {
-					match registered.get::<component::binary::Registration>() {
-						Some(binary_registration) => {
-							let _ = binary_registration.deserialize(comp_data.data, &mut builder);
-						}
-						None => {
-							log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
+					let mut builder = hecs::EntityBuilder::default();
+					for comp_data in serialized.components.clone().into_iter() {
+						let type_id = registry.get_type_id(&comp_data.id).unwrap();
+						if let Some(registered) = registry.find(&type_id) {
+							match registered.get::<component::binary::Registration>() {
+								Some(binary_registration) => {
+									let _ = binary_registration
+										.deserialize(comp_data.data, &mut builder);
+								}
+								None => {
+									log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
+								}
+							}
 						}
 					}
+					entities_to_spawn.push((serialized.entity, builder));
+				}
+				Operation::Destroy(entity) => {
+					entities_to_despawn.push(*entity);
 				}
 			}
-			updates.push((serialized.entity, builder));
 		}
 
-		if updates.len() > 0 {
+		if !entities_to_despawn.is_empty() {
+			profiling::scope!("despawn-replicated");
+			let mut world = arc_world.write().unwrap();
+			for entity in entities_to_despawn.into_iter() {
+				log::debug!(target: "ReplicateEntity", "Despawning replicated entity {}", entity.id());
+				let _ = world.despawn(entity);
+			}
+		}
+
+		if entities_to_spawn.len() > 0 {
 			profiling::scope!("spawn-replicated");
 
 			let local_account_id = account::ClientRegistry::read()?
@@ -100,7 +126,9 @@ impl PacketProcessor<ReplicateEntity> for ReceiveReplicatedEntity {
 				.map(|account| account.meta.id.clone());
 
 			let mut world = arc_world.write().unwrap();
-			for (entity, mut builder) in updates.into_iter() {
+			for (entity, mut builder) in entities_to_spawn.into_iter() {
+				log::debug!(target: "ReplicateEntity", "Spawning replicated entity {}", entity.id());
+
 				// If the entity doesn't exist in the world, spawn it with the components.
 				// Otherwise, replace any existing components with the same types with the new data.
 				// Example: Dedicated or Integrated Server spawns an entity and a Client receives

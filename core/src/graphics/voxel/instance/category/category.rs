@@ -1,5 +1,5 @@
-use crate::block;
 use super::{Operation, TargetPosition};
+use crate::block;
 
 #[derive(Clone, Copy)]
 pub struct Category {
@@ -55,9 +55,15 @@ impl Category {
 impl std::fmt::Debug for Category {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		if self.count() > 0 {
-			write!(f, "Category({:?} : {}..{} ({}))", self.id, self.start(), self.start + self.count, self.count())
-		}
-		else {
+			write!(
+				f,
+				"Category({:?} : {}..{} ({}))",
+				self.id,
+				self.start(),
+				self.start + self.count,
+				self.count()
+			)
+		} else {
 			write!(f, "Category({:?} : {}..Ø (0))", self.id, self.start())
 		}
 	}

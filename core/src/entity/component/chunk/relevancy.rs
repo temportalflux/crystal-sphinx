@@ -8,6 +8,7 @@ use std::collections::HashSet;
 pub struct Relevancy {
 	/// The radius of chunks around the [`current chunk coordinate`](super::super::Position::chunk).
 	radius: usize,
+	entity_radius: usize,
 	/// The origin chunk of the last replication.
 	/// Compared against the entity's [`current chunk coordinate`](super::super::Position::chunk)
 	/// to determine if chunks need to be replicated.
@@ -26,6 +27,7 @@ impl Default for Relevancy {
 	fn default() -> Self {
 		Self {
 			radius: 0,
+			entity_radius: 0,
 			replicated_origin: Point3::new(0, 0, 0),
 			pending_chunks: HashSet::new(),
 			replicated_chunks: HashSet::new(),
@@ -57,6 +59,15 @@ impl Relevancy {
 
 	pub fn radius(&self) -> usize {
 		self.radius
+	}
+
+	pub fn with_entity_radius(mut self, radius: usize) -> Self {
+		self.entity_radius = radius;
+		self
+	}
+
+	pub fn entity_radius(&self) -> usize {
+		self.entity_radius
 	}
 
 	pub fn chunk(&self) -> &Point3<i64> {
