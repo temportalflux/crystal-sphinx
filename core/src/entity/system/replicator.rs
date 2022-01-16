@@ -40,7 +40,7 @@ impl EngineSystem for Replicator {
 		profiling::scope!("subsystem:replicator");
 
 		type QueryBundle<'c> = hecs::PreparedQuery<(
-			&'c component::Position,
+			&'c component::physics::linear::Position,
 			&'c mut component::OwnedByConnection,
 			&'c mut component::chunk::Relevancy,
 		)>;
@@ -227,8 +227,10 @@ impl Replicator {
 	) {
 		use crate::network::packet::replicate_entity;
 		use engine::network::{enums::*, packet::Packet, Network};
-		type QueryBundle<'c> =
-			hecs::PreparedQuery<(&'c component::Position, &'c component::network::Replicated)>;
+		type QueryBundle<'c> = hecs::PreparedQuery<(
+			&'c component::physics::linear::Position,
+			&'c component::network::Replicated,
+		)>;
 
 		let mut world = arc_world.write().unwrap();
 

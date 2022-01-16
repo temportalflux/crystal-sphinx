@@ -49,7 +49,11 @@ impl OwnedByAccount {
 	}
 }
 
-impl super::network::Replicatable for OwnedByAccount {}
+impl super::network::Replicatable for OwnedByAccount {
+	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
+		*self = *replicated;
+	}
+}
 
 impl super::binary::Serializable for OwnedByAccount {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {

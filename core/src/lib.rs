@@ -95,6 +95,11 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	let network_storage = network::storage::Storage::new(&app_state);
 	network::task::Unload::add_state_listener(&app_state);
 
+	// Both clients and servers run the physics simulation.
+	// The server will broadcast authoritative values (via components marked as `Replicatable`),
+	// and clients will tell the server of the changes to the entities they own via TBD.
+	engine.add_system(entity::system::Physics::new(&entity_world).arclocked());
+
 	if is_server {
 		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
 	} else {

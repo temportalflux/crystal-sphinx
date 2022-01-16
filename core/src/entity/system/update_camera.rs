@@ -6,7 +6,7 @@ use engine::{math::nalgebra::Point3, EngineSystem};
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
-	&'c component::Position,
+	&'c component::physics::linear::Position,
 	&'c component::Orientation,
 	&'c component::Camera,
 )>;

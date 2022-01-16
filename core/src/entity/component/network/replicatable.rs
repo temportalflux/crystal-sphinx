@@ -3,7 +3,7 @@ use crate::entity::component::{binary, Component, ExtensionRegistration};
 /// Trait implemented by components to mark that the component is replicated to relevant connections.
 /// Components which are able to be replicated must also implement [`binary serialization`](binary::Serializable).
 pub trait Replicatable: binary::Serializable {
-	fn on_replication(&mut self, _replicated: &Self, _is_locally_owned: bool) {}
+	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool);
 }
 
 pub struct Registration {

@@ -11,7 +11,7 @@ use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c component::OwnedByAccount,
-	&'c mut component::Position,
+	&'c mut component::physics::linear::Velocity,
 	&'c mut component::Orientation,
 )>;
 
@@ -124,7 +124,7 @@ impl PlayerController {
 }
 
 impl EngineSystem for PlayerController {
-	fn update(&mut self, delta_time: std::time::Duration, _has_focus: bool) {
+	fn update(&mut self, _delta_time: std::time::Duration, _has_focus: bool) {
 		profiling::scope!("subsystem:player_controller");
 
 		let look_values = self
@@ -144,7 +144,7 @@ impl EngineSystem for PlayerController {
 		};
 		let mut world = arc_world.write().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (_entity, (entity_user, position, orientation)) in query_bundle.query_mut(&mut world) {
+		for (_entity, (entity_user, velocity, orientation)) in query_bundle.query_mut(&mut world) {
 			// Only control the entity which is owned by the local player
 			if *entity_user.id() != self.account_id {
 				continue;
@@ -164,20 +164,17 @@ impl EngineSystem for PlayerController {
 			**orientation = desired_horizontal_rot;
 			*/
 
-			let mut displacement = Vector3::new(0.0, 0.0, 0.0);
+			**velocity = Vector3::new(0.0, 0.0, 0.0);
 			for (move_action, &value) in self.move_actions.iter().zip(move_values.iter()) {
 				if value.abs() > std::f32::EPSILON {
 					let mut direction = *move_action.direction;
 					if !move_action.is_global {
 						direction = (**orientation) * direction;
-						// zero out the y-value of the direction
-						direction[1] = 0.0;
+						direction.y = 0.0;
 					}
-					displacement += direction * value * self.move_speed * delta_time.as_secs_f32();
+					direction = direction.normalize();
+					**velocity += direction * value * self.move_speed;
 				}
-			}
-			if displacement.magnitude_squared() > 0.0 {
-				*position += displacement;
 			}
 
 			for (look_action, value) in self.look_actions.iter().zip(look_values.iter()) {

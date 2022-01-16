@@ -3,7 +3,7 @@ use engine::EngineSystem;
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
-	&'c component::Position,
+	&'c component::physics::linear::Position,
 	&'c mut component::chunk::TicketOwner,
 )>;
 

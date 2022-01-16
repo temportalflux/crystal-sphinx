@@ -10,8 +10,7 @@ mod owned_by_account;
 pub use owned_by_account::*;
 mod owned_by_connection;
 pub use owned_by_connection::*;
-mod position;
-pub use position::*;
+pub mod physics;
 mod registry;
 pub use registry::*;
 
@@ -35,5 +34,6 @@ pub fn register_types() {
 	registry.register::<Orientation>();
 	registry.register::<OwnedByAccount>();
 	registry.register::<OwnedByConnection>();
-	registry.register::<Position>();
+	registry.register::<physics::linear::Position>();
+	registry.register::<physics::linear::Velocity>();
 }

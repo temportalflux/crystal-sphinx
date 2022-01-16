@@ -1,3 +1,4 @@
+use crate::entity::component::{binary, debug, network, Component, Registration};
 use engine::{
 	math::nalgebra::{Point3, Vector3},
 	utility::AnyError,
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct Position {
 	chunk: Point3<i64>,
 	offset: Point3<f32>,
+	has_changed: bool,
 }
 
 impl Default for Position {
@@ -15,27 +17,28 @@ impl Default for Position {
 		Self {
 			chunk: Point3::new(0, 0, 0),
 			offset: Point3::new(3.5, 0.0, 0.5),
+			has_changed: false,
 		}
 	}
 }
 
-impl super::Component for Position {
+impl Component for Position {
 	fn unique_id() -> &'static str {
-		"crystal_sphinx::entity::component::Position"
+		"crystal_sphinx::entity::component::physics::linear::Position"
 	}
 
 	fn display_name() -> &'static str {
 		"Position"
 	}
 
-	fn registration() -> super::Registration<Self>
+	fn registration() -> Registration<Self>
 	where
 		Self: Sized,
 	{
-		use super::binary::Registration as binary;
-		use super::debug::Registration as debug;
-		use super::network::Registration as network;
-		super::Registration::<Self>::default()
+		use binary::Registration as binary;
+		use debug::Registration as debug;
+		use network::Registration as network;
+		Registration::<Self>::default()
 			.with_ext(binary::from::<Self>())
 			.with_ext(debug::from::<Self>())
 			.with_ext(network::from::<Self>())
@@ -89,12 +92,17 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 			*offset -= sign * size;
 			*chunk += sign as i64;
 		}
+		self.has_changed = true;
 	}
 }
 
-impl super::network::Replicatable for Position {}
+impl network::Replicatable for Position {
+	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
+		*self = *replicated;
+	}
+}
 
-impl super::binary::Serializable for Position {
+impl binary::Serializable for Position {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
@@ -103,11 +111,11 @@ impl super::binary::Serializable for Position {
 impl std::convert::TryFrom<Vec<u8>> for Position {
 	type Error = AnyError;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		Ok(super::binary::deserialize::<Self>(&bytes)?)
+		Ok(binary::deserialize::<Self>(&bytes)?)
 	}
 }
 
-impl super::debug::EguiInformation for Position {
+impl debug::EguiInformation for Position {
 	fn render(&self, ui: &mut egui::Ui) {
 		ui.label(format!(
 			"Chunk: <{:04}, {:04}, {:04}>",
