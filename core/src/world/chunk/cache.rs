@@ -60,6 +60,14 @@ impl<TArcLockChunk> Cache<TArcLockChunk> {
 
 	pub(crate) fn insert(&mut self, coordinate: Point3<i64>, chunk: TArcLockChunk) {
 		let _ = self.loaded_chunks.insert(coordinate, chunk);
+		self.mark_pending(coordinate);
+	}
+
+	pub(crate) fn get_loaded(&self, coordinate: &Point3<i64>) -> Option<&TArcLockChunk> {
+		self.loaded_chunks.get(&coordinate)
+	}
+
+	pub(crate) fn mark_pending(&mut self, coordinate: Point3<i64>) {
 		self.pending.push(coordinate);
 	}
 

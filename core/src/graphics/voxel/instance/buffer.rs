@@ -107,7 +107,8 @@ impl Buffer {
 								operations.push(Operation::Remove(coord));
 							}
 							for arc_chunk in pending.into_iter() {
-								operations.push(Operation::Insert(Arc::downgrade(&arc_chunk)));
+								// TODO: re-enable
+								//operations.push(Operation::Insert(Arc::downgrade(&arc_chunk)));
 							}
 						}
 					}
@@ -136,6 +137,7 @@ impl Buffer {
 									if let Some(arc_chunk) = weak_chunk.upgrade() {
 										let chunk = arc_chunk.read().unwrap();
 										let coord = chunk.coordinate();
+										// TODO: If using partial chunks, this will reapply the entire contents of the chunk on each partial chunk replication
 										description.insert_chunk(coord, chunk.block_ids());
 									}
 								}

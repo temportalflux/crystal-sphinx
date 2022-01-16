@@ -122,7 +122,7 @@ impl Replicator {
 		current_chunk: Point3<i64>,
 		relevancy: &mut component::chunk::Relevancy,
 	) -> Vec<PacketBuilder> {
-		use crate::network::packet::{ChunkRelevancy, ReplicateWorld, WorldUpdate};
+		use crate::network::packet::ReplicateWorld;
 		use engine::network::{enums::*, packet::Packet};
 
 		profiling::scope!(
@@ -144,12 +144,6 @@ impl Replicator {
 			});
 			old_chunks
 		};
-
-		log::debug!(
-			"update chunks: {} new, {} old",
-			new_chunks.len(),
-			old_chunks.len()
-		);
 
 		// Get all the coordinates that should be replicated once they are available/loaded.
 		// This might be some number of updates after the user moves to a new chunk,
@@ -179,8 +173,8 @@ impl Replicator {
 						let arc_chunk = weak_chunk.upgrade().unwrap();
 						let server_chunk = arc_chunk.read().unwrap();
 						// Conver the chunk into replication data and add it to the list of things to send.
-						let client_chunk = server_chunk.chunk.clone();
-						updates.push(ReplicateWorld(WorldUpdate::Chunk(client_chunk)));
+						let mut packets = ReplicateWorld::create_chunk_packets(&server_chunk.chunk);
+						updates.append(&mut packets);
 						relevancy.mark_as_replicated(coordinate);
 					}
 					None => {
@@ -189,8 +183,6 @@ impl Replicator {
 				}
 			}
 		}
-
-		log::debug!("Replicating {} chunk updates", updates.len());
 
 		let mut packets = Vec::with_capacity(2);
 		{
@@ -202,12 +194,7 @@ impl Replicator {
 					.with_guarantee(Reliable + Ordered)
 					// Notify client what chunks are no longer relevant (can be dropped),
 					// and what chunks will be incoming over the network shortly.
-					.with_payload(&ReplicateWorld(WorldUpdate::Relevancy(ChunkRelevancy {
-						entity,
-						new_chunks,
-						old_chunks,
-						origin: current_chunk,
-					}))),
+					.with_payloads(&ReplicateWorld::fragment_relevancy(entity, old_chunks)),
 			);
 			packets.push(
 				Packet::builder()
