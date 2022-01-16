@@ -149,13 +149,17 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 					};
 
 				// If the entity doesn't exist in the world, spawn it with the components.
-				// Otherwise, replace any existing components with the same types with the new data.
+				// Otherwise, update any existing components with the same types with the new data
+				// (and spawn any missing components that were replicated).
 				// Example: Dedicated or Integrated Server spawns an entity and a Client receives
 				//          the update for the first time. Client doesn't have the entity in its
 				//          world yet, so it and its components are spawned.
 				// Integrated Client-Server might spawn an entity, but it should never send the packet to itself.
 				match entity_map.get(&server_entity) {
 					None => {
+						// If this is first spawn and the entity is owned by the client, spawn the client-only components as well.
+						// This is only ever valid for players right now (only players have the OwnedByAccount component),
+						// so until that condition changes, its safe to just apply the player client-only components to any owned entity.
 						if is_locally_owned {
 							builder = archetype::player::Client::apply_to(builder);
 						}
@@ -163,10 +167,15 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 						entity_map.insert(server_entity, client_entity);
 					}
 					Some(client_entity) => {
+						// A hecs::EntityBuilder which contains all of the replicated components
+						// which did not already exist for the client_entity.
 						let mut missing_components = {
-							let entity_ref = world.entity(*client_entity)?;
 							let mut missing_components = hecs::EntityBuilder::new();
+							// Reference to the entity/components for the client entity in the world
+							let entity_ref = world.entity(*client_entity)?;
+							// Iterate over all of the replicated components
 							for type_id in builder.component_types() {
+								// Get the registration for the component type
 								let registered = match registry.find(&type_id) {
 									Some(reg) => reg,
 									None => {
@@ -174,6 +183,7 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 										continue;
 									}
 								};
+								// Get the Replicatable registration extension for the component type
 								let network_ext = match registered
 									.get_ext::<component::network::Registration>()
 								{
@@ -199,6 +209,7 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 							}
 							missing_components
 						};
+						// Insert all of the components which were replicated but not yet on the entity (if any such exist).
 						if missing_components.component_types().count() > 0 {
 							let _ = world.insert(*client_entity, missing_components.build());
 						}
