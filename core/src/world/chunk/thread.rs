@@ -170,7 +170,7 @@ impl ThreadState {
 				let mut cache = self.cache.write().unwrap();
 				let root_dir = self.root_dir.clone();
 				let arc_chunk = ServerChunk::load_or_generate(&coordinate, level, root_dir);
-				cache.insert(&coordinate, Arc::downgrade(&arc_chunk));
+				cache.insert(coordinate, Arc::downgrade(&arc_chunk));
 				(true, arc_chunk)
 			}
 		};

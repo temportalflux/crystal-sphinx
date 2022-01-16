@@ -14,7 +14,7 @@ pub struct SerializedComponent {
 	pub(crate) data: Vec<u8>,
 }
 
-/// Trait implemented by components to mark that the component is replicated to relevant connections.
+/// Trait implemented by components to provide functionality for serializing to and deserializing from binary data.
 pub trait Serializable: super::Component
 where
 	Self: TryFrom<Vec<u8>>,

@@ -103,7 +103,7 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 			WorldUpdate::Chunk(client_chunk) => {
 				if let Ok(mut cache) = self.chunk_cache().write() {
 					cache.insert(
-						&client_chunk.coordinate(),
+						*client_chunk.coordinate(),
 						Arc::new(RwLock::new(client_chunk.clone())),
 					);
 				}

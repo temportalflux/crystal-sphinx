@@ -167,7 +167,7 @@ impl EntityInspector {
 					for type_id in entity_ref.component_types() {
 						if let Some(registered) = registry.find(&type_id) {
 							let is_showing = self.components_to_show.contains(&type_id);
-							let can_be_displayed = registered.has::<debug::Registration>();
+							let can_be_displayed = registered.has_ext::<debug::Registration>();
 							let label =
 								egui::SelectableLabel::new(is_showing, registered.display_name());
 							if ui.add_enabled(can_be_displayed, label).clicked() {
@@ -182,7 +182,7 @@ impl EntityInspector {
 		});
 		for type_id in self.components_to_show.iter() {
 			let registered = registry.find(&type_id).unwrap();
-			if let Some(debug_registration) = registered.get::<debug::Registration>() {
+			if let Some(debug_registration) = registered.get_ext::<debug::Registration>() {
 				ui.label(registered.display_name());
 				ui.indent(registered.id(), |ui| {
 					debug_registration.render(&entity_ref, ui);

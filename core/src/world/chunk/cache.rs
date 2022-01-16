@@ -58,9 +58,9 @@ impl<TArcLockChunk> Cache<TArcLockChunk> {
 		(pending, removed)
 	}
 
-	pub(crate) fn insert(&mut self, coordinate: &Point3<i64>, chunk: TArcLockChunk) {
-		let _ = self.loaded_chunks.insert(*coordinate, chunk);
-		self.pending.push(coordinate.clone());
+	pub(crate) fn insert(&mut self, coordinate: Point3<i64>, chunk: TArcLockChunk) {
+		let _ = self.loaded_chunks.insert(coordinate, chunk);
+		self.pending.push(coordinate);
 	}
 
 	pub(crate) fn remove(&mut self, coordinate: &Point3<i64>) {

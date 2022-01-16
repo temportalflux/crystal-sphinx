@@ -3,6 +3,7 @@ mod camera;
 pub use camera::*;
 pub mod chunk;
 pub mod debug;
+pub mod network;
 mod orientation;
 pub use orientation::*;
 mod owned_by_account;
@@ -13,8 +14,6 @@ mod position;
 pub use position::*;
 mod registry;
 pub use registry::*;
-mod replicated;
-pub use replicated::*;
 
 pub trait Component: hecs::Component {
 	fn unique_id() -> &'static str;
@@ -32,6 +31,7 @@ pub fn register_types() {
 	registry.register::<Camera>();
 	registry.register::<chunk::Relevancy>();
 	registry.register::<chunk::TicketOwner>();
+	registry.register::<network::Replicated>();
 	registry.register::<Orientation>();
 	registry.register::<OwnedByAccount>();
 	registry.register::<OwnedByConnection>();

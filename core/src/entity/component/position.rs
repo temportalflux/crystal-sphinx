@@ -34,9 +34,11 @@ impl super::Component for Position {
 	{
 		use super::binary::Registration as binary;
 		use super::debug::Registration as debug;
+		use super::network::Registration as network;
 		super::Registration::<Self>::default()
 			.with_ext(binary::from::<Self>())
 			.with_ext(debug::from::<Self>())
+			.with_ext(network::from::<Self>())
 	}
 }
 
@@ -89,6 +91,8 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 		}
 	}
 }
+
+impl super::network::Replicatable for Position {}
 
 impl super::binary::Serializable for Position {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {

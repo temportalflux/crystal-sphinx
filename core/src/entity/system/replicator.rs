@@ -1,7 +1,7 @@
 use crate::{
 	entity::{
 		self,
-		component::{self, binary, Position},
+		component::{self, binary, network},
 		ArcLockEntityWorld,
 	},
 	world::chunk,
@@ -183,25 +183,32 @@ impl Replicator {
 
 		log::debug!("Replicating {} chunk updates", updates.len());
 
-		let packets = {
-			profiling::scope!("build-packets");
-			Packet::builder()
-				.with_address(*owner.address())
-				.unwrap()
-				.with_guarantee(Reliable + Ordered)
-				// Notify client what chunks are no longer relevant (can be dropped),
-				// and what chunks will be incoming over the network shortly.
-				.with_payload(&ReplicateWorld(WorldUpdate::Relevancy(ChunkRelevancy {
-					entity,
-					new_chunks,
-					old_chunks,
-					origin: current_chunk,
-				})))
-				// Send each chunk update in its own Reliably-Ordered packet,
-				// which is garunteed to be received by clients after the initial update.
-				.with_payloads(&updates[..])
-		};
-		let _ = Network::send_packets(packets);
+		{
+			profiling::scope!("send-packets");
+			let _ = Network::send_packets(
+				Packet::builder()
+					.with_address(*owner.address())
+					.unwrap()
+					.with_guarantee(Reliable + Ordered)
+					// Notify client what chunks are no longer relevant (can be dropped),
+					// and what chunks will be incoming over the network shortly.
+					.with_payload(&ReplicateWorld(WorldUpdate::Relevancy(ChunkRelevancy {
+						entity,
+						new_chunks,
+						old_chunks,
+						origin: current_chunk,
+					}))),
+			);
+			let _ = Network::send_packets(
+				Packet::builder()
+					.with_address(*owner.address())
+					.unwrap()
+					.with_guarantee(Reliable + Unordered)
+					// Send each chunk update in its own Reliably-Ordered packet,
+					// which is garunteed to be received by clients after the initial update.
+					.with_payloads(&updates[..]),
+			);
+		}
 	}
 
 	fn is_chunk_within_radius(origin: &Point3<i64>, coord: &Point3<i64>, radius: usize) -> bool {
@@ -220,7 +227,8 @@ impl Replicator {
 	) {
 		use crate::network::packet::replicate_entity;
 		use engine::network::{enums::*, packet::Packet, Network};
-		type QueryBundle<'c> = hecs::PreparedQuery<(&'c component::Position,)>;
+		type QueryBundle<'c> =
+			hecs::PreparedQuery<(&'c component::Position, &'c component::network::Replicated)>;
 
 		let mut world = arc_world.write().unwrap();
 
@@ -236,7 +244,7 @@ impl Replicator {
 				&format!("changed-connections:{}", updated_connections.len())
 			);
 			let mut query_bundle = QueryBundle::new();
-			for (entity, (position,)) in query_bundle.query_mut(&mut world) {
+			for (entity, (position, _replicated)) in query_bundle.query_mut(&mut world) {
 				for (address, areas_of_effect) in updated_connections.iter_all() {
 					// true if the `entity` was relevant to this address for any of its "owned" areas
 					let mut was_relevant = false;
@@ -304,6 +312,7 @@ impl Replicator {
 				profiling::scope!("serialize-entity", &format!("entity:{}", entity.id()));
 
 				let entity_ref = world.entity(entity).unwrap();
+				assert!(entity_ref.has::<network::Replicated>());
 				match self.serialize_entity(&registry, entity_ref) {
 					Ok(serialized) => {
 						serialized_entities.insert(entity, serialized);
@@ -349,7 +358,7 @@ impl Replicator {
 					.unwrap()
 					// Integrated Client-Server should not sent to itself
 					.ignore_local_address()
-					.with_guarantee(Reliable + Ordered)
+					.with_guarantee(Reliable + Unordered)
 					.with_payload(&replicate_entity::Packet { operations }),
 			);
 		}
@@ -362,34 +371,33 @@ impl Replicator {
 	) -> Result<binary::SerializedEntity, AnyError> {
 		let mut serialized_components = Vec::new();
 		for type_id in entity_ref.component_types() {
-			// TODO: Implement a Replicated trait for the components which should actually be replicated (instead of using binary::Serializable as the marker).
 			if let Some(registered) = registry.find(&type_id) {
-				if let Some(binary_registration) = registered.get::<binary::Registration>() {
-					match binary_registration.serialize(&entity_ref)? {
-						Some(serialized) => {
-							serialized_components.push(serialized);
-						}
-						None => {} // The component didn't actually exist on the entity
-					}
+				// Skip any components that are not marked as network replicatable.
+				match registered.get_ext::<network::Registration>() {
+					None => continue,
+					Some(_) => {}
 				}
+				let binary_registration = match registered.get_ext::<binary::Registration>() {
+					Some(reg) => reg,
+					None => {
+						log::error!(
+							target: "Replicator",
+							"Failed to serialize type {}, missing binary serializable extension.",
+							registered.id()
+						);
+						continue;
+					}
+				};
+				// If `serializable` returns None, it means the component wasn't actually on that entity.
+				// Since the type-id came from the entity itself, the component MUST exist on the entity_ref,
+				// so it should be safe to unwrap directly.
+				let serialized = binary_registration.serialize(&entity_ref)?.unwrap();
+				serialized_components.push(serialized);
 			}
 		}
 		Ok(binary::SerializedEntity {
 			entity: entity_ref.entity(),
 			components: serialized_components,
 		})
-	}
-
-	fn _owned_entities(
-		&self,
-		arc_world: &ArcLockEntityWorld,
-	) -> Vec<(hecs::Entity, std::net::SocketAddr, Position)> {
-		let world = arc_world.read().unwrap();
-		let entities = world
-			.query::<(&component::OwnedByConnection, &Position)>()
-			.iter()
-			.map(|(entity, (&owner, &position))| (entity, *owner.address(), position))
-			.collect::<Vec<_>>();
-		entities
 	}
 }

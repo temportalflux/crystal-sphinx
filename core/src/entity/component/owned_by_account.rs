@@ -25,9 +25,11 @@ impl super::Component for OwnedByAccount {
 	{
 		use super::binary::Registration as binary;
 		use super::debug::Registration as debug;
+		use super::network::Registration as network;
 		super::Registration::<Self>::default()
 			.with_ext(binary::from::<Self>())
 			.with_ext(debug::from::<Self>())
+			.with_ext(network::from::<Self>())
 	}
 }
 
@@ -46,6 +48,8 @@ impl OwnedByAccount {
 		&self.account_id
 	}
 }
+
+impl super::network::Replicatable for OwnedByAccount {}
 
 impl super::binary::Serializable for OwnedByAccount {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {

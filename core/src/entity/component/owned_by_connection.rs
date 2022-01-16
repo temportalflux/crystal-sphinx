@@ -25,9 +25,11 @@ impl super::Component for OwnedByConnection {
 	{
 		use super::binary::Registration as binary;
 		use super::debug::Registration as debug;
+		use super::network::Registration as network;
 		super::Registration::<Self>::default()
 			.with_ext(binary::from::<Self>())
 			.with_ext(debug::from::<Self>())
+			.with_ext(network::from::<Self>())
 	}
 }
 
@@ -57,6 +59,8 @@ impl OwnedByConnection {
 		self.has_been_replicated = true;
 	}
 }
+
+impl super::network::Replicatable for OwnedByConnection {}
 
 impl super::binary::Serializable for OwnedByConnection {
 	fn serialize(&self) -> Result<Vec<u8>, AnyError> {

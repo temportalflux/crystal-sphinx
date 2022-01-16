@@ -15,6 +15,7 @@ where
 				id: T::unique_id(),
 				display_name: T::display_name(),
 				extensions: HashMap::new(),
+				fn_has: Box::new(|entity_ref| -> bool { entity_ref.has::<T>() }),
 			},
 			marker: Default::default(),
 		}
@@ -39,6 +40,7 @@ pub struct Registered {
 	id: &'static str,
 	display_name: &'static str,
 	extensions: HashMap<&'static str, Box<dyn std::any::Any>>,
+	fn_has: Box<dyn Fn(&hecs::EntityRef) -> bool>,
 }
 impl Registered {
 	pub fn id(&self) -> &'static str {
@@ -49,14 +51,18 @@ impl Registered {
 		&self.display_name
 	}
 
-	pub fn has<T>(&self) -> bool
+	pub fn is_in_entity(&self, entity_ref: &hecs::EntityRef) -> bool {
+		(self.fn_has)(entity_ref)
+	}
+
+	pub fn has_ext<T>(&self) -> bool
 	where
 		T: 'static + ExtensionRegistration,
 	{
-		self.get::<T>().is_some()
+		self.get_ext::<T>().is_some()
 	}
 
-	pub fn get<T>(&self) -> Option<&T>
+	pub fn get_ext<T>(&self) -> Option<&T>
 	where
 		T: 'static + ExtensionRegistration,
 	{

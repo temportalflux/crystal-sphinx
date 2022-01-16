@@ -348,11 +348,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 								let local_account = client_reg.active_account().unwrap();
 								// If the account ids match, then this entity is the local player's avatar
 								if *local_account.id() == *pending_user.id() {
-									if let Some(mut client_builder) =
-										archetype::player::Client::from(None).build()
-									{
-										builder.add_bundle(client_builder.build());
-									}
+									builder = archetype::player::Client::apply_to(builder);
 								}
 							}
 

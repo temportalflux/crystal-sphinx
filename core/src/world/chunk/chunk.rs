@@ -26,8 +26,8 @@ pub struct ServerChunk {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Chunk {
 	/// The coordinate of the chunk in the world.
-	coordinate: Point3<i64>,
-	block_ids: HashMap<Point3<usize>, block::LookupId>,
+	pub(crate) coordinate: Point3<i64>,
+	pub(crate) block_ids: HashMap<Point3<usize>, block::LookupId>,
 }
 
 impl Chunk {

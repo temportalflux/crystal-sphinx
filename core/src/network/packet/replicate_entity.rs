@@ -12,7 +12,10 @@ use engine::{
 	utility::VoidResult,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock, Weak};
+use std::{
+	collections::HashMap,
+	sync::{Arc, Mutex, RwLock, Weak},
+};
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -32,6 +35,7 @@ impl Packet {
 
 		let client_proc = ReceiveReplicatedEntity {
 			entity_world: Arc::downgrade(&entity_world),
+			server_to_client_id: Arc::new(Mutex::new(HashMap::new())),
 		};
 
 		builder.register_bundle::<Self>(
@@ -45,6 +49,7 @@ impl Packet {
 #[derive(Clone)]
 struct ReceiveReplicatedEntity {
 	entity_world: Weak<RwLock<entity::World>>,
+	server_to_client_id: Arc<Mutex<HashMap<hecs::Entity, hecs::Entity>>>,
 }
 
 impl Processor for ReceiveReplicatedEntity {
@@ -90,31 +95,39 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 					for comp_data in serialized.components.clone().into_iter() {
 						let type_id = registry.get_type_id(&comp_data.id).unwrap();
 						if let Some(registered) = registry.find(&type_id) {
-							match registered.get::<component::binary::Registration>() {
+							match registered.get_ext::<component::binary::Registration>() {
 								Some(binary_registration) => {
-									let _ = binary_registration
-										.deserialize(comp_data.data, &mut builder);
+									if let Err(err) = binary_registration
+										.deserialize(comp_data.data, &mut builder)
+									{
+										log::error!(target: "ReplicateEntity", "Encountered error while deserializing component {}, {}", comp_data.id, err);
+									}
 								}
 								None => {
 									log::warn!(target: "ReplicateEntity", "Failed to deserialize, no binary registration found for component({})", comp_data.id);
 								}
 							}
+						} else {
+							log::error!(target: "ReplicateEntity", "Failed to find registration for serialized component {}", comp_data.id);
 						}
 					}
 					entities_to_spawn.push((serialized.entity, builder));
 				}
-				Operation::Destroy(entity) => {
-					entities_to_despawn.push(*entity);
+				Operation::Destroy(server_entity) => {
+					entities_to_despawn.push(*server_entity);
 				}
 			}
 		}
 
+		let mut entity_map = self.server_to_client_id.lock().unwrap();
+
 		if !entities_to_despawn.is_empty() {
 			profiling::scope!("despawn-replicated");
 			let mut world = arc_world.write().unwrap();
-			for entity in entities_to_despawn.into_iter() {
-				log::debug!(target: "ReplicateEntity", "Despawning replicated entity {}", entity.id());
-				let _ = world.despawn(entity);
+			for server_entity in entities_to_despawn.into_iter() {
+				if let Some(client_entity) = entity_map.remove(&server_entity) {
+					let _ = world.despawn(client_entity);
+				}
 			}
 		}
 
@@ -126,8 +139,14 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 				.map(|account| account.meta.id.clone());
 
 			let mut world = arc_world.write().unwrap();
-			for (entity, mut builder) in entities_to_spawn.into_iter() {
-				log::debug!(target: "ReplicateEntity", "Spawning replicated entity {}", entity.id());
+			let registry = component::Registry::read();
+			for (server_entity, mut builder) in entities_to_spawn.into_iter() {
+				let is_locally_owned =
+					match (local_account_id, builder.get::<component::OwnedByAccount>()) {
+						// If the account ids match, then this entity is the local player's avatar
+						(Some(local_id), Some(user)) => *user.id() == local_id,
+						_ => false,
+					};
 
 				// If the entity doesn't exist in the world, spawn it with the components.
 				// Otherwise, replace any existing components with the same types with the new data.
@@ -135,26 +154,55 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 				//          the update for the first time. Client doesn't have the entity in its
 				//          world yet, so it and its components are spawned.
 				// Integrated Client-Server might spawn an entity, but it should never send the packet to itself.
-				let bundle = builder.build();
-				if !world.contains(entity) {
-					world.spawn_at(entity, bundle);
-				} else {
-					let _ = world.insert(entity, bundle);
-				}
-
-				match (local_account_id, builder.get::<component::OwnedByAccount>()) {
-					(Some(local_id), Some(user)) => {
-						// If the account ids match, then this entity is the local player's avatar
-						if *user.id() == local_id {
-							let entity_ref = world.entity(entity).unwrap();
-							if let Some(mut builder) =
-								archetype::player::Client::from(Some(entity_ref)).build()
-							{
-								let _ = world.insert(entity, builder.build());
+				match entity_map.get(&server_entity) {
+					None => {
+						if is_locally_owned {
+							builder = archetype::player::Client::apply_to(builder);
+						}
+						let client_entity = world.spawn(builder.build());
+						entity_map.insert(server_entity, client_entity);
+					}
+					Some(client_entity) => {
+						let mut missing_components = {
+							let entity_ref = world.entity(*client_entity)?;
+							let mut missing_components = hecs::EntityBuilder::new();
+							for type_id in builder.component_types() {
+								let registered = match registry.find(&type_id) {
+									Some(reg) => reg,
+									None => {
+										log::error!(target: "ReplicateEntity", "Failed to find registration for entity component {:?}", type_id);
+										continue;
+									}
+								};
+								let network_ext = match registered
+									.get_ext::<component::network::Registration>()
+								{
+									Some(ext) => ext,
+									None => {
+										log::error!(target: "ReplicateEntity", "Entity component {} was replicated but does not have the network replication registration extension.", registered.display_name());
+										continue;
+									}
+								};
+								// Read the data from the replicated component into the existing entity.
+								if !registered.is_in_entity(&entity_ref) {
+									// cache the missing component to the builder for adding all missing components at once
+									network_ext
+										.clone_into_builder(&builder, &mut missing_components);
+								} else {
+									// read the data from the replicated component into the existing component
+									network_ext.on_replication(
+										&builder,
+										&entity_ref,
+										is_locally_owned,
+									);
+								}
 							}
+							missing_components
+						};
+						if missing_components.component_types().count() > 0 {
+							let _ = world.insert(*client_entity, missing_components.build());
 						}
 					}
-					_ => {}
 				}
 			}
 		}

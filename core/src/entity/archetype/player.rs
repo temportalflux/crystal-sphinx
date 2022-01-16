@@ -1,6 +1,9 @@
 use crate::{
 	account,
-	entity::component::{chunk, Camera, Orientation, OwnedByAccount, OwnedByConnection, Position},
+	entity::component::{
+		chunk, network::Replicated, Camera, Orientation, OwnedByAccount, OwnedByConnection,
+		Position,
+	},
 };
 use std::net::SocketAddr;
 
@@ -8,14 +11,15 @@ pub struct Server(hecs::EntityBuilder);
 impl Server {
 	pub fn new() -> Self {
 		let mut builder = hecs::EntityBuilder::default();
+		builder.add(Replicated::default());
 		builder.add(Position::default());
 		builder.add(Orientation::default());
 		builder.add(chunk::TicketOwner::default().with_load_radius(5));
 		builder.add(
 			chunk::Relevancy::default()
-				.with_radius(6)
+				.with_radius(6) // TODO: This radius should match the radius in the graphics instance buffer
 				.with_entity_radius(5),
-		); // TODO: This radius should match the radius in the graphics instance buffer
+		);
 		Self(builder)
 	}
 
@@ -36,16 +40,23 @@ impl Server {
 
 /// Creates a builder of components that only need to be created on the owning-client,
 /// returning only those types which do not already exist on the entity.
-pub struct Client<'e>(Option<hecs::EntityRef<'e>>, hecs::EntityBuilder, bool);
-impl<'e> Client<'e> {
+pub struct Client(hecs::EntityBuilder, bool);
+impl Client {
+	pub fn new(builder: hecs::EntityBuilder) -> Self {
+		let mut client = Self(builder, false);
+		client.add_opt::<Camera>();
+		client
+	}
+
+	pub fn apply_to(builder: hecs::EntityBuilder) -> hecs::EntityBuilder {
+		Self::new(builder).build()
+	}
+
 	fn has<T>(&self) -> bool
 	where
 		T: hecs::Component,
 	{
-		match self.0 {
-			Some(entity_ref) => entity_ref.has::<T>(),
-			None => false,
-		}
+		self.0.has::<T>()
 	}
 
 	fn add_opt<T>(&mut self)
@@ -53,22 +64,12 @@ impl<'e> Client<'e> {
 		T: hecs::Component + Default,
 	{
 		if !self.has::<T>() {
-			self.1.add(T::default());
-			self.2 = true;
+			self.0.add(T::default());
+			self.1 = true;
 		}
 	}
 
-	pub(crate) fn build(self) -> Option<hecs::EntityBuilder> {
-		match self.2 {
-			true => Some(self.1),
-			false => None,
-		}
-	}
-}
-impl<'e> From<Option<hecs::EntityRef<'e>>> for Client<'e> {
-	fn from(entity_ref: Option<hecs::EntityRef<'e>>) -> Self {
-		let mut client = Self(entity_ref, hecs::EntityBuilder::default(), false);
-		client.add_opt::<Camera>();
-		client
+	pub fn build(self) -> hecs::EntityBuilder {
+		self.0
 	}
 }
