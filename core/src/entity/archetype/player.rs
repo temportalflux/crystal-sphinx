@@ -13,7 +13,7 @@ pub struct Server(hecs::EntityBuilder);
 impl Server {
 	pub fn new() -> Self {
 		let mut builder = hecs::EntityBuilder::default();
-		builder.add(Replicated::default());
+		builder.add(Replicated::new_server());
 		builder.add(Position::default());
 		builder.add(Velocity::default());
 		builder.add(Orientation::default());

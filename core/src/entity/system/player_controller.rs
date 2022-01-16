@@ -1,11 +1,12 @@
 use crate::{
 	account,
 	entity::{self, component, ArcLockEntityWorld},
+	network::packet::MovePlayer,
 };
 use engine::{
 	input,
 	math::nalgebra::{Unit, UnitQuaternion, Vector3},
-	world, EngineSystem,
+	network, world, EngineSystem,
 };
 use std::sync::{Arc, RwLock, Weak};
 
@@ -13,6 +14,7 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c component::OwnedByAccount,
 	&'c mut component::physics::linear::Velocity,
 	&'c mut component::Orientation,
+	&'c mut component::network::Replicated,
 )>;
 
 enum RotationOrder {
@@ -124,7 +126,11 @@ impl PlayerController {
 }
 
 impl EngineSystem for PlayerController {
-	fn update(&mut self, _delta_time: std::time::Duration, _has_focus: bool) {
+	fn update(&mut self, _delta_time: std::time::Duration, has_focus: bool) {
+		if !has_focus {
+			return;
+		}
+
 		profiling::scope!("subsystem:player_controller");
 
 		let look_values = self
@@ -144,11 +150,16 @@ impl EngineSystem for PlayerController {
 		};
 		let mut world = arc_world.write().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (_entity, (entity_user, velocity, orientation)) in query_bundle.query_mut(&mut world) {
+		for (_entity, (entity_user, velocity, orientation, replicated)) in
+			query_bundle.query_mut(&mut world)
+		{
 			// Only control the entity which is owned by the local player
 			if *entity_user.id() != self.account_id {
 				continue;
 			}
+
+			let prev_velocity = **velocity;
+			let prev_orientation = **orientation;
 
 			/* Rotate around <0.5, 0, 0.5>
 			let r = 3.0;
@@ -163,6 +174,13 @@ impl EngineSystem for PlayerController {
 			);
 			**orientation = desired_horizontal_rot;
 			*/
+
+			// Its OK to modify the velocity and orientation of the player on a Dedicated Client.
+			// A couple reasons why:
+			// 1. Clients need to have local prediction while their movement request is in-flight,
+			//    and thus need to update the physics so it gets simulated locally.
+			// 2. The relevant components will be authoritatively replicated from the server,
+			//    so there is no risk of client-authority here.
 
 			**velocity = Vector3::new(0.0, 0.0, 0.0);
 			for (move_action, &value) in self.move_actions.iter().zip(move_values.iter()) {
@@ -179,6 +197,35 @@ impl EngineSystem for PlayerController {
 
 			for (look_action, value) in self.look_actions.iter().zip(look_values.iter()) {
 				look_action.concat_into(*value, &mut (**orientation));
+			}
+
+			if network::Network::local_data().is_dedicated(network::mode::Kind::Client) {
+				const SIG_VEL_MAGNITUDE: f32 = 0.05;
+				const SIG_ORIENTATION_ANGLE_DIFF: f32 = 0.005;
+
+				let mut has_significantly_changed = false;
+				if (**velocity - prev_velocity).magnitude_squared() >= SIG_VEL_MAGNITUDE.powi(2) {
+					has_significantly_changed = true;
+				}
+				if prev_orientation.angle_to(&**orientation) >= SIG_ORIENTATION_ANGLE_DIFF {
+					has_significantly_changed = true;
+				}
+
+				if has_significantly_changed {
+					use network::{enums::*, packet::Packet, Network};
+					assert!(replicated.get_id_on_server().is_some());
+					let server_entity = *replicated.get_id_on_server().unwrap();
+					let _ = Network::send_packets(
+						Packet::builder()
+							.with_mode(ToServer)
+							.with_guarantee(Unreliable + Sequenced)
+							.with_payload(&MovePlayer {
+								server_entity,
+								velocity: **velocity,
+								orientation: **orientation,
+							}),
+					);
+				}
 			}
 		}
 	}

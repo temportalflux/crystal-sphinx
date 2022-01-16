@@ -3,14 +3,14 @@ use std::collections::HashSet;
 
 /// Component added on the server to indicate what chunks are relevant to a given entity.
 /// Chunks which exist inside the radius are replicated, if the entity also has the
-/// [`Owned By Connection`](super::super::OwnedByConnection) component.
+/// [`Owned By Connection`](crate::entity::component::OwnedByConnection) component.
 #[derive(Clone)]
 pub struct Relevancy {
-	/// The radius of chunks around the [`current chunk coordinate`](super::super::Position::chunk).
+	/// The radius of chunks around the [`current chunk coordinate`](crate::entity::component::physics::linear::Position::chunk).
 	radius: usize,
 	entity_radius: usize,
 	/// The origin chunk of the last replication.
-	/// Compared against the entity's [`current chunk coordinate`](super::super::Position::chunk)
+	/// Compared against the entity's [`current chunk coordinate`](crate::entity::component::physics::linear::Position::chunk)
 	/// to determine if chunks need to be replicated.
 	replicated_origin: Point3<i64>,
 	/// Chunk coordinates which are relevant to the owner entity,

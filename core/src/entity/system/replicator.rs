@@ -6,7 +6,9 @@ use crate::{
 	},
 	world::chunk,
 };
-use engine::{math::nalgebra::Point3, utility::AnyError, EngineSystem};
+use engine::{
+	math::nalgebra::Point3, network::packet::PacketBuilder, utility::AnyError, EngineSystem,
+};
 use multimap::MultiMap;
 use std::{
 	collections::{HashMap, HashSet},
@@ -50,10 +52,11 @@ impl EngineSystem for Replicator {
 			None => return,
 		};
 
-		let updated_connections = {
+		let (updated_connections, chunk_packets) = {
 			// its possible for a connection to have multiple owned entities (in theory),
 			// so this needs to be a multimap where each address can have multiple chunk locations.
 			let mut connections = MultiMap::new();
+			let mut chunk_packets = Vec::with_capacity(10);
 			let mut world = arc_world.write().unwrap();
 			let mut query_bundle = QueryBundle::new();
 			for (entity, (position, owner, relevancy)) in query_bundle.query_mut(&mut world) {
@@ -87,13 +90,19 @@ impl EngineSystem for Replicator {
 								),
 							);
 						}
-						self.replicate_chunks_to(entity, owner, current_chunk, relevancy);
+						let mut packets =
+							self.replicate_chunks_to(entity, owner, current_chunk, relevancy);
+						chunk_packets.append(&mut packets);
 					}
 				}
 			}
-			connections
+			(connections, chunk_packets)
 		};
-		self.replicate_entities(&arc_world, updated_connections);
+
+		let entity_packets = self.replicate_entities(&arc_world, updated_connections);
+
+		let _ = engine::network::Network::send_all_packets(entity_packets);
+		let _ = engine::network::Network::send_all_packets(chunk_packets);
 
 		// TODO: Replicate updates on net::BinarySerializable components
 		// - (net::BinarySerializable should have a flag to indicate that it is dirty)
@@ -112,9 +121,9 @@ impl Replicator {
 		owner: &component::OwnedByConnection,
 		current_chunk: Point3<i64>,
 		relevancy: &mut component::chunk::Relevancy,
-	) {
+	) -> Vec<PacketBuilder> {
 		use crate::network::packet::{ChunkRelevancy, ReplicateWorld, WorldUpdate};
-		use engine::network::{enums::*, packet::Packet, Network};
+		use engine::network::{enums::*, packet::Packet};
 
 		profiling::scope!(
 			"replicate_chunks_to",
@@ -183,9 +192,10 @@ impl Replicator {
 
 		log::debug!("Replicating {} chunk updates", updates.len());
 
+		let mut packets = Vec::with_capacity(2);
 		{
 			profiling::scope!("send-packets");
-			let _ = Network::send_packets(
+			packets.push(
 				Packet::builder()
 					.with_address(*owner.address())
 					.unwrap()
@@ -199,7 +209,7 @@ impl Replicator {
 						origin: current_chunk,
 					}))),
 			);
-			let _ = Network::send_packets(
+			packets.push(
 				Packet::builder()
 					.with_address(*owner.address())
 					.unwrap()
@@ -209,6 +219,7 @@ impl Replicator {
 					.with_payloads(&updates[..]),
 			);
 		}
+		packets
 	}
 
 	fn is_chunk_within_radius(origin: &Point3<i64>, coord: &Point3<i64>, radius: usize) -> bool {
@@ -224,9 +235,9 @@ impl Replicator {
 			std::net::SocketAddr,
 			(Option<Point3<i64>>, Point3<i64>, usize),
 		>,
-	) {
+	) -> Vec<PacketBuilder> {
 		use crate::network::packet::replicate_entity;
-		use engine::network::{enums::*, packet::Packet, Network};
+		use engine::network::{enums::*, packet::Packet};
 		type QueryBundle<'c> = hecs::PreparedQuery<(
 			&'c component::physics::linear::Position,
 			&'c component::network::Replicated,
@@ -343,6 +354,7 @@ impl Replicator {
 			}
 		}
 
+		let mut packets = Vec::with_capacity(operations.keys().count());
 		for (address, operations) in operations.iter_all() {
 			profiling::scope!("send-entity-packets", &format!("connection:{address}"));
 			let operations = operations
@@ -354,7 +366,7 @@ impl Replicator {
 					EntityOperation::Destroy(eid) => replicate_entity::Operation::Destroy(*eid),
 				})
 				.collect();
-			let _ = Network::send_packets(
+			packets.push(
 				Packet::builder()
 					.with_address(address)
 					.unwrap()
@@ -364,6 +376,7 @@ impl Replicator {
 					.with_payload(&replicate_entity::Packet { operations }),
 			);
 		}
+		packets
 	}
 
 	fn serialize_entity(

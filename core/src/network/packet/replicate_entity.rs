@@ -163,6 +163,11 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 						if is_locally_owned {
 							builder = archetype::player::Client::apply_to(builder);
 						}
+
+						// Since the entity was replicated, it needs its own `Replicated` component.
+						builder.add(component::network::Replicated::new_client(server_entity));
+
+						// Actually spawn the entity on the client
 						let client_entity = world.spawn(builder.build());
 						entity_map.insert(server_entity, client_entity);
 					}
