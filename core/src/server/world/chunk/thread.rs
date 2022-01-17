@@ -1,4 +1,8 @@
-use super::{cache::server::ArcLockServerCache, ticket, Level, ServerChunk, Ticket};
+use crate::server::world::chunk::{
+	self, cache,
+	ticket::{self, Ticket},
+	Chunk, Level,
+};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{spawn_thread, VoidResult},
@@ -6,14 +10,13 @@ use engine::{
 use std::{
 	collections::HashMap,
 	path::PathBuf,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, Weak},
 };
 
 /// The log category for the chunk loading thread.
 static LOG: &'static str = "chunk-loading";
 /// The handle for the chunk-loading thread. Dropping the handle results in the thread ending.
 pub(crate) type Handle = Arc<()>;
-type ArcLockChunk = Arc<RwLock<ServerChunk>>;
 
 /// State data about the loading thread.
 pub(crate) struct ThreadState {
@@ -22,7 +25,7 @@ pub(crate) struct ThreadState {
 	/// The public cache of chunks that are currently loaded.
 	/// The cache holds no ownership of chunks,
 	/// just weak references to what is loaded at any given time.
-	cache: ArcLockServerCache,
+	cache: cache::ArcLock,
 
 	/// List of inactive and recently dropped tickets (and the chunk coordinates they reference).
 	ticket_bindings: Vec<(Weak<Ticket>, Vec<Point3<i64>>)>,
@@ -47,7 +50,7 @@ pub(crate) struct ThreadState {
 pub fn start(
 	root_dir: PathBuf,
 	incoming_requests: ticket::Receiver,
-	cache: &ArcLockServerCache,
+	cache: &cache::ArcLock,
 ) -> Handle {
 	let handle = Handle::new(());
 
@@ -137,7 +140,7 @@ impl ThreadState {
 	fn sync_load_ticket_chunks(
 		&mut self,
 		ticket: Arc<Ticket>,
-	) -> Vec<(Point3<i64>, ArcLockChunk, Level)> {
+	) -> Vec<(Point3<i64>, chunk::ArcLock, Level)> {
 		let mut chunks = Vec::new();
 		let coordinate_levels = ticket.coordinate_levels();
 		for (coordinate, level) in coordinate_levels.into_iter() {
@@ -153,7 +156,7 @@ impl ThreadState {
 		chunks
 	}
 
-	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> ArcLockChunk {
+	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> chunk::ArcLock {
 		let loaded_chunk = self
 			.cache
 			.read()
@@ -169,7 +172,7 @@ impl ThreadState {
 			None => {
 				let mut cache = self.cache.write().unwrap();
 				let root_dir = self.root_dir.clone();
-				let arc_chunk = ServerChunk::load_or_generate(&coordinate, level, root_dir);
+				let arc_chunk = Chunk::load_or_generate(&coordinate, level, root_dir);
 				cache.insert(coordinate, Arc::downgrade(&arc_chunk));
 				(true, arc_chunk)
 			}
@@ -183,7 +186,7 @@ impl ThreadState {
 		weak_ticket: &Weak<Ticket>,
 		coordinate: Point3<i64>,
 		level: Level,
-		arc_chunk: &ArcLockChunk,
+		arc_chunk: &chunk::ArcLock,
 	) {
 		match self.chunk_states.get_mut(&coordinate) {
 			Some(state) => {
@@ -248,7 +251,7 @@ impl ThreadState {
 	}
 
 	#[profiling::function]
-	fn find_expired_chunks(&mut self) -> Vec<(Point3<i64>, ArcLockChunk)> {
+	fn find_expired_chunks(&mut self) -> Vec<(Point3<i64>, chunk::ArcLock)> {
 		// Invalidate the flag indicating that there is some chunk pending expiration.
 		// We will later give it a proper value if there are still chunks in the list which will expire later.
 		self.earliest_expiration_timestamp = None;
@@ -294,7 +297,7 @@ impl ThreadState {
 	#[profiling::function]
 	fn unload_expired_chunks(
 		&mut self,
-		mut chunks_for_unloading: Vec<(Point3<i64>, ArcLockChunk)>,
+		mut chunks_for_unloading: Vec<(Point3<i64>, chunk::ArcLock)>,
 	) {
 		// Unload each chunk, dropping them one-after-one after each iteration
 		if !chunks_for_unloading.is_empty() {
@@ -322,7 +325,7 @@ impl ThreadState {
 pub struct ChunkState {
 	/// The pointer to the actual chunk world data.
 	/// If this is dropped, the chunk is discarded (regardless of if its been saved or not).
-	pub chunk: ArcLockChunk,
+	pub chunk: chunk::ArcLock,
 	/// The ticking level of the chunk.
 	/// If this state changes during [`update`](ChunkState::update), the value in the chunk world data is updated.
 	/// This value is driven by finding the highest level in the list of associated tickets.

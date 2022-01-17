@@ -1,4 +1,6 @@
-use crate::{block, entity::ArcLockEntityWorld, network::storage::ArcLockStorage, world::chunk};
+use crate::{
+	block, common::world::chunk, entity::ArcLockEntityWorld, network::storage::ArcLockStorage,
+};
 use engine::{
 	math::nalgebra::Point3,
 	network::{
@@ -161,7 +163,7 @@ struct ReceiveReplicatedWorld {
 }
 
 impl ReceiveReplicatedWorld {
-	fn chunk_cache(&self) -> chunk::cache::client::ArcLockClientCache {
+	fn chunk_cache(&self) -> crate::client::world::chunk::cache::ArcLock {
 		let storage = self.storage.read().unwrap();
 		let arc_client = storage.client().as_ref().unwrap();
 		let client = arc_client.read().unwrap();

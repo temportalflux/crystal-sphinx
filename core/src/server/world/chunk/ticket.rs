@@ -1,4 +1,7 @@
-use super::{Level, ParameterizedLevel};
+use crate::server::world::{
+	chunk::{Level, ParameterizedLevel},
+	Database,
+};
 use engine::{
 	math::nalgebra::{Point3, Vector3},
 	utility::AnyError,
@@ -41,7 +44,7 @@ impl Ticket {
 	/// the affected chunks will be unloaded if no other ticket references them.
 	pub fn submit(self) -> Result<Arc<Ticket>, AnyError> {
 		let arctex = Arc::new(self);
-		crate::world::Database::send_chunk_ticket(&arctex)?;
+		Database::send_chunk_ticket(&arctex)?;
 		Ok(arctex)
 	}
 

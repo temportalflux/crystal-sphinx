@@ -1,4 +1,4 @@
-use crate::world::chunk;
+use crate::common::world::chunk;
 use engine::math::nalgebra::{Point3, Vector3};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

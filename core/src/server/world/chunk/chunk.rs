@@ -1,20 +1,20 @@
 use crate::{
-	block,
-	world::{chunk::Level, generator},
+	common::world::{chunk::Chunk as CommonChunk, generator},
+	server::world::chunk::Level,
 };
-use engine::{asset, math::nalgebra::Point3};
-use serde::{Deserialize, Serialize};
+use engine::math::nalgebra::Point3;
 use std::{
-	collections::HashMap,
 	path::PathBuf,
 	sync::{Arc, RwLock},
 };
 
+pub type ArcLock = Arc<RwLock<Chunk>>;
+
 /// A 16x16x16 chunk in the world.
 ///
 /// Data is saved to disk at `<world root>/chunks/x.y.z.kdl`.
-pub struct ServerChunk {
-	pub chunk: Chunk,
+pub struct Chunk {
+	pub chunk: CommonChunk,
 	/// The path to the chunk on disk.
 	/// Not saved to file.
 	path_on_disk: PathBuf,
@@ -23,53 +23,7 @@ pub struct ServerChunk {
 	pub(crate) level: Level,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Chunk {
-	/// The coordinate of the chunk in the world.
-	pub(crate) coordinate: Point3<i64>,
-	pub(crate) block_ids: HashMap<Point3<usize>, block::LookupId>,
-}
-
 impl Chunk {
-	pub fn new(coordinate: Point3<i64>) -> Self {
-		Self {
-			coordinate,
-			block_ids: HashMap::new(),
-		}
-	}
-
-	pub fn coordinate(&self) -> &Point3<i64> {
-		&self.coordinate
-	}
-
-	pub fn block_ids(&self) -> &HashMap<Point3<usize>, block::LookupId> {
-		&self.block_ids
-	}
-
-	pub fn set_block(&mut self, point: Point3<usize>, id: Option<&asset::Id>) {
-		let id = match id {
-			Some(asset_id) => match block::Lookup::lookup_value(&asset_id) {
-				Some(id) => Some(id),
-				None => return,
-			},
-			None => None,
-		};
-		self.set_block_id(point, id);
-	}
-
-	pub fn set_block_id(&mut self, point: Point3<usize>, id: Option<block::LookupId>) {
-		match id {
-			Some(block_id) => {
-				self.block_ids.insert(point, block_id);
-			}
-			None => {
-				self.block_ids.remove(&point);
-			}
-		}
-	}
-}
-
-impl ServerChunk {
 	fn create_path_for(mut world_root: PathBuf, coordinate: &Point3<i64>) -> PathBuf {
 		world_root.push("chunks");
 		world_root.push(format!(
@@ -83,7 +37,7 @@ impl ServerChunk {
 		coordinate: &Point3<i64>,
 		level: Level,
 		root_dir: PathBuf,
-	) -> Arc<RwLock<ServerChunk>> {
+	) -> Arc<RwLock<Self>> {
 		let path_on_disk = Self::create_path_for(root_dir, &coordinate);
 		Arc::new(RwLock::new(if path_on_disk.exists() {
 			Self::load(path_on_disk, &coordinate, level)
@@ -112,7 +66,7 @@ impl ServerChunk {
 		//log::debug!(target: "world", "Loading chunk {}", coordinate);
 		Self {
 			path_on_disk,
-			chunk: Chunk::new(*coordinate),
+			chunk: CommonChunk::new(*coordinate),
 			level,
 		}
 	}

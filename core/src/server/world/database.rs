@@ -1,8 +1,5 @@
-use super::{
-	chunk::{
-		self,
-		cache::server::{ArcLockServerCache, ServerCache},
-	},
+use crate::server::world::{
+	chunk::{cache, thread, ticket, Level, Ticket},
 	Settings,
 };
 use engine::{
@@ -21,22 +18,22 @@ pub type ArcLockDatabase = Arc<RwLock<Database>>;
 /// Exists on the server, does not contain presentational/graphical data.
 pub struct Database {
 	_settings: Settings,
-	chunk_cache: ArcLockServerCache,
-	_load_request_sender: Arc<chunk::ticket::Sender>,
+	chunk_cache: cache::ArcLock,
+	_load_request_sender: Arc<ticket::Sender>,
 	// When this is dropped, the loading thread stops.
-	_chunk_thread_handle: chunk::thread::Handle,
+	_chunk_thread_handle: thread::Handle,
 
-	held_tickets: Vec<Arc<chunk::Ticket>>,
+	held_tickets: Vec<Arc<Ticket>>,
 }
 
 impl Database {
 	pub fn new(root_path: PathBuf) -> Self {
 		let settings = Settings::load(&root_path).unwrap();
 
-		let chunk_cache = Arc::new(RwLock::new(ServerCache::new()));
+		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
 
 		let (load_request_sender, load_request_receiver) = crossbeam_channel::unbounded();
-		let thread_handle = chunk::thread::start(root_path, load_request_receiver, &chunk_cache);
+		let thread_handle = thread::start(root_path, load_request_receiver, &chunk_cache);
 
 		let load_request_sender = Arc::new(load_request_sender);
 		*Self::ticket_sender_static() = Some(Arc::downgrade(&load_request_sender));
@@ -51,12 +48,12 @@ impl Database {
 		}
 	}
 
-	fn ticket_sender_static() -> &'static mut Option<Weak<chunk::ticket::Sender>> {
-		static mut TICKET_SENDER: Option<Weak<chunk::ticket::Sender>> = None;
+	fn ticket_sender_static() -> &'static mut Option<Weak<ticket::Sender>> {
+		static mut TICKET_SENDER: Option<Weak<ticket::Sender>> = None;
 		unsafe { &mut TICKET_SENDER }
 	}
 
-	fn ticket_sender() -> Result<Arc<chunk::ticket::Sender>, AnyError> {
+	fn ticket_sender() -> Result<Arc<ticket::Sender>, AnyError> {
 		Ok(Self::ticket_sender_static()
 			.as_ref()
 			.map(|weak| weak.upgrade())
@@ -64,19 +61,19 @@ impl Database {
 			.ok_or(NoWorldDatabase)?)
 	}
 
-	pub(crate) fn send_chunk_ticket(ticket: &Arc<chunk::Ticket>) -> VoidResult {
+	pub(crate) fn send_chunk_ticket(ticket: &Arc<Ticket>) -> VoidResult {
 		Ok(Self::ticket_sender()?.try_send(Arc::downgrade(&ticket))?)
 	}
 
-	pub fn chunk_cache(&self) -> &ArcLockServerCache {
+	pub fn chunk_cache(&self) -> &cache::ArcLock {
 		&self.chunk_cache
 	}
 
 	pub fn load_origin_chunk(arc_world: &ArcLockDatabase) -> VoidResult {
 		arc_world.write().unwrap().held_tickets.push(
-			chunk::Ticket {
+			Ticket {
 				coordinate: Point3::new(0, 0, 0),
-				level: (chunk::Level::Ticking, 2).into(),
+				level: (Level::Ticking, 2).into(),
 			}
 			.submit()?,
 		);

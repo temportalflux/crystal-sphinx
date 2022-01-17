@@ -1,6 +1,6 @@
 use crate::{
 	block,
-	world::chunk::{self, Chunk},
+	common::world::chunk::{self, Chunk},
 };
 use engine::{asset, math::nalgebra::Point3};
 use std::collections::HashMap;

@@ -1,9 +1,9 @@
-use crate::{block, world::chunk::Chunk};
+use crate::{block, common::world::chunk::Chunk};
 use engine::math::nalgebra::Point3;
 use multimap::MultiMap;
 use std::{
 	collections::{HashMap, HashSet},
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
 pub enum Operation {
@@ -11,11 +11,12 @@ pub enum Operation {
 	Insert(Point3<i64>, Vec<(Point3<usize>, block::LookupId)>),
 }
 
-pub type ArcLockClientCache = Arc<RwLock<ClientCache>>;
+pub type ArcLock = Arc<RwLock<Cache>>;
+pub type WeakLock = Weak<RwLock<Cache>>;
 
 /// A storage bin for all the chunks which are relevant to the client.
 /// Stores strong references until replication packets remove chunks.
-pub struct ClientCache {
+pub struct Cache {
 	loaded_chunks: HashMap<Point3<i64>, Arc<RwLock<Chunk>>>,
 
 	added: MultiMap<Point3<i64>, Point3<usize>>,
@@ -23,7 +24,7 @@ pub struct ClientCache {
 	removed: HashSet<Point3<i64>>,
 }
 
-impl ClientCache {
+impl Cache {
 	pub(crate) fn new() -> Self {
 		Self {
 			loaded_chunks: HashMap::new(),

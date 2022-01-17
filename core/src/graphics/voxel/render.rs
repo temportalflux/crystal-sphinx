@@ -1,13 +1,13 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
 	block,
+	client::world::chunk::cache,
 	graphics::voxel::{
 		camera,
 		instance::{self, Instance},
 		model,
 	},
 	network::storage::Storage,
-	world::chunk::cache::client::ArcLockClientCache,
 	CrystalSphinx,
 };
 use engine::{
@@ -102,7 +102,7 @@ impl RenderVoxel {
 		render_chain: &mut RenderChain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: &Arc<model::Cache>,
-		chunk_cache: ArcLockClientCache,
+		chunk_cache: cache::ArcLock,
 		gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<ArcLockRenderVoxel, AnyError> {
 		let subpass_id = Self::subpass_id();
@@ -122,7 +122,7 @@ impl RenderVoxel {
 		render_chain: &RenderChain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
-		chunk_cache: ArcLockClientCache,
+		chunk_cache: cache::ArcLock,
 		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<Self, AnyError> {
 		// TODO: Load shaders in async process before renderer is created

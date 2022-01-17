@@ -1,4 +1,4 @@
-use crate::world::chunk;
+use crate::server::world::chunk;
 use engine::math::nalgebra::Point3;
 use std::sync::Arc;
 

@@ -74,7 +74,7 @@ impl Position {
 
 impl std::ops::AddAssign<Vector3<f32>> for Position {
 	fn add_assign(&mut self, rhs: Vector3<f32>) {
-		use crate::world::chunk::SIZE;
+		use crate::common::world::chunk::SIZE;
 		self.offset += rhs;
 		let iter = self
 			.offset

@@ -32,6 +32,10 @@
 
 use engine::{utility::VoidResult, Application};
 
+pub mod client;
+pub mod common;
+pub mod server;
+
 pub mod account;
 pub mod app;
 pub mod block;
@@ -43,7 +47,6 @@ pub mod input;
 pub mod network;
 pub mod plugin;
 pub mod ui;
-pub mod world;
 
 use std::sync::{Arc, RwLock};
 

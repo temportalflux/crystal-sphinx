@@ -1,18 +1,16 @@
 use crate::{
+	client::world::chunk::cache,
+	common::world::chunk,
 	graphics::voxel::{
 		instance::{local, submitted, Instance},
 		model,
-	},
-	world::chunk::{
-		self,
-		cache::client::{ClientCache, Operation},
 	},
 };
 use engine::{
 	graphics::{command, RenderChain},
 	utility::{self, AnyError, VoidResult},
 };
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Mutex, Weak};
 
 /// Controls the instance buffer data for rendering voxels.
 /// Keeps track of what chunks and blocks are old and updates the instances accordingly.
@@ -26,7 +24,7 @@ impl Buffer {
 	pub fn new(
 		render_chain: &RenderChain,
 		model_cache: Weak<model::Cache>,
-		chunk_cache: Weak<RwLock<ClientCache>>,
+		chunk_cache: cache::WeakLock,
 	) -> Result<Self, AnyError> {
 		// TODO: Get this value from settings
 		let render_radius = 6;
@@ -72,7 +70,7 @@ impl Buffer {
 	}
 
 	fn start_thread(
-		chunk_cache: Weak<RwLock<ClientCache>>,
+		chunk_cache: cache::WeakLock,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> Arc<()> {
 		static LOG: &'static str = "voxel-instance-buffer";
@@ -120,10 +118,10 @@ impl Buffer {
 						let mut operation_count = 0;
 						loop {
 							match operations.remove(0) {
-								Operation::Remove(coord) => {
+								cache::Operation::Remove(coord) => {
 									description.remove_chunk(&coord);
 								}
-								Operation::Insert(coordinate, updates) => {
+								cache::Operation::Insert(coordinate, updates) => {
 									description.insert_chunk(coordinate, updates);
 								}
 							}

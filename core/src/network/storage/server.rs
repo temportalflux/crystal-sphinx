@@ -1,7 +1,7 @@
 use crate::{
 	account,
 	entity::{self, ArcLockEntityWorld},
-	world::ArcLockDatabase,
+	server::world::Database,
 };
 use engine::{
 	utility::{AnyError, VoidResult},
@@ -23,7 +23,7 @@ pub struct Server {
 	auth_key: account::Key,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 
-	database: Option<ArcLockDatabase>,
+	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
 }
 
@@ -148,8 +148,6 @@ impl Server {
 
 	#[profiling::function]
 	pub fn start_loading_world(&mut self) {
-		use crate::world::Database;
-
 		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
 		let database = Database::new(Self::world_path(self.root_dir.to_owned()));
 

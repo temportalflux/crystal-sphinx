@@ -118,22 +118,28 @@ impl Relevancy {
 		}
 		// sort according to the new origin
 		self.replicated_origin = origin;
-		self.pending_chunks.sort_by(|a, b| Self::cmp_coord_by_dist(a, b, &origin));
+		self.pending_chunks
+			.sort_by(|a, b| Self::cmp_coord_by_dist(a, b, &origin));
 		for coord in new.iter() {
 			self.insert_pending(*coord);
 		}
 	}
 
-	fn cmp_coord_by_dist(a: &Point3<i64>, b: &Point3<i64>, origin: &Point3<i64>) -> std::cmp::Ordering {
+	fn cmp_coord_by_dist(
+		a: &Point3<i64>,
+		b: &Point3<i64>,
+		origin: &Point3<i64>,
+	) -> std::cmp::Ordering {
 		let a_dist = (a - origin).cast::<f32>().magnitude_squared();
 		let b_dist = (b - origin).cast::<f32>().magnitude_squared();
 		a_dist.partial_cmp(&b_dist).unwrap()
 	}
 
 	fn find_pending(&self, coord: &Point3<i64>) -> Result<usize, usize> {
-		self.pending_chunks.binary_search_by(|a| Self::cmp_coord_by_dist(a, coord, &self.replicated_origin))
+		self.pending_chunks
+			.binary_search_by(|a| Self::cmp_coord_by_dist(a, coord, &self.replicated_origin))
 	}
-	
+
 	fn remove_pending(&mut self, coord: &Point3<i64>) {
 		// If `find_pending` returns Ok, then the coordinate was found and can be removed.
 		if let Ok(idx) = self.find_pending(&coord) {

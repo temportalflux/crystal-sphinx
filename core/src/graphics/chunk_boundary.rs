@@ -1,7 +1,7 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
+	common::world::chunk,
 	graphics::voxel::camera,
-	world::chunk,
 	CrystalSphinx,
 };
 use engine::{
