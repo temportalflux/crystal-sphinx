@@ -1,4 +1,10 @@
-use super::{chunk, Settings};
+use super::{
+	chunk::{
+		self,
+		cache::server::{ArcLockServerCache, ServerCache},
+	},
+	Settings,
+};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{AnyError, VoidResult},
@@ -15,7 +21,7 @@ pub type ArcLockDatabase = Arc<RwLock<Database>>;
 /// Exists on the server, does not contain presentational/graphical data.
 pub struct Database {
 	_settings: Settings,
-	chunk_cache: chunk::ArcLockServerCache,
+	chunk_cache: ArcLockServerCache,
 	_load_request_sender: Arc<chunk::ticket::Sender>,
 	// When this is dropped, the loading thread stops.
 	_chunk_thread_handle: chunk::thread::Handle,
@@ -27,7 +33,7 @@ impl Database {
 	pub fn new(root_path: PathBuf) -> Self {
 		let settings = Settings::load(&root_path).unwrap();
 
-		let chunk_cache = Arc::new(RwLock::new(chunk::Cache::new()));
+		let chunk_cache = Arc::new(RwLock::new(ServerCache::new()));
 
 		let (load_request_sender, load_request_receiver) = crossbeam_channel::unbounded();
 		let thread_handle = chunk::thread::start(root_path, load_request_receiver, &chunk_cache);
@@ -62,7 +68,7 @@ impl Database {
 		Ok(Self::ticket_sender()?.try_send(Arc::downgrade(&ticket))?)
 	}
 
-	pub fn chunk_cache(&self) -> &chunk::ArcLockServerCache {
+	pub fn chunk_cache(&self) -> &ArcLockServerCache {
 		&self.chunk_cache
 	}
 

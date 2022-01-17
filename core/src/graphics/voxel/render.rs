@@ -7,7 +7,7 @@ use crate::{
 		model,
 	},
 	network::storage::Storage,
-	world::chunk::ArcLockClientCache,
+	world::chunk::cache::client::ArcLockClientCache,
 	CrystalSphinx,
 };
 use engine::{

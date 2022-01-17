@@ -1,4 +1,4 @@
-use super::{ticket, ArcLockServerCache, Level, ServerChunk, Ticket};
+use super::{cache::server::ArcLockServerCache, ticket, Level, ServerChunk, Ticket};
 use engine::{
 	math::nalgebra::Point3,
 	utility::{spawn_thread, VoidResult},

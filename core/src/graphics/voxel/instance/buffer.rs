@@ -3,11 +3,13 @@ use crate::{
 		instance::{local, submitted, Instance},
 		model,
 	},
-	world::chunk::{self, ClientCache},
+	world::chunk::{
+		self,
+		cache::client::{ClientCache, Operation},
+	},
 };
 use engine::{
 	graphics::{command, RenderChain},
-	math::nalgebra::Point3,
 	utility::{self, AnyError, VoidResult},
 };
 use std::sync::{Arc, Mutex, RwLock, Weak};
@@ -18,11 +20,6 @@ pub struct Buffer {
 	local_integrated_buffer: Arc<Mutex<local::IntegratedBuffer>>,
 	submitted_description: submitted::Description,
 	_thread_handle: Arc<()>,
-}
-
-enum Operation {
-	Remove(Point3<i64>),
-	Insert(Weak<RwLock<chunk::Chunk>>),
 }
 
 impl Buffer {
@@ -102,14 +99,7 @@ impl Buffer {
 					if chunks_pending {
 						profiling::scope!("take");
 						if let Ok(mut chunk_cache) = arc_cache.try_write() {
-							let (pending, removed) = chunk_cache.take_pending();
-							for coord in removed.into_iter() {
-								operations.push(Operation::Remove(coord));
-							}
-							for arc_chunk in pending.into_iter() {
-								// TODO: re-enable
-								//operations.push(Operation::Insert(Arc::downgrade(&arc_chunk)));
-							}
+							operations = chunk_cache.take_pending();
 						}
 					}
 				}
@@ -133,13 +123,8 @@ impl Buffer {
 								Operation::Remove(coord) => {
 									description.remove_chunk(&coord);
 								}
-								Operation::Insert(weak_chunk) => {
-									if let Some(arc_chunk) = weak_chunk.upgrade() {
-										let chunk = arc_chunk.read().unwrap();
-										let coord = chunk.coordinate();
-										// TODO: If using partial chunks, this will reapply the entire contents of the chunk on each partial chunk replication
-										description.insert_chunk(coord, chunk.block_ids());
-									}
+								Operation::Insert(coordinate, updates) => {
+									description.insert_chunk(coordinate, updates);
 								}
 							}
 							operation_count += 1;

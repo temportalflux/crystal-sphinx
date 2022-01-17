@@ -10,7 +10,6 @@ use engine::{
 	utility::VoidResult,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
 
 #[packet_kind(engine::network)]
 #[derive(Serialize, Deserialize)]
@@ -159,7 +158,7 @@ struct ReceiveReplicatedWorld {
 }
 
 impl ReceiveReplicatedWorld {
-	fn chunk_cache(&self) -> chunk::ArcLockClientCache {
+	fn chunk_cache(&self) -> chunk::cache::client::ArcLockClientCache {
 		let storage = self.storage.read().unwrap();
 		let arc_client = storage.client().as_ref().unwrap();
 		let client = arc_client.read().unwrap();
@@ -197,23 +196,10 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 				}
 			}
 			WorldUpdate::Chunk(partial_chunk) => {
+				// TODO: all of the packets are received, but not all block instances get rendered (some chunks are just missing altogether)
+				//log::debug!("received <{}, {}, {}> {}", partial_chunk.coordinate.x, partial_chunk.coordinate.y, partial_chunk.coordinate.z, partial_chunk.block_ids.len());
 				if let Ok(mut cache) = self.chunk_cache().write() {
-					match cache.get_loaded(&partial_chunk.coordinate).cloned() {
-						Some(arc_chunk) => {
-							if let Ok(mut client_chunk) = arc_chunk.write() {
-								cache.mark_pending(partial_chunk.coordinate);
-								partial_chunk.apply_to(&mut client_chunk);
-							}
-						}
-						None => {
-							let mut client_chunk = chunk::Chunk::new(partial_chunk.coordinate);
-							partial_chunk.apply_to(&mut client_chunk);
-							cache.insert(
-								partial_chunk.coordinate,
-								Arc::new(RwLock::new(client_chunk)),
-							);
-						}
-					}
+					cache.insert_updates(&partial_chunk.coordinate, &partial_chunk.block_ids);
 				}
 			}
 		}

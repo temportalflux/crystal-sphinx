@@ -6,8 +6,7 @@ pub static RADIUS: i8 = 8;
 pub static SIZE_I: Vector3<usize> = Vector3::new(DIAMETER, DIAMETER, DIAMETER);
 pub static SIZE: Vector3<f32> = Vector3::new(16.0, 16.0, 16.0);
 
-mod cache;
-pub use cache::*;
+pub mod cache;
 
 mod chunk;
 pub use chunk::*;

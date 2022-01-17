@@ -4,7 +4,7 @@ use crate::{
 		component::{self, binary, network},
 		ArcLockEntityWorld,
 	},
-	world::chunk,
+	world::chunk::cache::server::WeakLockServerCache,
 };
 use engine::{
 	math::nalgebra::Point3, network::packet::PacketBuilder, utility::AnyError, EngineSystem,
@@ -18,13 +18,13 @@ use std::{
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
 pub struct Replicator {
 	world: Weak<RwLock<entity::World>>,
-	chunk_cache: chunk::WeakLockServerCache,
+	chunk_cache: WeakLockServerCache,
 	// Mapping of Entity -> Address List to keep track of to what connections a given entity has been replicated to.
 	entities_replicated_to: MultiMap<hecs::Entity, std::net::SocketAddr>,
 }
 
 impl Replicator {
-	pub fn new(chunk_cache: chunk::WeakLockServerCache, world: &ArcLockEntityWorld) -> Self {
+	pub fn new(chunk_cache: WeakLockServerCache, world: &ArcLockEntityWorld) -> Self {
 		Self {
 			chunk_cache,
 			world: Arc::downgrade(&world),
@@ -200,7 +200,7 @@ impl Replicator {
 				Packet::builder()
 					.with_address(*owner.address())
 					.unwrap()
-					.with_guarantee(Reliable + Unordered)
+					.with_guarantee(Reliable + Ordered)
 					// Send each chunk update in its own Reliably-Ordered packet,
 					// which is garunteed to be received by clients after the initial update.
 					.with_payloads(&updates[..]),

@@ -87,8 +87,8 @@ impl IntegratedBuffer {
 
 	pub fn insert_chunk(
 		&mut self,
-		chunk: &Point3<i64>,
-		block_ids: &HashMap<Point3<usize>, block::LookupId>,
+		chunk: Point3<i64>,
+		block_ids: Vec<(Point3<usize>, block::LookupId)>,
 	) {
 		profiling::scope!(
 			"insert_chunk",
@@ -96,9 +96,9 @@ impl IntegratedBuffer {
 		);
 
 		let mut points = HashSet::with_capacity(block_ids.len());
-		for (point, block_id) in block_ids.iter() {
-			let point = block::Point::new(*chunk, point.cast::<i8>());
-			self.insert_inactive(&point, *block_id, Instance::from(&point, EnumSet::empty()));
+		for (point, block_id) in block_ids.into_iter() {
+			let point = block::Point::new(chunk, point.cast::<i8>());
+			self.insert_inactive(&point, block_id, Instance::from(&point, EnumSet::empty()));
 			points.insert(point);
 		}
 		self.update_faces(points);
