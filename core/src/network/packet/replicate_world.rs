@@ -145,7 +145,10 @@ impl ReplicateWorld {
 			}
 			partial_chunk.push((point, block_id));
 		}
-		if !partial_chunk.is_empty() {
+		// If there are blocks left over that haven't filled a packet,
+		// or the chunk itself was empty,
+		// push the last (or only) packet.
+		if !partial_chunk.is_empty() || packets.is_empty() {
 			packets.push(ReplicateWorld(WorldUpdate::Chunk(partial_chunk)));
 		}
 		packets

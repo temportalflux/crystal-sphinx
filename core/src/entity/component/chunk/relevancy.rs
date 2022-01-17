@@ -17,7 +17,7 @@ pub struct Relevancy {
 	/// but which have not yet been loaded by the server.
 	/// These are repeatadley checked until they can be replicated
 	/// and moved to [`replicated_chunks`](Relevancy::replicated_chunks).
-	pending_chunks: HashSet<Point3<i64>>,
+	pending_chunks: Vec<Point3<i64>>,
 	/// Chunk coordinates replicated to the owner of this component.
 	/// This is updated before the replication packets are sent.
 	replicated_chunks: HashSet<Point3<i64>>,
@@ -29,7 +29,7 @@ impl Default for Relevancy {
 			radius: 0,
 			entity_radius: 0,
 			replicated_origin: Point3::new(0, 0, 0),
-			pending_chunks: HashSet::new(),
+			pending_chunks: Vec::new(),
 			replicated_chunks: HashSet::new(),
 		}
 	}
@@ -112,22 +112,46 @@ impl Relevancy {
 		old: &HashSet<Point3<i64>>,
 		new: &HashSet<Point3<i64>>,
 	) {
-		self.replicated_origin = origin;
 		for coord in old.iter() {
-			self.pending_chunks.remove(&coord);
+			self.remove_pending(&coord);
 			self.replicated_chunks.remove(&coord);
 		}
+		// sort according to the new origin
+		self.replicated_origin = origin;
+		self.pending_chunks.sort_by(|a, b| Self::cmp_coord_by_dist(a, b, &origin));
 		for coord in new.iter() {
-			self.pending_chunks.insert(*coord);
+			self.insert_pending(*coord);
 		}
 	}
 
-	pub(crate) fn take_pending_chunks(&mut self) -> HashSet<Point3<i64>> {
-		self.pending_chunks.drain().collect()
+	fn cmp_coord_by_dist(a: &Point3<i64>, b: &Point3<i64>, origin: &Point3<i64>) -> std::cmp::Ordering {
+		let a_dist = (a - origin).cast::<f32>().magnitude_squared();
+		let b_dist = (b - origin).cast::<f32>().magnitude_squared();
+		a_dist.partial_cmp(&b_dist).unwrap()
 	}
 
-	pub(crate) fn mark_as_pending(&mut self, coord: Point3<i64>) {
-		self.pending_chunks.insert(coord);
+	fn find_pending(&self, coord: &Point3<i64>) -> Result<usize, usize> {
+		self.pending_chunks.binary_search_by(|a| Self::cmp_coord_by_dist(a, coord, &self.replicated_origin))
+	}
+	
+	fn remove_pending(&mut self, coord: &Point3<i64>) {
+		// If `find_pending` returns Ok, then the coordinate was found and can be removed.
+		if let Ok(idx) = self.find_pending(&coord) {
+			let _ = self.pending_chunks.remove(idx);
+		}
+	}
+
+	pub fn insert_pending(&mut self, coord: Point3<i64>) {
+		// If `find_pending` returns Err, then the coordinate was not found and,
+		// and the resulting index is where it can be inserted to preserve sort order.
+		if let Err(idx) = self.find_pending(&coord) {
+			self.pending_chunks.insert(idx, coord);
+		}
+	}
+
+	pub(crate) fn take_pending_chunks(&mut self, count: usize) -> HashSet<Point3<i64>> {
+		let count = self.pending_chunks.len().min(count);
+		self.pending_chunks.drain(..count).collect()
 	}
 
 	pub(crate) fn mark_as_replicated(&mut self, coord: Point3<i64>) {

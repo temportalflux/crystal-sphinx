@@ -201,7 +201,7 @@ impl IntegratedBuffer {
 	}
 
 	fn insert_inactive(&mut self, point: &block::Point, id: block::LookupId, instance: Instance) {
-		//self.remove_point(&point);
+		self.remove_point(&point);
 		if !self.inactive_points.contains_key(point.chunk()) {
 			self.inactive_points.insert(*point.chunk(), HashMap::new());
 		}
