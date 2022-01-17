@@ -92,7 +92,20 @@ impl IntegratedBuffer {
 	) {
 		profiling::scope!(
 			"insert_chunk",
-			&format!("<{}, {}, {}>", chunk.x, chunk.y, chunk.z)
+			&format!(
+				"chunk=<{}, {}, {}> updates={}",
+				chunk.x,
+				chunk.y,
+				chunk.z,
+				block_ids.len()
+			)
+		);
+		log::debug!(
+			"insert_chunk chunk=<{}, {}, {}> updates={}",
+			chunk.x,
+			chunk.y,
+			chunk.z,
+			block_ids.len()
 		);
 
 		let mut points = HashSet::with_capacity(block_ids.len());
@@ -188,11 +201,23 @@ impl IntegratedBuffer {
 	}
 
 	fn insert_inactive(&mut self, point: &block::Point, id: block::LookupId, instance: Instance) {
+		//self.remove_point(&point);
 		if !self.inactive_points.contains_key(point.chunk()) {
 			self.inactive_points.insert(*point.chunk(), HashMap::new());
 		}
 		let inactive_chunk_points = self.inactive_points.get_mut(point.chunk()).unwrap();
-		inactive_chunk_points.insert(*point.offset(), (id, instance));
+		let _ = inactive_chunk_points.insert(*point.offset(), (id, instance));
+	}
+
+	fn remove_point(&mut self, point: &block::Point) {
+		if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
+			if let Some((block_id, _instance_idx)) = chunk_points.remove(&point.offset()) {
+				self.remove(&point, block_id);
+			}
+		}
+		if let Some(chunk_points) = self.inactive_points.get_mut(&point.chunk()) {
+			let _ = chunk_points.remove(&point.offset());
+		}
 	}
 
 	fn get_block_id(&self, point: &block::Point) -> Option<(IdPhase, block::LookupId)> {

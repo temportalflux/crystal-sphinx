@@ -42,7 +42,7 @@ impl ClientCache {
 		self.added_order.push(coordinate);
 		for &(point, block_id) in updates.iter() {
 			self.added.insert(coordinate, point);
-			chunk.block_ids.insert(point, block_id);
+			let _ = chunk.block_ids.insert(point, block_id);
 		}
 	}
 
@@ -98,7 +98,7 @@ impl ClientCache {
 					Some(&block_id) => Some((*point, block_id)),
 					None => None,
 				})
-				.collect();
+				.collect::<Vec<_>>();
 			operations.push(Operation::Insert(coord, blocks));
 		}
 		operations

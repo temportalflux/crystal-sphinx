@@ -196,8 +196,13 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 				}
 			}
 			WorldUpdate::Chunk(partial_chunk) => {
-				// TODO: all of the packets are received, but not all block instances get rendered (some chunks are just missing altogether)
-				//log::debug!("received <{}, {}, {}> {}", partial_chunk.coordinate.x, partial_chunk.coordinate.y, partial_chunk.coordinate.z, partial_chunk.block_ids.len());
+				log::debug!(
+					"received <{}, {}, {}> {}",
+					partial_chunk.coordinate.x,
+					partial_chunk.coordinate.y,
+					partial_chunk.coordinate.z,
+					partial_chunk.block_ids.len()
+				);
 				if let Ok(mut cache) = self.chunk_cache().write() {
 					cache.insert_updates(&partial_chunk.coordinate, &partial_chunk.block_ids);
 				}

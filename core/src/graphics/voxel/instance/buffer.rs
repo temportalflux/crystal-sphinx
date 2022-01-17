@@ -86,7 +86,7 @@ impl Buffer {
 			while weak_handle.strong_count() > 0 {
 				let unable_to_lock_delay_ms = 1;
 				let no_chunks_to_proccess_delay_ms = 1000;
-				let operation_batch_size = 5;
+				let operation_batch_size = 10;
 				let delay_between_batches = 10;
 
 				// Fetch any chunks that might have come into the cache since the last check
@@ -99,7 +99,7 @@ impl Buffer {
 					if chunks_pending {
 						profiling::scope!("take");
 						if let Ok(mut chunk_cache) = arc_cache.try_write() {
-							operations = chunk_cache.take_pending();
+							operations.append(&mut chunk_cache.take_pending());
 						}
 					}
 				}
