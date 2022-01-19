@@ -171,6 +171,16 @@ impl Machine {
 			.push(Box::new(callback));
 	}
 
+	pub fn add_async_callback<F, T>(&mut self, key: OperationKey, callback: F)
+	where
+		F: Fn(&Operation) -> T + Send + Sync + 'static,
+		T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
+	{
+		self.add_callback(key, move |operation| {
+			engine::task::spawn("app-state", callback(operation));
+		});
+	}
+
 	fn dispatch_callback(&mut self, operation: Operation) {
 		let relevant_callbacks = operation
 			.all_keys()

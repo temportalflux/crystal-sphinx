@@ -104,10 +104,14 @@ pub fn run(config: plugin::Config) -> VoidResult {
 	engine.add_system(entity::system::Physics::new(&entity_world).arclocked());
 
 	if is_server {
-		network::task::Load::load_dedicated_server(&app_state, &network_storage, &entity_world);
+		network::task::load_dedicated_server(
+			app_state.clone(),
+			network_storage.clone(),
+			Arc::downgrade(&entity_world),
+		);
 	} else {
 		input_user = Some(input::init());
-		network::task::Load::add_state_listener(&app_state, &network_storage, &entity_world);
+		network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
 
 		let account_id = if let Ok(mut client_reg) = account::ClientRegistry::write() {
 			client_reg.scan_accounts()?;
