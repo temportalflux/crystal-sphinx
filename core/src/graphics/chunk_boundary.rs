@@ -10,11 +10,11 @@ use engine::{
 		self, buffer, command, flags, pipeline, structs,
 		types::{Vec3, Vec4},
 		utility::NamedObject,
-		vertex_object, ArcRenderChain, Drawable, RenderChain, RenderChainElement, Uniform,
+		vertex_object, ArcRenderChain, Drawable, GpuOperationBuilder, RenderChain,
+		RenderChainElement, Uniform,
 	},
 	input,
 	math::nalgebra::{Point3, Vector2, Vector4},
-	task::{self, ScheduledTask},
 	utility::Result,
 	Application, Engine, EngineSystem,
 };
@@ -306,16 +306,15 @@ impl Render {
 			None,
 		)?;
 
-		graphics::TaskGpuCopy::new(
+		GpuOperationBuilder::new(
 			vertex_buffer.wrap_name(|v| format!("Write({})", v)),
 			&render_chain,
 		)?
 		.begin()?
 		.stage(&vertices[..])?
 		.copy_stage_to_buffer(&vertex_buffer)
-		.end()?
 		.add_signal_to(&mut pending_gpu_signals)
-		.send_to(task::sender());
+		.end()?;
 
 		let index_buffer = buffer::Buffer::create_gpu(
 			Some(format!("ChunkBoundary.IndexBuffer")),
@@ -325,16 +324,15 @@ impl Render {
 			Some(flags::IndexType::UINT32),
 		)?;
 
-		graphics::TaskGpuCopy::new(
+		GpuOperationBuilder::new(
 			index_buffer.wrap_name(|v| format!("Write({})", v)),
 			&render_chain,
 		)?
 		.begin()?
 		.stage(&indices[..])?
 		.copy_stage_to_buffer(&index_buffer)
-		.end()?
 		.add_signal_to(&mut pending_gpu_signals)
-		.send_to(task::sender());
+		.end()?;
 
 		let camera_uniform =
 			Uniform::new::<camera::UniformData, &str>("ChunkBoundary.Camera", &render_chain)?;

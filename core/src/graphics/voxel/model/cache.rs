@@ -5,9 +5,8 @@ use crate::{
 use engine::{
 	graphics::{
 		buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
-		RenderChain, TaskGpuCopy,
+		GpuOperationBuilder, RenderChain,
 	},
-	task::{self, ScheduledTask},
 	utility::Result,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -83,16 +82,15 @@ impl Cache {
 				None,
 			)?;
 
-			TaskGpuCopy::new(
+			GpuOperationBuilder::new(
 				vertex_buffer.wrap_name(|v| format!("Write({})", v)),
 				&render_chain,
 			)?
 			.begin()?
 			.stage(&builder.vertices[..])?
 			.copy_stage_to_buffer(&vertex_buffer)
-			.end()?
 			.add_signal_to(&mut pending_gpu_signals)
-			.send_to(task::sender());
+			.end()?;
 
 			let index_buffer = buffer::Buffer::create_gpu(
 				Some("RenderVoxel.IndexBuffer".to_owned()),
@@ -102,16 +100,15 @@ impl Cache {
 				Some(flags::IndexType::UINT32),
 			)?;
 
-			TaskGpuCopy::new(
+			GpuOperationBuilder::new(
 				index_buffer.wrap_name(|v| format!("Write({})", v)),
 				&render_chain,
 			)?
 			.begin()?
 			.stage(&builder.indices[..])?
 			.copy_stage_to_buffer(&index_buffer)
-			.end()?
 			.add_signal_to(&mut pending_gpu_signals)
-			.send_to(task::sender());
+			.end()?;
 
 			(vertex_buffer, index_buffer)
 		};

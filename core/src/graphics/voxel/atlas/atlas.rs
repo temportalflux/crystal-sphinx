@@ -3,10 +3,9 @@ use engine::{
 	graphics::{
 		command, flags, image, image_view, structs,
 		utility::{BuildFromDevice, NameableBuilder, NamedObject},
-		RenderChain, TaskGpuCopy, Texture,
+		GpuOperationBuilder, RenderChain, Texture,
 	},
 	math::nalgebra::{Point2, Vector2},
-	task::{self, ScheduledTask},
 	utility::Result,
 };
 use std::{collections::HashMap, sync::Arc};
@@ -198,15 +197,14 @@ impl Builder {
 			},
 		)?);
 
-		TaskGpuCopy::new(image.wrap_name(|v| format!("Create({})", v)), &render_chain)?
+		GpuOperationBuilder::new(image.wrap_name(|v| format!("Create({})", v)), &render_chain)?
 			.begin()?
 			.format_image_for_write(&image)
 			.stage(&self.as_binary()[..])?
 			.copy_stage_to_image(&image)
 			.format_image_for_read(&image)
-			.end()?
 			.add_signal_to(&mut gpu_signals)
-			.send_to(task::sender());
+			.end()?;
 
 		let view = Arc::new(
 			image_view::View::builder()

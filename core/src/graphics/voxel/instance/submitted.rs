@@ -1,7 +1,8 @@
 use crate::graphics::voxel::instance::{category::Category, local::IntegratedBuffer, Instance};
 use engine::{
-	graphics::{self, buffer::Buffer, command, flags, utility::NamedObject, RenderChain},
-	task::{self, ScheduledTask},
+	graphics::{
+		buffer::Buffer, command, flags, utility::NamedObject, GpuOperationBuilder, RenderChain,
+	},
 	utility::Result,
 };
 use std::sync::Arc;
@@ -42,7 +43,7 @@ impl Description {
 
 		let mut task = {
 			profiling::scope!("prepare-task");
-			let mut task = graphics::TaskGpuCopy::new(
+			let mut task = GpuOperationBuilder::new(
 				self.buffer.wrap_name(|v| format!("Write({})", v)),
 				&render_chain,
 			)?
@@ -71,9 +72,8 @@ impl Description {
 		{
 			profiling::scope!("run-task");
 			task.copy_stage_to_buffer_ranges(&self.buffer, ranges)
-				.end()?
 				.add_signal_to(pending_gpu_signals)
-				.send_to(task::sender());
+				.end()?;
 		}
 
 		self.categories = local.get_categories().clone();
