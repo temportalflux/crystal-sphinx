@@ -34,7 +34,7 @@ pub fn load_models(
 	let thread_camera = camera.clone();
 	task::spawn(LOG, async move {
 		profiling::scope!("load_models");
-		
+
 		// Gather asset ids for all block assets
 		let block_ids = match asset::Library::read().get_ids_of_type::<Block>() {
 			Some(ids) => ids.clone(),
