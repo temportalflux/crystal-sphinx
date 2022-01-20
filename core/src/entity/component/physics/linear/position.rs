@@ -1,7 +1,7 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
 use engine::{
 	math::nalgebra::{Point3, Vector3},
-	utility::{Result, Error},
+	utility::{Error, Result},
 };
 use serde::{Deserialize, Serialize};
 

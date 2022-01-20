@@ -1,8 +1,8 @@
+use engine::utility::Result;
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock},
 };
-use engine::utility::Result;
 
 pub mod storage;
 

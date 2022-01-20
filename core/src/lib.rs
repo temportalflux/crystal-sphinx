@@ -152,7 +152,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
-		graphics::voxel::model::Load::start(
+		graphics::voxel::model::load_models(
 			&app_state,
 			Arc::downgrade(&network_storage),
 			&engine.render_chain().unwrap(),

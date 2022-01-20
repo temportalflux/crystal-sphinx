@@ -134,9 +134,7 @@ impl Key {
 				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
 				Ok(rsa.encrypt(&mut rng, padding, &bytes)?)
 			}
-			private => Err(KeyError::InvalidKeyType(
-				private.kind_str().to_owned(),
-			))?,
+			private => Err(KeyError::InvalidKeyType(private.kind_str().to_owned()))?,
 		}
 	}
 

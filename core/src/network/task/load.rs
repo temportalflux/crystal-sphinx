@@ -10,7 +10,7 @@ use crate::{
 use engine::{
 	network::{mode, LocalData},
 	task,
-	utility::Result
+	utility::Result,
 };
 use std::sync::{Arc, RwLock, Weak};
 

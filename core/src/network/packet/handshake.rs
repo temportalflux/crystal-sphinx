@@ -179,9 +179,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 					if let Ok(saved_user_guard) = arclock_user.read() {
 						if *public_key != saved_user_guard.public_key().as_string()? {
 							// The server intentionally does not respond, which will cause the client to timeout.
-							return Err(Error::ClientKeyDoesntMatch(
-								account_meta.id.clone(),
-							))?;
+							return Err(Error::ClientKeyDoesntMatch(account_meta.id.clone()))?;
 						}
 					}
 				}
