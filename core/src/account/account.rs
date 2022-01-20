@@ -1,4 +1,4 @@
-use engine::utility::{AnyError, VoidResult};
+use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -28,22 +28,22 @@ impl Meta {
 		path
 	}
 
-	pub fn load(path: &Path) -> Result<Self, AnyError> {
+	pub fn load(path: &Path) -> Result<Self> {
 		let raw = std::fs::read_to_string(path)?;
 		Ok(Meta::from_json(&raw)?)
 	}
 
-	pub fn save(&self, path: &Path) -> VoidResult {
+	pub fn save(&self, path: &Path) -> Result<()> {
 		std::fs::write(path, self.to_json()?)?;
 		Ok(())
 	}
 
-	fn from_json(json: &str) -> Result<Self, AnyError> {
+	fn from_json(json: &str) -> Result<Self> {
 		let value: Self = serde_json::from_str(json)?;
 		Ok(value)
 	}
 
-	fn to_json(&self) -> Result<String, AnyError> {
+	fn to_json(&self) -> Result<String> {
 		let mut json = serde_json::to_string_pretty(self)?;
 		json = json.replace("  ", "\t");
 		Ok(json)
@@ -97,7 +97,7 @@ impl Key {
 		}
 	}
 
-	pub fn as_string(&self) -> Result<String, AnyError> {
+	pub fn as_string(&self) -> Result<String> {
 		use rsa::pkcs8::{ToPrivateKey, ToPublicKey};
 		Ok(match self {
 			Self::Private(private) => private.to_pkcs8_pem()?.to_string(),
@@ -105,7 +105,7 @@ impl Key {
 		})
 	}
 
-	pub fn from_string(s: &str) -> Result<Self, AnyError> {
+	pub fn from_string(s: &str) -> Result<Self> {
 		use rsa::pkcs8::{FromPrivateKey, FromPublicKey};
 		if s.contains("PRIVATE") {
 			Ok(Self::Private(rsa::RsaPrivateKey::from_pkcs8_pem(s)?))
@@ -114,18 +114,18 @@ impl Key {
 		}
 	}
 
-	pub fn load(path: &Path) -> Result<Self, AnyError> {
+	pub fn load(path: &Path) -> Result<Self> {
 		let key_string = std::fs::read_to_string(path)?;
 		let key = Key::from_string(&key_string)?;
 		Ok(key)
 	}
 
-	pub fn save(&self, path: &Path) -> VoidResult {
+	pub fn save(&self, path: &Path) -> Result<()> {
 		std::fs::write(path, self.as_string()?)?;
 		Ok(())
 	}
 
-	pub fn encrypt(&self, bytes: &[u8]) -> Result<Vec<u8>, AnyError> {
+	pub fn encrypt(&self, bytes: &[u8]) -> Result<Vec<u8>> {
 		use rand::rngs::OsRng;
 		use rsa::PublicKey;
 		match self.public() {
@@ -134,9 +134,9 @@ impl Key {
 				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
 				Ok(rsa.encrypt(&mut rng, padding, &bytes)?)
 			}
-			private => Err(Box::new(KeyError::InvalidKeyType(
+			private => Err(KeyError::InvalidKeyType(
 				private.kind_str().to_owned(),
-			))),
+			))?,
 		}
 	}
 
@@ -191,14 +191,14 @@ impl Account {
 		&self.meta.display_name
 	}
 
-	pub fn save(&self) -> VoidResult {
+	pub fn save(&self) -> Result<()> {
 		std::fs::create_dir_all(&self.root)?;
 		self.meta.save(&Meta::make_path(&self.root))?;
 		self.key.save(&Key::make_path(&self.root))?;
 		Ok(())
 	}
 
-	pub fn load(path: &Path) -> Result<Self, AnyError> {
+	pub fn load(path: &Path) -> Result<Self> {
 		let meta = Meta::load(&Meta::make_path(path))?;
 		let key = Key::load(&Key::make_path(path))?;
 		Ok(Account {

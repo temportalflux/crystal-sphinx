@@ -4,7 +4,7 @@ use crate::server::world::{
 };
 use engine::{
 	math::nalgebra::{Point3, Vector3},
-	utility::AnyError,
+	utility::Result,
 };
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ impl Ticket {
 	/// If the returned Arctex is dropped before the loading thread can process it, the request is canceled.
 	/// If the arctex is dropped at any point in the future,
 	/// the affected chunks will be unloaded if no other ticket references them.
-	pub fn submit(self) -> Result<Arc<Ticket>, AnyError> {
+	pub fn submit(self) -> Result<Arc<Ticket>> {
 		let arctex = Arc::new(self);
 		Database::send_chunk_ticket(&arctex)?;
 		Ok(arctex)

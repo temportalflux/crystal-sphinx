@@ -7,7 +7,7 @@ use engine::{
 	},
 	math::nalgebra::{Point2, Vector2},
 	task::{self, ScheduledTask},
-	utility::AnyError,
+	utility::Result,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -184,7 +184,7 @@ impl Builder {
 		self,
 		render_chain: &RenderChain,
 		name: String,
-	) -> Result<(Atlas, Vec<Arc<command::Semaphore>>), AnyError> {
+	) -> Result<(Atlas, Vec<Arc<command::Semaphore>>)> {
 		let mut gpu_signals = Vec::new();
 
 		let image = Arc::new(image::Image::create_gpu(

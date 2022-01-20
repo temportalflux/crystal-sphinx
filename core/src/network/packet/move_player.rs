@@ -7,7 +7,7 @@ use engine::{
 		event, mode, packet, packet_kind,
 		processor::{EventProcessors, PacketProcessor, Processor},
 	},
-	utility::VoidResult,
+	utility::Result,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock, Weak};
@@ -51,7 +51,7 @@ impl Processor for RequestReceived {
 		kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.process_as(kind, data, local_data)
 	}
 }
@@ -64,7 +64,7 @@ impl PacketProcessor<MovePlayer> for RequestReceived {
 		_connection: &Connection,
 		_guarantee: &packet::Guarantee,
 		_local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		use entity::component::{physics::linear, Orientation};
 		profiling::scope!("process-packet", LOG);
 

@@ -17,7 +17,7 @@ use engine::{
 		processor::{AnyProcessor, EventProcessors, PacketProcessor, Processor},
 		LocalData, Network, LOG,
 	},
-	utility::{AnyError, VoidResult},
+	utility::Result,
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -106,9 +106,9 @@ impl Handshake {
 	}
 
 	#[profiling::function]
-	pub fn connect_to_server(address: &str) -> VoidResult {
+	pub fn connect_to_server(address: &str) -> Result<()> {
 		use network::prelude::*;
-		let request = match account::ClientRegistry::read()?.active_account() {
+		let request = match account::ClientRegistry::read().unwrap().active_account() {
 			Some(account) => {
 				Request::Login(account.meta.clone(), account.public_key().as_string()?)
 			}
@@ -144,7 +144,7 @@ impl Processor for ServerProcessor {
 		kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.process_as(kind, data, local_data)
 	}
 }
@@ -158,7 +158,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 		connection: &Connection,
 		guarantee: &Guarantee,
 		local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		match &data.0 {
 			Request::Login(account_meta, public_key) => {
 				let user_id = format!("{}({})", connection.address, account_meta.id);
@@ -170,7 +170,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 						server.find_user(&account_meta.id).cloned(),
 					),
 					Err(_) => {
-						return Err(Box::new(Error::CannotReadServerData));
+						return Err(Error::CannotReadServerData)?;
 					}
 				};
 
@@ -179,9 +179,9 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 					if let Ok(saved_user_guard) = arclock_user.read() {
 						if *public_key != saved_user_guard.public_key().as_string()? {
 							// The server intentionally does not respond, which will cause the client to timeout.
-							return Err(Box::new(Error::ClientKeyDoesntMatch(
+							return Err(Error::ClientKeyDoesntMatch(
 								account_meta.id.clone(),
-							)));
+							))?;
 						}
 					}
 				}
@@ -202,7 +202,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 					rsa_public.encrypt(&mut rng, padding, token.as_bytes())?
 				} else {
 					// This should never happen, because we requested the public key from the auth key.
-					return Err(Box::new(Error::ServerKeyCannotEncrypt));
+					return Err(Error::ServerKeyCannotEncrypt)?;
 				};
 
 				let mut pending_user = user::pending::User::new(
@@ -249,11 +249,11 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 				// Wrapper function to try to decrypt an auth token,
 				// so that the error can be handled gracefully
 				// without sacrificing readability.
-				fn decrypt_token(bytes: &[u8], server: ArcLockServer) -> Result<String, AnyError> {
+				fn decrypt_token(bytes: &[u8], server: ArcLockServer) -> Result<String> {
 					let server_auth_key = match server.read() {
 						Ok(server) => server.auth_key().clone(),
 						Err(_) => {
-							return Err(Box::new(Error::CannotReadServerData));
+							return Err(Error::CannotReadServerData)?;
 						}
 					};
 
@@ -261,11 +261,11 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 						Ok(token_bytes) => match String::from_utf8(token_bytes) {
 							Ok(token) => return Ok(token),
 							Err(_) => {
-								return Err(Box::new(Error::ClientTokenUnparsable));
+								return Err(Error::ClientTokenUnparsable)?;
 							}
 						},
 						Err(_) => {
-							return Err(Box::new(Error::ClientTokenUnparsable));
+							return Err(Error::ClientTokenUnparsable)?;
 						}
 					}
 				}
@@ -324,7 +324,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 								));
 							}
 						} else {
-							return Err(Box::new(Error::CannotReadServerData));
+							return Err(Error::CannotReadServerData)?;
 						}
 
 						let arc_world = self.entity_world.upgrade().unwrap();
@@ -344,7 +344,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 							// Integrated Client-Server needs to spawn client-only components
 							// if its the local player's entity.
 							if local_data.is_client() {
-								let client_reg = account::ClientRegistry::read()?;
+								let client_reg = account::ClientRegistry::read().unwrap();
 								let local_account = client_reg.active_account().unwrap();
 								// If the account ids match, then this entity is the local player's avatar
 								if *local_account.id() == *pending_user.id() {
@@ -380,7 +380,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 
 				Ok(())
 			}
-			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),
+			_ => Err(Error::InvalidRequest(data.0.clone()))?,
 		}
 	}
 }
@@ -396,7 +396,7 @@ impl Processor for ClientProcessor {
 		kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.process_as(kind, data, local_data)
 	}
 }
@@ -410,7 +410,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 		connection: &Connection,
 		guarantee: &Guarantee,
 		_local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		match &data.0 {
 			Request::AuthTokenForClient(encrypted_bytes, server_public_key) => {
 				profiling::scope!("received-auth-token");
@@ -418,17 +418,17 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 				// Technically we will have "connected" by the end of this request,
 				// but not really connected until the server validates the token.
 				let reencrypted_bytes = if let Some(account::Account { key, .. }) =
-					account::ClientRegistry::read()?.active_account()
+					account::ClientRegistry::read().unwrap().active_account()
 				{
 					let server_key = account::Key::from_string(&server_public_key)?;
 					match key.decrypt(&encrypted_bytes)? {
 						Ok(raw_token_bytes) => server_key.encrypt(&raw_token_bytes)?,
 						Err(_) => {
-							return Err(Box::new(Error::ClientTokenUnparsable));
+							return Err(Error::ClientTokenUnparsable)?;
 						}
 					}
 				} else {
-					return Err(Box::new(Error::NoActiveAccount));
+					return Err(Error::NoActiveAccount)?;
 				};
 
 				data.0 = Request::AuthTokenForServer(reencrypted_bytes);
@@ -444,7 +444,8 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 			Request::ClientAuthenticated(account_id) => {
 				let profiling_tag = format!("{}", account_id);
 				profiling::scope!("client-authenticated", profiling_tag.as_str());
-				let authenticated_self = account::ClientRegistry::read()?
+				let authenticated_self = account::ClientRegistry::read()
+					.unwrap()
 					.active_account()
 					.map(|account| account.meta.id == *account_id)
 					.unwrap_or(false);
@@ -469,7 +470,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 
 				Ok(())
 			}
-			_ => Err(Box::new(Error::InvalidRequest(data.0.clone()))),
+			_ => Err(Error::InvalidRequest(data.0.clone()))?,
 		}
 	}
 }

@@ -1,5 +1,5 @@
 use crate::account;
-use engine::utility::AnyError;
+use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 
 /// Indicates that an entity is controlled by a given account/user.
@@ -56,7 +56,7 @@ impl super::network::Replicatable for OwnedByAccount {
 }
 
 impl super::binary::Serializable for OwnedByAccount {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+	fn serialize(&self) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }

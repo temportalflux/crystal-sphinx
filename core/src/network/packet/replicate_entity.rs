@@ -9,7 +9,7 @@ use engine::{
 		event, mode, packet, packet_kind,
 		processor::{EventProcessors, PacketProcessor, Processor},
 	},
-	utility::VoidResult,
+	utility::Result,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -58,7 +58,7 @@ impl Processor for ReceiveReplicatedEntity {
 		kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.process_as(kind, data, local_data)
 	}
 }
@@ -71,7 +71,7 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 		_connection: &Connection,
 		_guarantee: &packet::Guarantee,
 		_local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		profiling::scope!("process-packet", "ReplicateEntity");
 
 		let arc_world = match self.entity_world.upgrade() {
@@ -134,7 +134,8 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 		if entities_to_spawn.len() > 0 {
 			profiling::scope!("spawn-replicated");
 
-			let local_account_id = account::ClientRegistry::read()?
+			let local_account_id = account::ClientRegistry::read()
+				.unwrap()
 				.active_account()
 				.map(|account| account.meta.id.clone());
 

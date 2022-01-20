@@ -2,7 +2,7 @@ use crystal_sphinx::block::Block;
 use editor::asset::TypeEditorMetadata;
 use engine::{
 	asset::{AnyBox, AssetResult},
-	utility::AnyError,
+	utility::Result,
 };
 use std::path::Path;
 
@@ -16,7 +16,7 @@ impl TypeEditorMetadata for BlockEditorMetadata {
 		editor::asset::deserialize::<Block>(&path, &content)
 	}
 
-	fn compile(&self, _: &Path, asset: AnyBox) -> Result<Vec<u8>, AnyError> {
+	fn compile(&self, _: &Path, asset: AnyBox) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&asset.downcast::<Block>().unwrap())?)
 	}
 }

@@ -1,5 +1,5 @@
 use super::{Account, LOG};
-use engine::utility::{AnyError, VoidResult};
+use engine::utility::Result;
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -20,7 +20,7 @@ impl Manager {
 		}
 	}
 
-	pub fn scan_accounts(&mut self) -> VoidResult {
+	pub fn scan_accounts(&mut self) -> Result<()> {
 		if !self.root.exists() {
 			std::fs::create_dir_all(&self.root)?;
 		}
@@ -41,7 +41,7 @@ impl Manager {
 		None
 	}
 
-	pub fn create_account(&mut self, name: &String) -> Result<super::Id, AnyError> {
+	pub fn create_account(&mut self, name: &String) -> Result<super::Id> {
 		let account = Account::new(&self.root, name);
 		log::info!(target: LOG, "Created account {}", account);
 		account.save()?;

@@ -8,7 +8,7 @@ use crate::{
 };
 use engine::{
 	graphics::{command, RenderChain},
-	utility::{self, AnyError, VoidResult},
+	utility::{self, Result},
 };
 use std::sync::{Arc, Mutex, Weak};
 
@@ -25,7 +25,7 @@ impl Buffer {
 		render_chain: &RenderChain,
 		model_cache: Weak<model::Cache>,
 		chunk_cache: cache::WeakLock,
-	) -> Result<Self, AnyError> {
+	) -> Result<Self> {
 		// TODO: Get this value from settings
 		let render_radius = 6;
 		// square diameter of the cube surrounding the player
@@ -76,7 +76,7 @@ impl Buffer {
 		static LOG: &'static str = "voxel-instance-buffer";
 		let handle = Arc::new(());
 		let weak_handle = Arc::downgrade(&handle);
-		utility::spawn_thread(LOG, move || -> VoidResult {
+		utility::spawn_thread(LOG, move || -> Result<()> {
 			use std::thread::sleep;
 			use std::time::Duration;
 			log::info!(target: LOG, "Starting thread");
@@ -151,7 +151,7 @@ impl Buffer {
 	pub fn prerecord_update(
 		&mut self,
 		render_chain: &RenderChain,
-	) -> Result<(bool, Vec<Arc<command::Semaphore>>), AnyError> {
+	) -> Result<(bool, Vec<Arc<command::Semaphore>>)> {
 		profiling::scope!("update_voxel_instances");
 		let mut pending_gpu_signals = Vec::new();
 		let mut was_able_to_lock = false;

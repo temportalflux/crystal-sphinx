@@ -1,4 +1,4 @@
-use engine::utility::{AnyError, VoidResult};
+use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -19,7 +19,7 @@ pub trait Serializable: super::Component
 where
 	Self: TryFrom<Vec<u8>>,
 {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError>;
+	fn serialize(&self) -> Result<Vec<u8>>;
 }
 
 pub fn deserialize<'a, T>(bytes: &'a Vec<u8>) -> Result<T, rmp_serde::decode::Error>
@@ -30,8 +30,8 @@ where
 }
 
 pub struct Registration {
-	serialize: Box<dyn Fn(&hecs::EntityRef<'_>) -> Result<Option<SerializedComponent>, AnyError>>,
-	deserialize: Box<dyn Fn(Vec<u8>, &mut hecs::EntityBuilder) -> VoidResult>,
+	serialize: Box<dyn Fn(&hecs::EntityRef<'_>) -> Result<Option<SerializedComponent>>>,
+	deserialize: Box<dyn Fn(Vec<u8>, &mut hecs::EntityBuilder) -> Result<()>>,
 }
 impl super::ExtensionRegistration for Registration {
 	fn extension_id() -> &'static str
@@ -48,7 +48,7 @@ impl Registration {
 	{
 		Self {
 			serialize: Box::new(
-				|e: &hecs::EntityRef<'_>| -> Result<Option<SerializedComponent>, AnyError> {
+				|e: &hecs::EntityRef<'_>| -> Result<Option<SerializedComponent>> {
 					let data = match e.get::<T>() {
 						Some(t_comp) => {
 							profiling::scope!("serialize-component", T::unique_id());
@@ -64,7 +64,7 @@ impl Registration {
 				},
 			),
 			deserialize: Box::new(
-				|bytes: Vec<u8>, builder: &mut hecs::EntityBuilder| -> VoidResult {
+				|bytes: Vec<u8>, builder: &mut hecs::EntityBuilder| -> Result<()> {
 					profiling::scope!("deserialize-component", T::unique_id());
 					let comp =
 						T::try_from(bytes).map_err(|_| FailedToDeserialize(T::unique_id()))?;
@@ -75,14 +75,11 @@ impl Registration {
 		}
 	}
 
-	pub fn serialize(
-		&self,
-		entity: &hecs::EntityRef<'_>,
-	) -> Result<Option<SerializedComponent>, AnyError> {
+	pub fn serialize(&self, entity: &hecs::EntityRef<'_>) -> Result<Option<SerializedComponent>> {
 		(self.serialize)(entity)
 	}
 
-	pub fn deserialize(&self, bytes: Vec<u8>, builder: &mut hecs::EntityBuilder) -> VoidResult {
+	pub fn deserialize(&self, bytes: Vec<u8>, builder: &mut hecs::EntityBuilder) -> Result<()> {
 		(self.deserialize)(bytes, builder)
 	}
 }

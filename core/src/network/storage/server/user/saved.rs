@@ -1,5 +1,5 @@
 use crate::account;
-use engine::utility::{AnyError, VoidResult};
+use engine::utility::Result;
 use std::path::{Path, PathBuf};
 
 pub struct User {
@@ -19,7 +19,7 @@ impl User {
 	}
 
 	#[profiling::function]
-	pub fn load(dir: &Path) -> Result<Self, AnyError> {
+	pub fn load(dir: &Path) -> Result<Self> {
 		let meta = account::Meta::load(&account::Meta::make_path(dir))?;
 		let key = account::Key::load(&account::Key::make_path(dir))?;
 		Ok(Self {
@@ -30,7 +30,7 @@ impl User {
 	}
 
 	#[profiling::function]
-	pub fn save(&self) -> VoidResult {
+	pub fn save(&self) -> Result<()> {
 		use engine::Application;
 		log::debug!(
 			target: crate::CrystalSphinx::name(),

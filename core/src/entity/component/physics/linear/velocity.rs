@@ -1,5 +1,5 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
-use engine::{math::nalgebra::Vector3, utility::AnyError};
+use engine::{math::nalgebra::Vector3, utility::{Result, Error}};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -64,13 +64,13 @@ impl network::Replicatable for Velocity {
 }
 
 impl binary::Serializable for Velocity {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+	fn serialize(&self) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }
 
 impl std::convert::TryFrom<Vec<u8>> for Velocity {
-	type Error = AnyError;
+	type Error = Error;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
 		Ok(binary::deserialize::<Self>(&bytes)?)
 	}

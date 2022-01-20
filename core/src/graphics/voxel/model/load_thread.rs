@@ -12,7 +12,7 @@ use engine::{
 		ArcRenderChain, DescriptorCache, Texture,
 	},
 	task::{ArctexState, ScheduledTask},
-	utility::{self, VoidResult},
+	utility::{self, Result},
 };
 use std::{
 	collections::{HashMap, HashSet},
@@ -55,7 +55,7 @@ impl Load {
 		let thread_storage = storage.clone();
 		let thread_render_chain = render_chain.clone();
 		let thread_camera = camera.clone();
-		utility::spawn_thread(LOG, move || -> VoidResult {
+		utility::spawn_thread(LOG, move || -> Result<()> {
 			// Gather asset ids for all block assets
 			let block_ids = match asset::Library::read().get_ids_of_type::<Block>() {
 				Some(ids) => ids.clone(),

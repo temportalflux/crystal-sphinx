@@ -1,7 +1,7 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
 use engine::{
 	math::nalgebra::{Point3, Vector3},
-	utility::AnyError,
+	utility::{Result, Error},
 };
 use serde::{Deserialize, Serialize};
 
@@ -103,13 +103,13 @@ impl network::Replicatable for Position {
 }
 
 impl binary::Serializable for Position {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+	fn serialize(&self) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }
 
 impl std::convert::TryFrom<Vec<u8>> for Position {
-	type Error = AnyError;
+	type Error = Error;
 	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
 		Ok(binary::deserialize::<Self>(&bytes)?)
 	}

@@ -1,4 +1,4 @@
-use engine::utility::AnyError;
+use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
@@ -67,7 +67,7 @@ impl super::network::Replicatable for OwnedByConnection {
 }
 
 impl super::binary::Serializable for OwnedByConnection {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+	fn serialize(&self) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }

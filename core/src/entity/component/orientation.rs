@@ -1,4 +1,4 @@
-use engine::{math::nalgebra::UnitQuaternion, utility::AnyError};
+use engine::{math::nalgebra::UnitQuaternion, utility::Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -66,7 +66,7 @@ impl super::network::Replicatable for Orientation {
 }
 
 impl super::binary::Serializable for Orientation {
-	fn serialize(&self) -> Result<Vec<u8>, AnyError> {
+	fn serialize(&self) -> Result<Vec<u8>> {
 		Ok(rmp_serde::to_vec(&self)?)
 	}
 }

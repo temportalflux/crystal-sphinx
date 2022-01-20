@@ -4,7 +4,7 @@ use crate::{
 };
 use engine::{
 	network::{self, event, mode, processor::Processor, LocalData},
-	utility::VoidResult,
+	utility::Result,
 };
 use std::sync::{Arc, RwLock, Weak};
 
@@ -55,7 +55,7 @@ impl Processor for CloseClient {
 		kind: &event::Kind,
 		_data: &mut Option<event::Data>,
 		_local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		use crate::app::state::State::*;
 		if *kind == event::Kind::Disconnected || *kind == event::Kind::Stop {
 			profiling::scope!("close-client-world");
@@ -80,7 +80,7 @@ impl Processor for RemoveUser {
 		_kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		_local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		if let Some(event::Data::Connection(connection)) = data {
 			profiling::scope!("remove-user");
 			if let Ok(mut auth_cache) = self.auth_cache.write() {
@@ -106,7 +106,7 @@ impl Processor for DestroyOwnedEntities {
 		_kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		_local_data: &LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		use entity::component::OwnedByConnection;
 		if let Some(event::Data::Connection(connection)) = data {
 			profiling::scope!("destroy-owned-entities");

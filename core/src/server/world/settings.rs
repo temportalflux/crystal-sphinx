@@ -1,4 +1,4 @@
-use engine::utility::AnyError;
+use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -32,7 +32,7 @@ impl Settings {
 		world_root_dir
 	}
 
-	pub(super) fn load(world_root_dir: &Path) -> Result<Self, AnyError> {
+	pub(super) fn load(world_root_dir: &Path) -> Result<Self> {
 		// Ensure the world directory exists
 		if !world_root_dir.exists() {
 			std::fs::create_dir_all(&world_root_dir)?;

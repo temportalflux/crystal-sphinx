@@ -2,10 +2,7 @@ use crate::server::world::{
 	chunk::{cache, thread, ticket, Level, Ticket},
 	Settings,
 };
-use engine::{
-	math::nalgebra::Point3,
-	utility::{AnyError, VoidResult},
-};
+use engine::{math::nalgebra::Point3, utility::Result};
 use std::{
 	path::PathBuf,
 	sync::{Arc, RwLock, Weak},
@@ -53,7 +50,7 @@ impl Database {
 		unsafe { &mut TICKET_SENDER }
 	}
 
-	fn ticket_sender() -> Result<Arc<ticket::Sender>, AnyError> {
+	fn ticket_sender() -> Result<Arc<ticket::Sender>> {
 		Ok(Self::ticket_sender_static()
 			.as_ref()
 			.map(|weak| weak.upgrade())
@@ -61,7 +58,7 @@ impl Database {
 			.ok_or(NoWorldDatabase)?)
 	}
 
-	pub(crate) fn send_chunk_ticket(ticket: &Arc<Ticket>) -> VoidResult {
+	pub(crate) fn send_chunk_ticket(ticket: &Arc<Ticket>) -> Result<()> {
 		Ok(Self::ticket_sender()?.try_send(Arc::downgrade(&ticket))?)
 	}
 
@@ -69,7 +66,7 @@ impl Database {
 		&self.chunk_cache
 	}
 
-	pub fn load_origin_chunk(arc_world: &ArcLockDatabase) -> VoidResult {
+	pub fn load_origin_chunk(arc_world: &ArcLockDatabase) -> Result<()> {
 		arc_world.write().unwrap().held_tickets.push(
 			Ticket {
 				coordinate: Point3::new(0, 0, 0),

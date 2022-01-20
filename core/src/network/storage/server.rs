@@ -3,10 +3,7 @@ use crate::{
 	entity::{self, ArcLockEntityWorld},
 	server::world::Database,
 };
-use engine::{
-	utility::{AnyError, VoidResult},
-	Engine, EngineSystem,
-};
+use engine::{utility::Result, Engine, EngineSystem};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -29,7 +26,7 @@ pub struct Server {
 
 impl Server {
 	#[profiling::function]
-	pub fn load(save_name: &str) -> Result<Self, AnyError> {
+	pub fn load(save_name: &str) -> Result<Self> {
 		let mut savegame_path = std::env::current_dir().unwrap();
 		savegame_path.push("saves");
 		savegame_path.push(save_name);
@@ -47,7 +44,7 @@ impl Server {
 		})
 	}
 
-	fn create(savegame_path: &Path) -> VoidResult {
+	fn create(savegame_path: &Path) -> Result<()> {
 		log::info!(target: LOG, "Creating data");
 		std::fs::create_dir_all(savegame_path)?;
 		account::Key::new().save(&Self::auth_key_path(savegame_path.to_owned()))?;
@@ -78,7 +75,7 @@ impl Server {
 
 	fn load_saved_users(
 		path: &Path,
-	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>, AnyError> {
+	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>> {
 		std::fs::create_dir_all(path)?;
 		let mut users = HashMap::new();
 		for entry in std::fs::read_dir(path)? {

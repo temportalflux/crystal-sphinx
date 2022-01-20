@@ -1,5 +1,5 @@
 use super::{Account, Manager, LOG};
-use engine::utility::{AnyError, VoidResult};
+use engine::utility::Result;
 
 /// The registry of all accounts on a client.
 /// Is not applicable for querying the accounts that have logged into a game save.
@@ -34,18 +34,18 @@ impl ClientRegistry {
 }
 
 impl ClientRegistry {
-	pub fn scan_accounts(&mut self) -> VoidResult {
+	pub fn scan_accounts(&mut self) -> Result<()> {
 		self.manager.scan_accounts()
 	}
 
-	pub fn ensure_account(&mut self, name: &String) -> Result<super::Id, AnyError> {
+	pub fn ensure_account(&mut self, name: &String) -> Result<super::Id> {
 		match self.manager.find_id(name) {
 			Some(account_id) => Ok(account_id),
 			None => Ok(self.manager.create_account(name)?),
 		}
 	}
 
-	pub fn login_as(&mut self, id: &super::Id) -> VoidResult {
+	pub fn login_as(&mut self, id: &super::Id) -> Result<()> {
 		if !self.manager.contains(id) {
 			log::error!(target: LOG, "No account with id {}", id);
 			return Ok(());

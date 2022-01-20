@@ -7,7 +7,7 @@ use crate::{
 	server::world::chunk,
 };
 use engine::{
-	math::nalgebra::Point3, network::packet::PacketBuilder, utility::AnyError, EngineSystem,
+	math::nalgebra::Point3, network::packet::PacketBuilder, utility::Result, EngineSystem,
 };
 use multimap::MultiMap;
 use std::{
@@ -360,7 +360,7 @@ impl Replicator {
 		&self,
 		registry: &component::Registry,
 		entity_ref: hecs::EntityRef<'_>,
-	) -> Result<binary::SerializedEntity, AnyError> {
+	) -> Result<binary::SerializedEntity> {
 		let mut serialized_components = Vec::new();
 		for type_id in entity_ref.component_types() {
 			if let Some(registered) = registry.find(&type_id) {

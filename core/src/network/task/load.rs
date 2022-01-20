@@ -10,6 +10,7 @@ use crate::{
 use engine::{
 	network::{mode, LocalData},
 	task,
+	utility::Result
 };
 use std::sync::{Arc, RwLock, Weak};
 
@@ -75,7 +76,7 @@ fn load_network(
 	storage: &ArcLockStorage,
 	entity_world: &Weak<RwLock<entity::World>>,
 	instruction: Instruction,
-) -> anyhow::Result<()> {
+) -> Result<()> {
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = match &instruction.directive {
 			Directive::LoadWorld(world_name) => world_name,

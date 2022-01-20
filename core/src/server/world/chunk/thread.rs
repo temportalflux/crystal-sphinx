@@ -5,7 +5,7 @@ use crate::server::world::chunk::{
 };
 use engine::{
 	math::nalgebra::Point3,
-	utility::{spawn_thread, VoidResult},
+	utility::{spawn_thread, Result},
 };
 use std::{
 	collections::HashMap,
@@ -58,7 +58,7 @@ pub fn start(
 
 	let cache = cache.clone();
 	let root_dir = root_dir.clone();
-	spawn_thread(LOG, move || -> VoidResult {
+	spawn_thread(LOG, move || -> Result<()> {
 		let mut thread_state = ThreadState {
 			root_dir: root_dir.clone(),
 			cache: cache.clone(),

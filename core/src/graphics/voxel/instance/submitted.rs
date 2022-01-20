@@ -2,7 +2,7 @@ use crate::graphics::voxel::instance::{category::Category, local::IntegratedBuff
 use engine::{
 	graphics::{self, buffer::Buffer, command, flags, utility::NamedObject, RenderChain},
 	task::{self, ScheduledTask},
-	utility::{AnyError, VoidResult},
+	utility::Result,
 };
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ pub struct Description {
 }
 
 impl Description {
-	pub fn new(render_chain: &RenderChain, instance_buffer_size: usize) -> Result<Self, AnyError> {
+	pub fn new(render_chain: &RenderChain, instance_buffer_size: usize) -> Result<Self> {
 		let buffer = Buffer::create_gpu(
 			Some(format!("RenderVoxel.InstanceBuffer")),
 			&render_chain.allocator(),
@@ -34,7 +34,7 @@ impl Description {
 		local: &IntegratedBuffer,
 		render_chain: &RenderChain,
 		pending_gpu_signals: &mut Vec<Arc<command::Semaphore>>,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.categories.clear();
 
 		let mut ranges = Vec::with_capacity(changed_ranges.len());

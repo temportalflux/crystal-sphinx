@@ -9,7 +9,7 @@ use engine::{
 		event, mode, packet, packet_kind,
 		processor::{EventProcessors, PacketProcessor, Processor},
 	},
-	utility::VoidResult,
+	utility::Result,
 };
 use serde::{Deserialize, Serialize};
 
@@ -177,7 +177,7 @@ impl Processor for ReceiveReplicatedWorld {
 		kind: &event::Kind,
 		data: &mut Option<event::Data>,
 		local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		self.process_as(kind, data, local_data)
 	}
 }
@@ -190,7 +190,7 @@ impl PacketProcessor<ReplicateWorld> for ReceiveReplicatedWorld {
 		_connection: &Connection,
 		_guarantee: &packet::Guarantee,
 		_local_data: &network::LocalData,
-	) -> VoidResult {
+	) -> Result<()> {
 		profiling::scope!("process-packet", "ReplicateWorld");
 		match &data.0 {
 			WorldUpdate::Relevancy(relevancy) => {

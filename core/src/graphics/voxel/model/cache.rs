@@ -8,7 +8,7 @@ use engine::{
 		RenderChain, TaskGpuCopy,
 	},
 	task::{self, ScheduledTask},
-	utility::AnyError,
+	utility::Result,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -42,10 +42,7 @@ impl CacheBuilder {
 		self.atlas_descriptor_cache = Some(cache);
 	}
 
-	pub fn build(
-		self,
-		render_chain: &RenderChain,
-	) -> Result<(Cache, Vec<Arc<Semaphore>>), AnyError> {
+	pub fn build(self, render_chain: &RenderChain) -> Result<(Cache, Vec<Arc<Semaphore>>)> {
 		Cache::create(self, render_chain)
 	}
 }
@@ -72,7 +69,7 @@ impl Cache {
 	fn create(
 		builder: CacheBuilder,
 		render_chain: &RenderChain,
-	) -> Result<(Self, Vec<Arc<Semaphore>>), AnyError> {
+	) -> Result<(Self, Vec<Arc<Semaphore>>)> {
 		let vbuff_size = std::mem::size_of::<Vertex>() * builder.vertices.len();
 		let ibuff_size = std::mem::size_of::<u32>() * builder.indices.len();
 		let mut pending_gpu_signals = Vec::with_capacity(/*buffer writes*/ 2);

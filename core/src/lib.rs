@@ -30,7 +30,7 @@
 //! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
-use engine::{utility::VoidResult, Application};
+use engine::{utility::Result, Application};
 
 pub mod client;
 pub mod common;
@@ -65,7 +65,7 @@ pub fn register_asset_types() {
 	type_reg.register::<block::Block>();
 }
 
-pub fn run(config: plugin::Config) -> VoidResult {
+pub fn run(config: plugin::Config) -> Result<()> {
 	let logid = std::env::args()
 		.find_map(|arg| arg.strip_prefix("-logid=").map(|s| s.to_owned()))
 		.unwrap();

@@ -1,5 +1,5 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::{utility::VoidResult, Application};
+use engine::{utility::Result, Application};
 
 pub mod block;
 
@@ -7,7 +7,7 @@ pub fn register_asset_types(manager: &mut editor::asset::Manager) {
 	manager.register::<crystal_sphinx::block::Block, block::BlockEditorMetadata>();
 }
 
-pub fn run(_config: plugin::Config) -> VoidResult {
+pub fn run(_config: plugin::Config) -> Result<()> {
 	engine::logging::init(&engine::logging::default_path(
 		CrystalSphinx::name(),
 		Some("_editor"),

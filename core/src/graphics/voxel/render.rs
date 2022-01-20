@@ -17,7 +17,7 @@ use engine::{
 		Uniform,
 	},
 	math::nalgebra::Vector2,
-	utility::AnyError,
+	utility::Result,
 	Application,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -104,7 +104,7 @@ impl RenderVoxel {
 		model_cache: &Arc<model::Cache>,
 		chunk_cache: cache::ArcLock,
 		gpu_signals: Vec<Arc<command::Semaphore>>,
-	) -> Result<ArcLockRenderVoxel, AnyError> {
+	) -> Result<ArcLockRenderVoxel> {
 		let subpass_id = Self::subpass_id();
 		let render_chunks = Self::new(
 			&render_chain,
@@ -124,7 +124,7 @@ impl RenderVoxel {
 		model_cache: Arc<model::Cache>,
 		chunk_cache: cache::ArcLock,
 		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
-	) -> Result<Self, AnyError> {
+	) -> Result<Self> {
 		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
@@ -168,7 +168,7 @@ impl RenderChainElement for RenderVoxel {
 	fn initialize_with(
 		&mut self,
 		render_chain: &mut RenderChain,
-	) -> Result<Vec<Arc<command::Semaphore>>, AnyError> {
+	) -> Result<Vec<Arc<command::Semaphore>>> {
 		let gpu_signals = Vec::new();
 
 		self.drawable.create_shaders(render_chain)?;
@@ -182,7 +182,7 @@ impl RenderChainElement for RenderVoxel {
 		render_chain: &RenderChain,
 		resolution: &Vector2<f32>,
 		subpass_id: &Option<String>,
-	) -> Result<(), AnyError> {
+	) -> Result<()> {
 		use graphics::pipeline::{state::*, Pipeline};
 		Ok(self.drawable.create_pipeline(
 			render_chain,
@@ -215,7 +215,7 @@ impl RenderChainElement for RenderVoxel {
 		)?)
 	}
 
-	fn destroy_render_chain(&mut self, render_chain: &RenderChain) -> Result<(), AnyError> {
+	fn destroy_render_chain(&mut self, render_chain: &RenderChain) -> Result<()> {
 		self.drawable.destroy_pipeline(render_chain)?;
 		Ok(())
 	}
@@ -226,7 +226,7 @@ impl RenderChainElement for RenderVoxel {
 		_buffer: &command::Buffer,
 		frame: usize,
 		resolution: &Vector2<f32>,
-	) -> Result<bool, AnyError> {
+	) -> Result<bool> {
 		let data = self.camera.read().unwrap().as_uniform_data(resolution);
 		self.camera_uniform.write_data(frame, &data)?;
 
@@ -239,7 +239,7 @@ impl RenderChainElement for RenderVoxel {
 		Ok(should_record)
 	}
 
-	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<(), AnyError> {
+	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<()> {
 		use graphics::debug;
 		profiling::scope!("record:RenderVoxel");
 
