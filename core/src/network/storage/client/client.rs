@@ -1,18 +1,17 @@
 use crate::{account, client::world::chunk::cache};
-use engine::{utility::Result, network::endpoint::Endpoint};
+use engine::utility::Result;
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockClient = Arc<RwLock<Client>>;
 /// Container class for all client data which is present when a user is connected to a game server.
 pub struct Client {
 	chunk_cache: cache::ArcLock,
-	endpoint: Option<Endpoint>,
 }
 
 impl Default for Client {
 	fn default() -> Self {
 		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
-		Self { chunk_cache, endpoint: None, }
+		Self { chunk_cache }
 	}
 }
 
@@ -37,10 +36,6 @@ impl Client {
 			.with_custom_certificate_verifier(SkipServerVerification::new())
 			.with_single_cert(vec![cert], key)?;
 		Ok(quinn::ClientConfig::new(Arc::new(core_config)))
-	}
-
-	pub fn set_endpoint(&mut self, endpoint: Endpoint) {
-		self.endpoint = Some(endpoint);
 	}
 }
 

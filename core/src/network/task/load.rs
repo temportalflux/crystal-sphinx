@@ -1,7 +1,7 @@
 use super::{Directive, Instruction};
 use crate::{
-	account::key::Certificate,
 	app::{self, state::ArcLockMachine},
+	common::network::ConnectionList,
 	entity::{self, ArcLockEntityWorld},
 	network::{
 		packet::Handshake,
@@ -128,17 +128,10 @@ fn load_network(
 		Ok(())
 	});
 
-	let connection_receiver = endpoint.connection_receiver().clone();
-	engine::task::spawn("network", async move {
-		while let Ok(connection) = connection_receiver.recv().await {
-			if let Some(identity) = connection.peer_identity() {
-				if let Ok(certs) = identity.downcast::<Vec<rustls::Certificate>>() {
-					log::info!(target: "network", "connected to address={} identity={}", connection.remote_address(), Certificate::fingerprint(&certs[0]));
-				}
-			}
-		}
-		Ok(())
-	});
+	storage
+		.write()
+		.unwrap()
+		.set_connection_list(ConnectionList::new(endpoint.connection_receiver().clone()));
 
 	// Dedicated Client (mode == Client) needs to connect to the server.
 	// Additionally... Integrated Client-Server (mode == Client + Server) should run
@@ -167,7 +160,7 @@ fn load_network(
 		endpoint.connect(url.parse()?, "server".to_owned());
 	}
 
-	if let Ok(storage) = storage.write() {
+	if let Ok(mut storage) = storage.write() {
 		storage.set_endpoint(endpoint);
 	}
 

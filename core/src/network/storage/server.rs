@@ -3,7 +3,7 @@ use crate::{
 	entity::{self, ArcLockEntityWorld},
 	server::world::Database,
 };
-use engine::{utility::Result, Engine, EngineSystem, network::endpoint::Endpoint};
+use engine::{utility::Result, Engine, EngineSystem};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -24,7 +24,6 @@ pub struct Server {
 
 	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
-	endpoint: Option<Endpoint>,
 }
 
 impl Server {
@@ -49,7 +48,6 @@ impl Server {
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
 			database: None,
 			systems: vec![],
-			endpoint: None,
 		})
 	}
 
@@ -167,10 +165,6 @@ impl Server {
 			.with_single_cert(vec![cert], key)?;
 
 		Ok(quinn::ServerConfig::with_crypto(Arc::new(core_config)))
-	}
-
-	pub fn set_endpoint(&mut self, endpoint: Endpoint) {
-		self.endpoint = Some(endpoint);
 	}
 
 	#[profiling::function]

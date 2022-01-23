@@ -2,8 +2,13 @@ use super::{
 	client::ArcLockClient,
 	server::{ArcLockServer, Server},
 };
-use crate::{app::state::ArcLockMachine, entity::ArcLockEntityWorld};
-use engine::{network::endpoint::{Config, Endpoint}, utility::Result};
+use crate::{
+	app::state::ArcLockMachine, common::network::ConnectionList, entity::ArcLockEntityWorld,
+};
+use engine::{
+	network::endpoint::{Config, Endpoint},
+	utility::Result,
+};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockStorage = Arc<RwLock<Storage>>;
@@ -11,6 +16,8 @@ pub type ArcLockStorage = Arc<RwLock<Storage>>;
 pub struct Storage {
 	client: Option<ArcLockClient>,
 	server: Option<ArcLockServer>,
+	endpoint: Option<Endpoint>,
+	connection_list: Option<Arc<RwLock<ConnectionList>>>,
 }
 
 impl Storage {
@@ -27,6 +34,8 @@ impl Storage {
 				move |_operation| {
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.client = None;
+						storage.endpoint = None;
+						storage.connection_list = None;
 					}
 				},
 			);
@@ -40,6 +49,8 @@ impl Storage {
 				move |_operation| {
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.server = None;
+						storage.endpoint = None;
+						storage.connection_list = None;
 					}
 				},
 			);
@@ -68,21 +79,20 @@ impl Storage {
 		&self.client
 	}
 
-	// TODO: The storage can have both client and server
 	pub fn create_config(&self) -> Result<Config> {
 		match (self.server.as_ref(), self.client.as_ref()) {
-			(Some(server), None) => Ok(Config::Server(server.read().unwrap().create_config()?)),
 			(None, Some(client)) => Ok(Config::Client(client.read().unwrap().create_config()?)),
+			(Some(server), _) => Ok(Config::Server(server.read().unwrap().create_config()?)),
 			_ => unimplemented!(),
 		}
 	}
 
-	pub fn set_endpoint(&self, endpoint: Endpoint) {
-		match (self.server.as_ref(), self.client.as_ref()) {
-			(Some(server), None) => server.write().unwrap().set_endpoint(endpoint),
-			(None, Some(client)) => client.write().unwrap().set_endpoint(endpoint),
-			_ => unimplemented!(),
-		}
+	pub fn set_endpoint(&mut self, endpoint: Endpoint) {
+		self.endpoint = Some(endpoint);
+	}
+
+	pub fn set_connection_list(&mut self, list: Arc<RwLock<ConnectionList>>) {
+		self.connection_list = Some(list);
 	}
 
 	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) {
