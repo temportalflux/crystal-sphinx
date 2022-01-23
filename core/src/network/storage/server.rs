@@ -1,9 +1,9 @@
 use crate::{
-	account,
+	account::{self, key},
 	entity::{self, ArcLockEntityWorld},
 	server::world::Database,
 };
-use engine::{utility::Result, Engine, EngineSystem};
+use engine::{utility::Result, Engine, EngineSystem, network::endpoint::Endpoint};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -18,15 +18,19 @@ pub type ArcLockServer = Arc<RwLock<Server>>;
 pub struct Server {
 	root_dir: PathBuf,
 	auth_key: account::Key,
+	certificate: key::Certificate,
+	private_key: key::PrivateKey,
 	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
 
 	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
+	endpoint: Option<Endpoint>,
 }
 
 impl Server {
 	#[profiling::function]
 	pub fn load(save_name: &str) -> Result<Self> {
+		use crate::common::utility::DataFile;
 		let mut savegame_path = std::env::current_dir().unwrap();
 		savegame_path.push("saves");
 		savegame_path.push(save_name);
@@ -35,19 +39,28 @@ impl Server {
 			Self::create(&savegame_path)?;
 		}
 		log::info!(target: LOG, "Loading data");
+		let certificate = key::Certificate::load(&savegame_path)?;
+		let private_key = key::PrivateKey::load(&savegame_path)?;
 		Ok(Self {
 			root_dir: savegame_path.to_owned(),
 			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
+			certificate,
+			private_key,
 			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
 			database: None,
 			systems: vec![],
+			endpoint: None,
 		})
 	}
 
 	fn create(savegame_path: &Path) -> Result<()> {
+		use crate::common::utility::DataFile;
 		log::info!(target: LOG, "Creating data");
 		std::fs::create_dir_all(savegame_path)?;
 		account::Key::new().save(&Self::auth_key_path(savegame_path.to_owned()))?;
+		let (certificate, private_key) = key::new()?;
+		certificate.save(&savegame_path)?;
+		private_key.save(&savegame_path)?;
 		Ok(())
 	}
 
@@ -143,6 +156,23 @@ impl Server {
 		self.systems.push(system);
 	}
 
+	pub fn create_config(&self) -> Result<quinn::ServerConfig> {
+		let cert = self.certificate.serialized()?;
+		let key = self.private_key.serialized()?;
+		log::debug!(target: "server", "local identity={}", key::Certificate::fingerprint(&cert));
+
+		let core_config = rustls::ServerConfig::builder()
+			.with_safe_defaults()
+			.with_client_cert_verifier(AllowAnyClient::new())
+			.with_single_cert(vec![cert], key)?;
+
+		Ok(quinn::ServerConfig::with_crypto(Arc::new(core_config)))
+	}
+
+	pub fn set_endpoint(&mut self, endpoint: Endpoint) {
+		self.endpoint = Some(endpoint);
+	}
+
 	#[profiling::function]
 	pub fn start_loading_world(&mut self) {
 		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
@@ -153,5 +183,30 @@ impl Server {
 		assert!(origin_res.is_ok());
 
 		self.database = Some(arc_database);
+	}
+}
+
+// Implementation of `ClientCertVerifier` that verifies everything as trustworthy.
+struct AllowAnyClient;
+
+impl AllowAnyClient {
+	fn new() -> Arc<Self> {
+		Arc::new(Self)
+	}
+}
+
+impl rustls::server::ClientCertVerifier for AllowAnyClient {
+	fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
+		Some(vec![])
+	}
+
+	fn verify_client_cert(
+		&self,
+		_end_entity: &rustls::Certificate,
+		_intermediates: &[rustls::Certificate],
+		_now: std::time::SystemTime,
+	) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
+		log::info!(target: "server", "Ignoring verification of client certificate");
+		Ok(rustls::server::ClientCertVerified::assertion())
 	}
 }

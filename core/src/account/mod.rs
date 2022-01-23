@@ -8,3 +8,5 @@ mod client_registry;
 pub use client_registry::*;
 mod manager;
 pub use manager::*;
+
+pub mod key;

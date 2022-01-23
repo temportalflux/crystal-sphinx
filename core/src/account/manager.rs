@@ -42,7 +42,7 @@ impl Manager {
 	}
 
 	pub fn create_account(&mut self, name: &String) -> Result<super::Id> {
-		let account = Account::new(&self.root, name);
+		let account = Account::new(&self.root, name)?;
 		log::info!(target: LOG, "Created account {}", account);
 		account.save()?;
 		let id = account.id().clone();

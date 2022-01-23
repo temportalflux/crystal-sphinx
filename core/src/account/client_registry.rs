@@ -80,3 +80,16 @@ impl ClientRegistry {
 			.flatten()
 	}
 }
+
+pub struct NoAccountLoggedIn;
+impl std::error::Error for NoAccountLoggedIn {}
+impl std::fmt::Debug for NoAccountLoggedIn {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		<Self as std::fmt::Display>::fmt(&self, f)
+	}
+}
+impl std::fmt::Display for NoAccountLoggedIn {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "Client has no account logged in")
+	}
+}

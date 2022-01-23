@@ -3,6 +3,7 @@ use super::{
 	server::{ArcLockServer, Server},
 };
 use crate::{app::state::ArcLockMachine, entity::ArcLockEntityWorld};
+use engine::{network::endpoint::{Config, Endpoint}, utility::Result};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockStorage = Arc<RwLock<Storage>>;
@@ -65,6 +66,23 @@ impl Storage {
 
 	pub fn client(&self) -> &Option<ArcLockClient> {
 		&self.client
+	}
+
+	// TODO: The storage can have both client and server
+	pub fn create_config(&self) -> Result<Config> {
+		match (self.server.as_ref(), self.client.as_ref()) {
+			(Some(server), None) => Ok(Config::Server(server.read().unwrap().create_config()?)),
+			(None, Some(client)) => Ok(Config::Client(client.read().unwrap().create_config()?)),
+			_ => unimplemented!(),
+		}
+	}
+
+	pub fn set_endpoint(&self, endpoint: Endpoint) {
+		match (self.server.as_ref(), self.client.as_ref()) {
+			(Some(server), None) => server.write().unwrap().set_endpoint(endpoint),
+			(None, Some(client)) => client.write().unwrap().set_endpoint(endpoint),
+			_ => unimplemented!(),
+		}
 	}
 
 	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) {
