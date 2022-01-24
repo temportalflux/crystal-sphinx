@@ -16,7 +16,7 @@ pub type ArcLockStorage = Arc<RwLock<Storage>>;
 pub struct Storage {
 	client: Option<ArcLockClient>,
 	server: Option<ArcLockServer>,
-	endpoint: Option<Endpoint>,
+	endpoint: Option<Arc<Endpoint>>,
 	connection_list: Option<Arc<RwLock<ConnectionList>>>,
 }
 
@@ -87,7 +87,7 @@ impl Storage {
 		}
 	}
 
-	pub fn set_endpoint(&mut self, endpoint: Endpoint) {
+	pub fn set_endpoint(&mut self, endpoint: Arc<Endpoint>) {
 		self.endpoint = Some(endpoint);
 	}
 

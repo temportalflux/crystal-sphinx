@@ -1,8 +1,5 @@
 use super::Command;
-use crate::{
-	app,
-	network::task::{Directive, Instruction},
-};
+use crate::{app, network::task::Instruction};
 use engine::network::{mode, LocalData};
 use std::sync::{Arc, RwLock};
 
@@ -35,7 +32,8 @@ impl Command for Connect {
 					Some(Box::new(Instruction {
 						mode: mode::Kind::Client.into(),
 						port: LocalData::get_named_arg("client_port"),
-						directive: Directive::Connect(self.url.clone()),
+						world_name: None,
+						server_url: Some(self.url.clone()),
 					})),
 				);
 			}

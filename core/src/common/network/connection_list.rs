@@ -10,7 +10,7 @@ use std::{
 };
 
 pub struct ConnectionList {
-	connections: HashMap<SocketAddr, Connection>,
+	connections: HashMap<SocketAddr, Arc<Connection>>,
 	#[allow(dead_code)]
 	handles: Arc<JoinHandleList>,
 }
@@ -43,7 +43,7 @@ impl ConnectionList {
 		list
 	}
 
-	pub fn insert(&mut self, connection: Connection) {
+	pub fn insert(&mut self, connection: Arc<Connection>) {
 		self.connections
 			.insert(connection.remote_address(), connection);
 	}

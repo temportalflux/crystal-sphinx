@@ -108,7 +108,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			app_state.clone(),
 			network_storage.clone(),
 			Arc::downgrade(&entity_world),
-		);
+		)?;
 	} else {
 		input_user = Some(input::init());
 		network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
