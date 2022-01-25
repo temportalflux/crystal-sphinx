@@ -3,13 +3,10 @@ use crate::{
 	app::{self, state::ArcLockMachine},
 	common::network::ConnectionList,
 	entity::{self, ArcLockEntityWorld},
-	network::{
-		packet::Handshake,
-		storage::{client::ArcLockClient, server::Server, ArcLockStorage},
-	},
+	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage},
 };
 use engine::{
-	network::{self, endpoint::Endpoint, mode, Config, LocalData},
+	network::{self, endpoint::Endpoint, mode, stream, Config, LocalData},
 	utility::Result,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -72,12 +69,11 @@ pub fn add_load_network_listener(
 					// initialization for entities on the client in the replication packet,
 					// running both for Integrated Client-Server/Client-on-top-of-Server.
 					if instruction.mode == mode::Kind::Client {
+						use stream::Initiator;
 						let url = instruction.server_url.unwrap();
 						let connection =
 							endpoint.connect(url.parse()?, "server".to_owned()).await?;
-						// if let Err(err) = Handshake::connect_to_server(&url) {
-						// 	log::error!("{}", err);
-						// }
+						crate::common::network::Handshake::open(&connection)?;
 					}
 
 					Ok(())
@@ -119,9 +115,13 @@ fn load_network(
 		let network_config = Config {
 			endpoint: endpoint_config,
 			address,
-			stream_processor: Arc::new(
-				network::stream::processor::handler::Registry::message_handler(),
-			),
+			stream_processor: Arc::new({
+				use crate::common::network::*;
+				use network::stream::processor::Registry;
+				let mut registry = Registry::default();
+				registry.register::<Handshake>();
+				registry
+			}),
 			error_sender,
 		};
 		let endpoint = network_config.build()?;

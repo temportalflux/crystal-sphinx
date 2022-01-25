@@ -3,7 +3,7 @@ use crate::{
 	entity::{self, ArcLockEntityWorld},
 	server::world::Database,
 };
-use engine::{utility::Result, Engine, EngineSystem};
+use engine::{network::endpoint, utility::Result, Engine, EngineSystem};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -154,17 +154,20 @@ impl Server {
 		self.systems.push(system);
 	}
 
-	pub fn create_config(&self) -> Result<quinn::ServerConfig> {
-		let cert = self.certificate.serialized()?;
-		let key = self.private_key.serialized()?;
-		log::debug!(target: "server", "local identity={}", key::Certificate::fingerprint(&cert));
+	pub fn create_config(&self) -> Result<endpoint::ServerConfig> {
+		let certificate = self.certificate.serialized()?;
+		let private_key = self.private_key.serialized()?;
 
 		let core_config = rustls::ServerConfig::builder()
 			.with_safe_defaults()
 			.with_client_cert_verifier(AllowAnyClient::new())
-			.with_single_cert(vec![cert], key)?;
+			.with_single_cert(vec![certificate.clone()], private_key.clone())?;
 
-		Ok(quinn::ServerConfig::with_crypto(Arc::new(core_config)))
+		Ok(endpoint::ServerConfig {
+			core: quinn::ServerConfig::with_crypto(Arc::new(core_config)),
+			certificate,
+			private_key,
+		})
 	}
 
 	#[profiling::function]

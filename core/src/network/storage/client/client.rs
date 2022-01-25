@@ -1,5 +1,5 @@
 use crate::{account, client::world::chunk::cache};
-use engine::utility::Result;
+use engine::{network::endpoint, utility::Result};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockClient = Arc<RwLock<Client>>;
@@ -20,8 +20,8 @@ impl Client {
 		&self.chunk_cache
 	}
 
-	pub fn create_config(&self) -> Result<quinn::ClientConfig> {
-		let (cert, key) = {
+	pub fn create_config(&self) -> Result<endpoint::ClientConfig> {
+		let (certificate, private_key) = {
 			let registry = account::ClientRegistry::read().unwrap();
 			let account = registry
 				.active_account()
@@ -29,13 +29,15 @@ impl Client {
 			account.serialized_keys()?
 		};
 
-		log::debug!(target: "client", "local identity={}", account::key::Certificate::fingerprint(&cert));
-
 		let core_config = rustls::ClientConfig::builder()
 			.with_safe_defaults()
 			.with_custom_certificate_verifier(SkipServerVerification::new())
-			.with_single_cert(vec![cert], key)?;
-		Ok(quinn::ClientConfig::new(Arc::new(core_config)))
+			.with_single_cert(vec![certificate.clone()], private_key.clone())?;
+		Ok(endpoint::ClientConfig {
+			core: quinn::ClientConfig::new(Arc::new(core_config)),
+			certificate,
+			private_key,
+		})
 	}
 }
 
