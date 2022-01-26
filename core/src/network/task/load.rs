@@ -107,11 +107,10 @@ fn load_network(
 	// 	.spawn();
 
 	let socknet_port = instruction.port.unwrap_or(25565);
-	let (endpoint, error_receiver) = {
+	let endpoint = {
 		use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 		let endpoint_config = storage.read().unwrap().create_config()?;
 		let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), socknet_port);
-		let (error_sender, error_receiver) = async_channel::unbounded();
 		let network_config = Config {
 			endpoint: endpoint_config,
 			address,
@@ -122,7 +121,6 @@ fn load_network(
 				registry.register::<Handshake>();
 				registry
 			}),
-			error_sender,
 		};
 		let endpoint = network_config.build()?;
 
@@ -130,15 +128,8 @@ fn load_network(
 			storage.set_endpoint(endpoint.clone());
 		}
 
-		(endpoint, error_receiver)
+		endpoint
 	};
-
-	engine::task::spawn("network", async move {
-		while let Ok(stream_error) = error_receiver.recv().await {
-			log::error!(target: "network", "{}", stream_error);
-		}
-		Ok(())
-	});
 
 	if let Ok(mut storage) = storage.write() {
 		storage.set_connection_list(ConnectionList::new(endpoint.connection_receiver().clone()));

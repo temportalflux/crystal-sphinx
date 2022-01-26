@@ -5,6 +5,7 @@ use std::path::Path;
 pub fn new() -> Result<(Certificate, PrivateKey)> {
 	// TODO: This should eventually use a third-party certificate distributer
 	// (https://quinn-rs.github.io/quinn/quinn/certificate.html).
+	// Default algo: rcgen::PKCS_ECDSA_P256_SHA256
 	let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
 	let private_key = PrivateKey(cert.serialize_private_key_pem());
 	let certificate = Certificate(cert.serialize_pem()?);
@@ -44,17 +45,6 @@ impl DataFile for Certificate {
 }
 
 impl Certificate {
-	pub fn fingerprint(cert: &rustls::Certificate) -> String {
-		use base64ct::{Base64UrlUnpadded, Encoding};
-		use sha2::{Digest, Sha256};
-
-		let mut hasher = Sha256::new();
-		hasher.update(&cert.0[..]);
-		let hash = hasher.finalize();
-
-		Base64UrlUnpadded::encode_string(&hash)
-	}
-
 	pub fn serialized(&self) -> Result<rustls::Certificate> {
 		let der_bytes = parse_pem(self.0.clone()).ok_or(InvalidPEM)?;
 		Ok(rustls::Certificate(der_bytes))

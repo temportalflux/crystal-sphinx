@@ -1,170 +1,185 @@
+use crate::common::network::CloseCode;
 use engine::{
-	network::socknet::{connection::Connection, initiator, responder, stream},
-	utility::Result,
+	network::socknet::{
+		self, connection::Connection, initiator, register_stream, responder, stream,
+	},
+	utility::{Context, Result},
 };
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 #[initiator(Bidirectional, process_client)]
-#[responder("handshake", Bidirectional, process_server)]
+#[register_stream("handshake", Bidirectional, receive)]
+#[responder(Bidirectional, process_server)]
 pub struct Handshake {
-	connection: Weak<Connection>,
+	target: String,
+	connection: Arc<Connection>,
 	send: stream::Send,
 	recv: stream::Recv,
 }
 
 impl Handshake {
-	fn new(connection: Weak<Connection>, (send, recv): (stream::Send, stream::Recv)) -> Self {
+	fn new(
+		target: String,
+		connection: Arc<Connection>,
+		(send, recv): (stream::Send, stream::Recv),
+	) -> Self {
 		Self {
+			target,
 			connection,
 			send,
 			recv,
 		}
 	}
+}
 
-	fn connection(&self) -> Result<Arc<Connection>> {
-		Connection::upgrade(&self.connection)
+impl stream::LogSource for Handshake {
+	fn target(kind: stream::Handler, connection: &Arc<Connection>) -> String {
+		use stream::processor::Registerable;
+		let name = match kind {
+			stream::Handler::Initiator => "client",
+			stream::Handler::Responder => "server",
+		};
+		format!(
+			"{}/{}[{}]",
+			name,
+			Self::unique_id(),
+			connection.remote_address()
+		)
 	}
 }
 
+static PASSED_AUTH: u32 = 0;
+static FAILED_AUTH: u32 = 1;
+
 impl Handshake {
 	async fn process_client(mut self) -> Result<()> {
-		static LOG: &'static str = "client/handshake";
-
-		log::info!(
-			target: LOG,
-			"Initiating handshake to server({})",
-			self.connection()?.fingerprint()?
-		);
+		log::info!(target: &self.target, "Initiating handshake");
 
 		// Tells the server how to process the stream (and establishes the stream).
-		self.send.write_id::<Handshake>().await?;
+		self.send
+			.write_id::<Handshake>()
+			.await
+			.context("writing handshake id")?;
 
-		// Server has sent us a token that is encrypted both with its key and ours
-		let token_bytes = self.recv.read::<Vec<u8>>().await?;
-
-		let token_bytes = {
-			log::debug!("decrypting with client key");
-			let client_private_key = {
-				use rsa::pkcs1::FromRsaPrivateKey;
-				let source = self.connection()?.endpoint()?;
-				let private_key = source.private_key();
-				rsa::RsaPrivateKey::from_pkcs1_der(&private_key.0)?
-			};
-
-			{
-				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-				client_private_key.decrypt(padding, &token_bytes)?
-			}
+		let key_pair = {
+			use ring::signature::{self, EcdsaKeyPair};
+			let source = self.connection.endpoint()?;
+			let private_key = source.private_key();
+			EcdsaKeyPair::from_pkcs8(&signature::ECDSA_P256_SHA256_ASN1_SIGNING, &private_key.0)
+				.map_err(|err| KeyRejected(err.description_()))?
 		};
 
-		// Token is now partially decrypted.
-		// If the server successfully decrypts,
-		// then we become authenticated.
-		self.send.write(&token_bytes).await?;
+		// Step 1: Send the client's public key
+		{
+			use ring::signature::KeyPair;
+			self.send
+				.write_bytes(key_pair.public_key().as_ref())
+				.await
+				.context("writing public key")?;
+		}
 
-		let code = self.send.stopped().await?;
-		assert_eq!(code, 0);
+		// Step 2: Disconnected if our account has joined before and had a different public key.
+
+		// Step 3: Sign the random token & send it to the server.
+		let token = self.recv.read_bytes().await.context("reading token")?;
+		let signature = {
+			use ring::rand::SystemRandom;
+
+			let rng = SystemRandom::new();
+			let signature = key_pair.sign(&rng, &token).map_err(|_| FailedToSignToken)?;
+
+			signature
+		};
+		self.send
+			.write_bytes(&signature.as_ref())
+			.await
+			.context("writing token")?;
+
+		// Step 4: Receive an approval byte if we've been authenticated.
+		let code = self
+			.send
+			.stopped()
+			.await
+			.context("waiting for end-of-stream")?;
+		assert!(code == PASSED_AUTH || code == FAILED_AUTH);
+		let _authenticated = code == PASSED_AUTH;
+
+		// Streams are going to be stopped regardless.
+		// If we have failed auth, the connection will also be closed.
 
 		Ok(())
 	}
 
 	async fn process_server(mut self) -> Result<()> {
-		use rand::Rng;
-		static LOG: &'static str = "server/handshake";
+		log::info!(target: &self.target, "Received handshake");
 
-		log::info!(
-			target: LOG,
-			"Received handshake from client({})",
-			self.connection()?.fingerprint()?
-		);
+		// Step 1: Receive the client's public key
+		// (which is derived from there private_key and is different from the certificate)
+		let public_key = self.recv.read_bytes().await.context("reading public key")?;
+		let encoded_key = socknet::utility::encode_string(&public_key);
+		log::info!(target:  &self.target, "Received public-key({})", encoded_key);
 
-		let raw_token: String = rand::thread_rng()
-			.sample_iter(&rand::distributions::Alphanumeric)
-			.take(64)
-			.map(char::from)
-			.collect();
-		let token_bytes = bincode::serialize(&raw_token)?;
-		
-		let token_bytes = {
-			log::debug!("encrypting with server key");
-			let server_public_key = {
-				use rsa::pkcs1::FromRsaPublicKey;
-				let source = self.connection()?.endpoint()?;
-				let certificate = source.certificate();
-				rsa::RsaPublicKey::from_pkcs1_der(&certificate.0)?
-			};
+		// Step 2: Determine if the account has joined before
+		// TODO: If the account (whose id is the certificate's fingerprint) has never joined before,
+		// then they automatically pass the first phase.
+		// Otherwise, the client-provided public key must match the public key stored to file.
+		// To store to file: base64 encode the bytes of the client-provided public key.
 
-			{
-				use rand::rngs::OsRng;
-				use rsa::PublicKey;
-				let mut rng = OsRng;
-				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-				server_public_key.encrypt(&mut rng, padding, &token_bytes)?
-			}
+		// Step 3: Generate a random token and send it to be signed by the client
+		let token = {
+			use rand::Rng;
+			let raw_token: String = rand::thread_rng()
+				.sample_iter(&rand::distributions::Alphanumeric)
+				.take(64)
+				.map(char::from)
+				.collect();
+			bincode::serialize(&raw_token)?
+		};
+		self.send
+			.write_bytes(&token)
+			.await
+			.context("sending token")?;
+
+		// Step 4: Verify the signed token
+		let signed_token = self.recv.read_bytes().await.context("reading token")?;
+
+		let verified = {
+			use ring::signature::{self, UnparsedPublicKey};
+			let public_key =
+				UnparsedPublicKey::new(&signature::ECDSA_P256_SHA256_ASN1, &public_key);
+			public_key.verify(&token, &signed_token).is_ok()
 		};
 
-		let token_bytes = {
-			log::debug!("encrypting with client key");
-			let client_public_key = {
-				use rsa::pkcs1::FromRsaPublicKey;
-				let source = self.connection()?;
-				let certificate = source.certificate()?;
-				rsa::RsaPublicKey::from_pkcs1_der(&certificate.0)?
-			};
-	
-			{
-				use rand::rngs::OsRng;
-				use rsa::PublicKey;
-				let mut rng = OsRng;
-				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-				client_public_key.encrypt(&mut rng, padding, &token_bytes)?
-			}
-		};
-	
-		// Token is encrypted with server key and then client key.
-		// Wait for client to send back the token decrypted from the client.
-		self.send.write(&token_bytes).await?;
-		
-		// The client has sent pack a partially decrypted token.
-		let token_bytes = self.recv.read::<Vec<u8>>().await?;
+		if !verified {
+			log::info!(target:  &self.target, "Failed authentication");
+			self.recv.stop(FAILED_AUTH).await?;
+			self.send.finish().await?;
 
-		let token_bytes = {
-			log::debug!("decrypting with server key");
-			let server_private_key = {
-				use rsa::pkcs1::FromRsaPrivateKey;
-				let source = self.connection()?.endpoint()?;
-				let private_key = source.private_key();
-				rsa::RsaPrivateKey::from_pkcs1_der(&private_key.0)?
-			};
+			self.connection
+				.close(CloseCode::FailedAuthentication as u32, &vec![]);
+			return Ok(());
+		}
 
-			{
-				let padding = rsa::PaddingScheme::new_pkcs1v15_encrypt();
-				server_private_key.decrypt(padding, &token_bytes)?
-			}
-		};
-
-		let decrypted_token: String = bincode::deserialize(&token_bytes)?;
-
-		let successful = decrypted_token == raw_token;
-		log::debug!("handshake was successful? {}", successful);
-
-		self.recv.stop(0).await?;
+		log::info!(target:  &self.target, "Passed authentication");
+		self.recv.stop(PASSED_AUTH).await?;
 		self.send.finish().await?;
+
+		// TODO: Process the user data/log them in
 
 		Ok(())
 	}
 }
 
-struct InvalidRsaKey;
-impl std::error::Error for InvalidRsaKey {}
-impl std::fmt::Debug for InvalidRsaKey {
+struct KeyRejected(&'static str);
+impl std::error::Error for KeyRejected {}
+impl std::fmt::Debug for KeyRejected {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		<Self as std::fmt::Display>::fmt(&self, f)
 	}
 }
-impl std::fmt::Display for InvalidRsaKey {
+impl std::fmt::Display for KeyRejected {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Failed to parse encryption key")
+		write!(f, "Key rejected during parsing: {}", self.0)
 	}
 }
 

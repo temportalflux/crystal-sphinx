@@ -1,4 +1,3 @@
-use crate::account::key::Certificate;
 use engine::socknet::{
 	connection::{self, Connection},
 	utility::JoinHandleList,
@@ -6,11 +5,11 @@ use engine::socknet::{
 use std::{
 	collections::HashMap,
 	net::SocketAddr,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
 pub struct ConnectionList {
-	connections: HashMap<SocketAddr, Arc<Connection>>,
+	connections: HashMap<SocketAddr, Weak<Connection>>,
 	#[allow(dead_code)]
 	handles: Arc<JoinHandleList>,
 }
@@ -24,18 +23,30 @@ impl ConnectionList {
 		}));
 
 		let async_list = list.clone();
-		handles.spawn(async move {
-			while let Ok(connection) = connection_receiver.recv().await {
-				let identity = match connection.peer_identity() {
-					Some(identity) => identity,
-					None => continue,
-				};
-				let certs = match identity.downcast::<Vec<rustls::Certificate>>() {
-					Ok(certs) => certs,
-					Err(_) => continue,
-				};
-				log::info!(target: "network", "connected to address={} identity={}", connection.remote_address(), Certificate::fingerprint(&certs[0]));
-				async_list.write().unwrap().insert(connection);
+		let target = "connection-list".to_owned();
+		handles.spawn(target.clone(), async move {
+			use connection::Event::*;
+			while let Ok(event) = connection_receiver.recv().await {
+				match event {
+					Created(connection) => {
+						let arc = Connection::upgrade(&connection)?;
+						log::info!(
+							target: &target,
+							"connected to address({}) identity({})",
+							arc.remote_address(),
+							arc.fingerprint()?
+						);
+
+						let mut list = async_list.write().unwrap();
+						list.insert(arc.remote_address(), connection);
+					}
+					Dropped(address) => {
+						log::info!(target: &target, "disconnected from address({})", address);
+
+						let mut list = async_list.write().unwrap();
+						list.remove(&address);
+					}
+				}
 			}
 			Ok(())
 		});
@@ -43,8 +54,11 @@ impl ConnectionList {
 		list
 	}
 
-	pub fn insert(&mut self, connection: Arc<Connection>) {
-		self.connections
-			.insert(connection.remote_address(), connection);
+	pub fn insert(&mut self, address: SocketAddr, connection: Weak<Connection>) {
+		self.connections.insert(address, connection);
+	}
+
+	pub fn remove(&mut self, address: &SocketAddr) {
+		self.connections.remove(&address);
 	}
 }
