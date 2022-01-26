@@ -1,30 +1,35 @@
 use crate::common::network::CloseCode;
 use engine::{
-	network::socknet::{
-		self, connection::Connection, initiator, register_stream, responder, stream,
-	},
-	utility::{Context, Result},
+	network::socknet::{self, builder, connection::Connection, stream},
+	utility::{self, Result},
 };
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
-#[initiator(Bidirectional, process_client)]
-#[register_stream("handshake", Bidirectional, receive)]
-#[responder(Bidirectional, process_server)]
+#[builder(
+	"handshake",
+	Bidirectional,
+	Handshake::process_client,
+	Handshake::process_server
+)]
+pub struct Builder {}
+
 pub struct Handshake {
-	target: String,
+	context: Arc<Builder>,
 	connection: Arc<Connection>,
 	send: stream::Send,
 	recv: stream::Recv,
 }
 
-impl Handshake {
-	fn new(
-		target: String,
+impl stream::Buildable for Handshake {
+	type Builder = Builder;
+	type Stream = (stream::Send, stream::Recv);
+	fn build(
+		context: Arc<Self::Builder>,
 		connection: Arc<Connection>,
-		(send, recv): (stream::Send, stream::Recv),
+		(send, recv): Self::Stream,
 	) -> Self {
 		Self {
-			target,
+			context,
 			connection,
 			send,
 			recv,
@@ -32,32 +37,31 @@ impl Handshake {
 	}
 }
 
-impl stream::LogSource for Handshake {
-	fn target(kind: stream::Handler, connection: &Arc<Connection>) -> String {
-		use stream::processor::Registerable;
-		let name = match kind {
-			stream::Handler::Initiator => "client",
-			stream::Handler::Responder => "server",
-		};
-		format!(
-			"{}/{}[{}]",
-			name,
-			Self::unique_id(),
-			connection.remote_address()
-		)
-	}
-}
-
 static PASSED_AUTH: u32 = 0;
 static FAILED_AUTH: u32 = 1;
 
 impl Handshake {
+	pub fn builder() -> Builder {
+		Builder {}
+	}
+
+	fn log(&self, side: &str) -> String {
+		format!(
+			"{}/{}[{}]",
+			side,
+			<Builder as stream::Builder>::unique_id(),
+			self.connection.remote_address()
+		)
+	}
+
 	async fn process_client(mut self) -> Result<()> {
-		log::info!(target: &self.target, "Initiating handshake");
+		use utility::Context;
+		let log = self.log("client");
+		log::info!(target: &log, "Initiating handshake");
 
 		// Tells the server how to process the stream (and establishes the stream).
 		self.send
-			.write_id::<Handshake>()
+			.write_id::<Builder>()
 			.await
 			.context("writing handshake id")?;
 
@@ -111,13 +115,15 @@ impl Handshake {
 	}
 
 	async fn process_server(mut self) -> Result<()> {
-		log::info!(target: &self.target, "Received handshake");
+		use utility::Context;
+		let log = self.log("server");
+		log::info!(target: &log, "Received handshake");
 
 		// Step 1: Receive the client's public key
 		// (which is derived from there private_key and is different from the certificate)
 		let public_key = self.recv.read_bytes().await.context("reading public key")?;
 		let encoded_key = socknet::utility::encode_string(&public_key);
-		log::info!(target:  &self.target, "Received public-key({})", encoded_key);
+		log::info!(target: &log, "Received public-key({})", encoded_key);
 
 		// Step 2: Determine if the account has joined before
 		// TODO: If the account (whose id is the certificate's fingerprint) has never joined before,
@@ -151,7 +157,7 @@ impl Handshake {
 		};
 
 		if !verified {
-			log::info!(target:  &self.target, "Failed authentication");
+			log::info!(target: &log, "Failed authentication");
 			self.recv.stop(FAILED_AUTH).await?;
 			self.send.finish().await?;
 
@@ -160,7 +166,7 @@ impl Handshake {
 			return Ok(());
 		}
 
-		log::info!(target:  &self.target, "Passed authentication");
+		log::info!(target: &log, "Passed authentication");
 		self.recv.stop(PASSED_AUTH).await?;
 		self.send.finish().await?;
 
