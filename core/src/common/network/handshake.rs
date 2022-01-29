@@ -1,7 +1,8 @@
 use crate::{
+	app,
 	common::{
 		account,
-		network::{CloseCode, ConnectionList},
+		network::{Broadcast, CloseCode, ConnectionList, SendClientJoined},
 	},
 	network::storage::{server::ArcLockServer, Storage},
 };
@@ -14,6 +15,7 @@ use std::sync::{Arc, RwLock, Weak};
 pub type Context = stream::Context<Builder, stream::kind::Bidirectional>;
 pub struct Builder {
 	storage: Weak<RwLock<Storage>>,
+	app_state: Weak<RwLock<app::state::Machine>>,
 }
 impl stream::Identifier for Builder {
 	fn unique_id() -> &'static str {
@@ -47,8 +49,11 @@ impl From<Context> for Handshake {
 }
 
 impl Handshake {
-	pub fn builder(storage: Weak<RwLock<Storage>>) -> Builder {
-		Builder { storage }
+	pub fn builder(
+		storage: Weak<RwLock<Storage>>,
+		app_state: Weak<RwLock<app::state::Machine>>,
+	) -> Builder {
+		Builder { storage, app_state }
 	}
 
 	fn log(&self, side: &str) -> String {
@@ -80,6 +85,14 @@ impl Handshake {
 		let arc = self.storage()?;
 		let storage = arc.read().map_err(|_| Error::FailedToReadStorage)?;
 		Ok(storage.connection_list().clone())
+	}
+
+	fn app_state(&self) -> Result<Arc<RwLock<app::state::Machine>>> {
+		Ok(self
+			.context
+			.app_state
+			.upgrade()
+			.ok_or(Error::InvalidAppState)?)
 	}
 }
 
@@ -171,13 +184,23 @@ impl Handshake {
 			.await
 			.context("waiting for end-of-stream")?;
 		assert!(code == PASSED_AUTH || code == FAILED_AUTH);
-		let _authenticated = code == PASSED_AUTH;
+		let authenticated = code == PASSED_AUTH;
 
 		// Streams are going to be stopped regardless.
 		// If we have failed auth, the connection will also be closed.
 
-		// TODO: If authenticated, move to InGame state
-		// TODO: If authentication failed in any way, go back to MainMenu state
+		// TODO: Server should send a "all data is ready" signal to tell the client
+		// that it is safe to enter the game, once relevant chunks and entities have been loaded.
+		// Must require:
+		// - player's entity and components have been replicated
+
+		self.app_state()?.write().unwrap().transition_to(
+			match authenticated {
+				true => crate::app::state::State::InGame,
+				false => crate::app::state::State::MainMenu,
+			},
+			None,
+		);
 
 		Ok(())
 	}
@@ -317,13 +340,20 @@ impl Handshake {
 				.write()
 				.map_err(|_| Error::FailedToWriteServer)
 				.context("adding user")?;
-			server.add_user(account_id, arc_user);
+			server.add_user(account_id.clone(), arc_user);
 		}
 
 		// TODO: spawn the user entity in the world
 
-		// TODO: Broadcast to all clients that a user has connected
-		let _ = self.connection_list()?;
+		Broadcast::<SendClientJoined>::new(self.connection_list()?)
+			.with_on_established(move |client_joined: SendClientJoined| {
+				let account_id = account_id.clone();
+				Box::pin(async move {
+					client_joined.initiate(&account_id).await?;
+					Ok(())
+				})
+			})
+			.open();
 
 		// TODO: Add the user to the active cache
 
@@ -354,4 +384,7 @@ enum Error {
 	FailedToReadUser(String),
 	#[error("provided public key did not match previous login")]
 	InvalidPublicKey,
+
+	#[error("app_states is invalid")]
+	InvalidAppState,
 }

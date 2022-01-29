@@ -416,7 +416,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 			Request::AuthTokenForClient(encrypted_bytes, server_public_key) => {
 				profiling::scope!("received-auth-token");
 				log::info!(target: LOG, "Received auth token from server");
-				
+
 				// Technically we will have "connected" by the end of this request,
 				// but not really connected until the server validates the token.
 				return Err(Error::NoActiveAccount)?;

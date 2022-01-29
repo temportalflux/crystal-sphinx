@@ -18,6 +18,7 @@ pub fn load_dedicated_server(
 	entity_world: Weak<RwLock<entity::World>>,
 ) -> Result<()> {
 	load_network(
+		&app_state,
 		&storage,
 		&entity_world,
 		&Instruction {
@@ -41,11 +42,13 @@ pub fn add_load_network_listener(
 ) {
 	use app::state::{State::*, Transition::*, *};
 	for state in [LoadingWorld, Connecting].iter() {
+		let callback_app_state = app_state.clone();
 		let callback_storage = storage.clone();
 		let callback_entity_world = Arc::downgrade(&entity_world);
 		app_state.write().unwrap().add_async_callback(
 			OperationKey(None, Some(Enter), Some(*state)),
 			move |operation| {
+				let async_app_state = callback_app_state.clone();
 				let async_storage = callback_storage.clone();
 				let async_entity_world = callback_entity_world.clone();
 				let instruction = operation
@@ -56,7 +59,12 @@ pub fn add_load_network_listener(
 					.unwrap()
 					.clone();
 				async move {
-					let endpoint = load_network(&async_storage, &async_entity_world, &instruction)?;
+					let endpoint = load_network(
+						&async_app_state,
+						&async_storage,
+						&async_entity_world,
+						&instruction,
+					)?;
 
 					// Dedicated Client (mode == Client) needs to connect to the server.
 					// Additionally... Integrated Client-Server (mode == Client + Server) should run
@@ -86,6 +94,7 @@ pub fn add_load_network_listener(
 
 #[profiling::function]
 fn load_network(
+	app_state: &ArcLockMachine,
 	storage: &ArcLockStorage,
 	entity_world: &Weak<RwLock<entity::World>>,
 	instruction: &Instruction,
@@ -112,7 +121,11 @@ fn load_network(
 				use crate::common::network::*;
 				use network::stream::Registry;
 				let mut registry = Registry::default();
-				registry.register(Handshake::builder(Arc::downgrade(&storage)));
+				registry.register(Handshake::builder(
+					Arc::downgrade(&storage),
+					Arc::downgrade(&app_state),
+				));
+				registry.register(ClientJoined {});
 				registry
 			}),
 		};

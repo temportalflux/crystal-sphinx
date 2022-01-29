@@ -1,6 +1,4 @@
-use crate::{
-	entity::{self, archetype, component, ArcLockEntityWorld},
-};
+use crate::entity::{self, archetype, component, ArcLockEntityWorld};
 use engine::{
 	network::{
 		self,

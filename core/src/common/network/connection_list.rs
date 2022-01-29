@@ -61,4 +61,8 @@ impl ConnectionList {
 	pub fn remove(&mut self, address: &SocketAddr) {
 		self.connections.remove(&address);
 	}
+
+	pub fn all(&self) -> &HashMap<SocketAddr, Weak<Connection>> {
+		&self.connections
+	}
 }
