@@ -32,7 +32,7 @@ pub fn load_models(
 	let thread_storage = storage.clone();
 	let thread_render_chain = render_chain.clone();
 	let thread_camera = camera.clone();
-	task::spawn(LOG, async move {
+	task::spawn(LOG.to_string(), async move {
 		profiling::scope!("load_models");
 
 		// Gather asset ids for all block assets

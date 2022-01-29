@@ -1,5 +1,4 @@
 use crate::{
-	account,
 	entity::{self, archetype, component, ArcLockEntityWorld},
 };
 use engine::{
@@ -134,20 +133,22 @@ impl PacketProcessor<Packet> for ReceiveReplicatedEntity {
 		if entities_to_spawn.len() > 0 {
 			profiling::scope!("spawn-replicated");
 
-			let local_account_id = account::ClientRegistry::read()
+			let local_account_id = crate::client::account::Manager::read()
 				.unwrap()
 				.active_account()
-				.map(|account| account.meta.id.clone());
+				.map(|account| account.id());
 
 			let mut world = arc_world.write().unwrap();
 			let registry = component::Registry::read();
 			for (server_entity, mut builder) in entities_to_spawn.into_iter() {
-				let is_locally_owned =
-					match (local_account_id, builder.get::<component::OwnedByAccount>()) {
-						// If the account ids match, then this entity is the local player's avatar
-						(Some(local_id), Some(user)) => *user.id() == local_id,
-						_ => false,
-					};
+				let is_locally_owned = match (
+					&local_account_id,
+					builder.get::<component::OwnedByAccount>(),
+				) {
+					// If the account ids match, then this entity is the local player's avatar
+					(Ok(local_id), Some(user)) => *user.id() == *local_id,
+					_ => false,
+				};
 
 				// If the entity doesn't exist in the world, spawn it with the components.
 				// Otherwise, update any existing components with the same types with the new data

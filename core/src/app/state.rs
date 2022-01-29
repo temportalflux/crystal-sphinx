@@ -178,7 +178,7 @@ impl Machine {
 		T: futures::future::Future<Output = Result<()>> + Send + 'static,
 	{
 		self.add_callback(key, move |operation| {
-			engine::task::spawn("app-state", callback(operation));
+			engine::task::spawn("app-state".to_string(), callback(operation));
 		});
 	}
 

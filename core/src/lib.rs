@@ -103,26 +103,36 @@ pub fn run(config: plugin::Config) -> Result<()> {
 	// and clients will tell the server of the changes to the entities they own via TBD.
 	engine.add_system(entity::system::Physics::new(&entity_world).arclocked());
 
-	if is_server {
-		network::task::load_dedicated_server(
+	let engine = if is_server {
+		let engine = engine.into_arclock();
+		engine::Engine::set(engine.clone());
+
+		if let Err(error) = network::task::load_dedicated_server(
 			app_state.clone(),
 			network_storage.clone(),
 			Arc::downgrade(&entity_world),
-		)?;
+		) {
+			log::error!(target: "main", "{:?}", error);
+			return Ok(());
+		}
+
+		engine
 	} else {
 		input_user = Some(input::init());
 		network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
 
-		let account_id = if let Ok(mut client_reg) = account::ClientRegistry::write() {
-			client_reg.scan_accounts()?;
+		let account_id = {
+			let mut manager = client::account::Manager::write().unwrap();
+			manager.scan_accounts()?;
+
 			let user_name = std::env::args()
 				.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
 				.unwrap();
-			let user_id = client_reg.ensure_account(&user_name)?;
-			client_reg.login_as(&user_id)?;
+
+			let user_id = manager.ensure_account(&user_name)?;
+			manager.login_as(&user_id)?;
+
 			user_id
-		} else {
-			unimplemented!()
 		};
 		engine.add_system(
 			entity::system::PlayerController::new(
@@ -264,12 +274,13 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			}
 		};
 		*/
-	}
+
+		engine.into_arclock()
+	};
 
 	log::info!(target: CrystalSphinx::name(), "Initialization finished");
-	let engine = engine.into_arclock();
 	engine::Engine::run(engine.clone(), || {
-		if let Ok(mut guard) = account::ClientRegistry::write() {
+		if let Ok(mut guard) = client::account::Manager::write() {
 			(*guard).logout();
 		}
 	})

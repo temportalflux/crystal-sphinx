@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Indicates that an entity is controlled by a given account/user.
 /// Use in conjunction with `net::Owner` to determine if the entity is
 /// controlled by the local player and what account it is that controls it.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OwnedByAccount {
 	account_id: account::Id,
 }
@@ -51,7 +51,7 @@ impl OwnedByAccount {
 
 impl super::network::Replicatable for OwnedByAccount {
 	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
-		*self = *replicated;
+		*self = replicated.clone();
 	}
 }
 

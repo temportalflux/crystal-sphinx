@@ -3,7 +3,7 @@ use crate::entity::{
 	component::{self, debug},
 	ArcLockEntityWorld,
 };
-use engine::ui::egui::Element;
+use engine::{ui::egui::Element, utility::Result};
 use enumset::{EnumSet, EnumSetType};
 use std::{
 	collections::HashSet,
@@ -70,11 +70,11 @@ impl EntityInspector {
 }
 
 impl EntityInspector {
-	fn local_account_id() -> Option<crate::account::Id> {
-		crate::account::ClientRegistry::read()
+	fn local_account_id() -> Result<crate::account::Id> {
+		crate::client::account::Manager::read()
 			.unwrap()
 			.active_account()
-			.map(|account| account.meta.id.clone())
+			.map(|account| account.id())
 	}
 
 	fn find_entity(&self) -> Option<hecs::Entity> {
@@ -84,8 +84,8 @@ impl EntityInspector {
 		match self.selector {
 			Selector::LocalOwner => {
 				let local_id = match Self::local_account_id() {
-					Some(id) => id,
-					None => return None,
+					Ok(id) => id,
+					Err(_) => return None,
 				};
 				for (entity, user) in world.query::<&OwnedByAccount>().iter() {
 					if *user.id() == local_id {

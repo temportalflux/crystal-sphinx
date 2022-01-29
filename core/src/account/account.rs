@@ -1,4 +1,3 @@
-use super::key;
 use engine::utility::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -8,8 +7,6 @@ pub struct Account {
 	root: PathBuf,
 	pub meta: Meta,
 	pub key: Key,
-	certificate: key::Certificate,
-	private_key: key::PrivateKey,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,16 +167,13 @@ impl Account {
 		let id = uuid::Uuid::new_v4();
 		let mut root = parent_dir.to_owned();
 		root.push(id.to_string());
-		let (certificate, private_key) = key::new()?;
 		Ok(Self {
 			root,
 			meta: Meta {
-				id,
+				id: id.to_string(),
 				display_name: name.clone(),
 			},
 			key: Key::new(),
-			certificate,
-			private_key,
 		})
 	}
 
@@ -195,35 +189,20 @@ impl Account {
 		&self.meta.display_name
 	}
 
-	pub fn serialized_keys(&self) -> Result<(rustls::Certificate, rustls::PrivateKey)> {
-		Ok((
-			self.certificate.serialized()?,
-			self.private_key.serialized()?,
-		))
-	}
-
 	pub fn save(&self) -> Result<()> {
-		use crate::common::utility::DataFile;
 		std::fs::create_dir_all(&self.root)?;
 		self.meta.save(&Meta::make_path(&self.root))?;
 		self.key.save(&Key::make_path(&self.root))?;
-		self.certificate.save(&self.root)?;
-		self.private_key.save(&self.root)?;
 		Ok(())
 	}
 
 	pub fn load(path: &Path) -> Result<Self> {
-		use crate::common::utility::DataFile;
 		let meta = Meta::load(&Meta::make_path(path))?;
 		let key = Key::load(&Key::make_path(path))?;
-		let certificate = key::Certificate::load(&path)?;
-		let private_key = key::PrivateKey::load(&path)?;
 		Ok(Account {
 			root: path.to_owned(),
 			meta,
 			key,
-			certificate,
-			private_key,
 		})
 	}
 }

@@ -11,6 +11,9 @@ pub trait DataFile {
 	}
 
 	fn save(&self, parent_dir: &Path) -> Result<()> {
+		if !parent_dir.exists() {
+			std::fs::create_dir_all(&parent_dir)?;
+		}
 		self.save_to(&Self::make_path(&parent_dir))?;
 		Ok(())
 	}

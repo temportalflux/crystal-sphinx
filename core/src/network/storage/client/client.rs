@@ -1,4 +1,4 @@
-use crate::{account, client::world::chunk::cache};
+use crate::{client::account, client::world::chunk::cache, common::account::key};
 use engine::{network::endpoint, utility::Result};
 use std::sync::{Arc, RwLock};
 
@@ -21,13 +21,19 @@ impl Client {
 	}
 
 	pub fn create_config(&self) -> Result<endpoint::ClientConfig> {
-		let (certificate, private_key) = {
-			let registry = account::ClientRegistry::read().unwrap();
-			let account = registry
-				.active_account()
-				.ok_or(account::NoAccountLoggedIn)?;
-			account.serialized_keys()?
-		};
+		let certificate: rustls::Certificate;
+		let private_key: rustls::PrivateKey;
+		{
+			let registry = account::Manager::read().unwrap();
+			let account = registry.active_account()?;
+			match account.key() {
+				key::Key::Private(cert, key) => {
+					certificate = cert.clone().into();
+					private_key = key.clone().into();
+				}
+				key::Key::Public(_) => return Err(key::Error::InvalidPrivacyPublic)?,
+			}
+		}
 
 		let core_config = rustls::ClientConfig::builder()
 			.with_safe_defaults()

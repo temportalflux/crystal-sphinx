@@ -6,8 +6,8 @@ use crate::{
 	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage},
 };
 use engine::{
-	network::{self, socknet::connection::Connection, endpoint::Endpoint, mode, Config, LocalData},
-	utility::Result,
+	network::{self, endpoint::Endpoint, mode, Config, LocalData},
+	utility::{Context, Result},
 };
 use std::sync::{Arc, RwLock, Weak};
 
@@ -70,10 +70,11 @@ pub fn add_load_network_listener(
 					// running both for Integrated Client-Server/Client-on-top-of-Server.
 					if instruction.mode == mode::Kind::Client {
 						use crate::common::network::Handshake;
+						use engine::network::stream::handler::Initiator;
 						let url = instruction.server_url.unwrap();
 						let connection =
 							endpoint.connect(url.parse()?, "server".to_owned()).await?;
-						Connection::open::<Handshake>(&connection)?;
+						Handshake::open(&connection)?.await?.initiate();
 					}
 
 					Ok(())
@@ -91,20 +92,13 @@ fn load_network(
 ) -> Result<Arc<Endpoint>> {
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
-		if let Ok(server) = Server::load(&world_name) {
-			storage.write().unwrap().set_server(server);
-		}
+		let server = Server::load(&world_name).context("loading server")?;
+		storage.write().unwrap().set_server(server);
 	}
 	if instruction.mode.contains(mode::Kind::Client) {
-		storage
-			.write()
-			.unwrap()
-			.set_client(ArcLockClient::default());
+		let client = ArcLockClient::default();
+		storage.write().unwrap().set_client(client);
 	}
-
-	// let _ = crate::network::create(instruction.mode, &app_state, &storage, &entity_world)
-	// 	.with_port(socknet_port)
-	// 	.spawn();
 
 	let socknet_port = instruction.port.unwrap_or(25565);
 	let endpoint = {
@@ -118,7 +112,7 @@ fn load_network(
 				use crate::common::network::*;
 				use network::stream::Registry;
 				let mut registry = Registry::default();
-				registry.register(Handshake::builder());
+				registry.register(Handshake::builder(Arc::downgrade(&storage)));
 				registry
 			}),
 		};
@@ -133,7 +127,7 @@ fn load_network(
 
 	if let Ok(mut storage) = storage.write() {
 		storage.set_connection_list(ConnectionList::new(endpoint.connection_receiver().clone()));
-		//storage.start_loading(&entity_world.upgrade().unwrap());
+		storage.start_loading(&entity_world.upgrade().unwrap());
 	}
 
 	Ok(endpoint)

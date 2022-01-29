@@ -83,7 +83,7 @@ impl Storage {
 		match (self.server.as_ref(), self.client.as_ref()) {
 			(None, Some(client)) => Ok(Config::Client(client.read().unwrap().create_config()?)),
 			(Some(server), _) => Ok(Config::Server(server.read().unwrap().create_config()?)),
-			_ => unimplemented!(),
+			(None, None) => unimplemented!(),
 		}
 	}
 
@@ -93,6 +93,10 @@ impl Storage {
 
 	pub fn set_connection_list(&mut self, list: Arc<RwLock<ConnectionList>>) {
 		self.connection_list = Some(list);
+	}
+
+	pub fn connection_list(&self) -> &Arc<RwLock<ConnectionList>> {
+		self.connection_list.as_ref().unwrap()
 	}
 
 	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) {

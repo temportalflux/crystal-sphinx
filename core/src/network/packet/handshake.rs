@@ -107,6 +107,8 @@ impl Handshake {
 
 	#[profiling::function]
 	pub fn connect_to_server(address: &str) -> Result<()> {
+		Ok(())
+		/*
 		use network::prelude::*;
 		let request = match account::ClientRegistry::read().unwrap().active_account() {
 			Some(account) => {
@@ -120,6 +122,7 @@ impl Handshake {
 				.with_guarantee(Reliable + Unordered)
 				.with_payload(&Handshake(request)),
 		)
+		*/
 	}
 }
 
@@ -167,7 +170,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 				let (server_auth_key, user) = match self.server().read() {
 					Ok(server) => (
 						server.auth_key().clone(),
-						server.find_user(&account_meta.id).cloned(),
+						server.find_saved_user(&account_meta.id).cloned(),
 					),
 					Err(_) => {
 						return Err(Error::CannotReadServerData)?;
@@ -314,9 +317,9 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 						pending_user.stop_timeout();
 
 						if let Ok(mut server) = self.server().write() {
-							if server.find_user(&pending_user.id()).is_none() {
+							if server.find_saved_user(&pending_user.id()).is_none() {
 								let player_dir_path = server.get_players_dir_path();
-								server.add_user(user::saved::User::new(
+								server.add_saved_user(user::saved::User::new(
 									&pending_user,
 									player_dir_path,
 								));
@@ -342,7 +345,7 @@ impl PacketProcessor<Handshake> for ServerProcessor {
 							// Integrated Client-Server needs to spawn client-only components
 							// if its the local player's entity.
 							if local_data.is_client() {
-								let client_reg = account::ClientRegistry::read().unwrap();
+								let client_reg = crate::client::account::Manager::read().unwrap();
 								let local_account = client_reg.active_account().unwrap();
 								// If the account ids match, then this entity is the local player's avatar
 								if *local_account.id() == *pending_user.id() {
@@ -413,9 +416,13 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 			Request::AuthTokenForClient(encrypted_bytes, server_public_key) => {
 				profiling::scope!("received-auth-token");
 				log::info!(target: LOG, "Received auth token from server");
+				
 				// Technically we will have "connected" by the end of this request,
 				// but not really connected until the server validates the token.
-				let reencrypted_bytes = if let Some(account::Account { key, .. }) =
+				return Err(Error::NoActiveAccount)?;
+				let reencrypted_bytes = Vec::new();
+				/*
+				if let Some(account::Account { key, .. }) =
 					account::ClientRegistry::read().unwrap().active_account()
 				{
 					let server_key = account::Key::from_string(&server_public_key)?;
@@ -428,6 +435,7 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 				} else {
 					return Err(Error::NoActiveAccount)?;
 				};
+				*/
 
 				data.0 = Request::AuthTokenForServer(reencrypted_bytes);
 				Network::send_packets(
@@ -442,10 +450,10 @@ impl PacketProcessor<Handshake> for ClientProcessor {
 			Request::ClientAuthenticated(account_id) => {
 				let profiling_tag = format!("{}", account_id);
 				profiling::scope!("client-authenticated", profiling_tag.as_str());
-				let authenticated_self = account::ClientRegistry::read()
+				let authenticated_self = crate::client::account::Manager::read()
 					.unwrap()
 					.active_account()
-					.map(|account| account.meta.id == *account_id)
+					.map(|account| account.id() == *account_id)
 					.unwrap_or(false);
 				log::debug!(
 					target: LOG,

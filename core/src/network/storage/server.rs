@@ -1,9 +1,15 @@
 use crate::{
-	account::{self, key},
+	account,
+	common::account::key,
 	entity::{self, ArcLockEntityWorld},
+	server::user::User,
 	server::world::Database,
 };
-use engine::{network::endpoint, utility::Result, Engine, EngineSystem};
+use engine::{
+	network::endpoint,
+	utility::{Context, Result},
+	Engine, EngineSystem,
+};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -17,10 +23,15 @@ pub mod user;
 pub type ArcLockServer = Arc<RwLock<Server>>;
 pub struct Server {
 	root_dir: PathBuf,
+
+	// OLD
 	auth_key: account::Key,
+	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
+
+	// NEW
 	certificate: key::Certificate,
 	private_key: key::PrivateKey,
-	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
+	users: HashMap<account::Id, Arc<RwLock<User>>>,
 
 	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
@@ -35,30 +46,42 @@ impl Server {
 		savegame_path.push(save_name);
 
 		if !savegame_path.exists() {
-			Self::create(&savegame_path)?;
+			Self::create(&savegame_path).context("generating server data")?;
 		}
 		log::info!(target: LOG, "Loading data");
-		let certificate = key::Certificate::load(&savegame_path)?;
-		let private_key = key::PrivateKey::load(&savegame_path)?;
+		let certificate =
+			key::Certificate::load(&savegame_path).context("loading server certificate")?;
+		let private_key =
+			key::PrivateKey::load(&savegame_path).context("loading server private key")?;
 		Ok(Self {
 			root_dir: savegame_path.to_owned(),
-			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))?,
+
+			// OLD
+			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))
+				.context("loading old server auth key")?,
+			saved_users: HashMap::new(),
+			// NEW
 			certificate,
 			private_key,
-			saved_users: Self::load_saved_users(&Self::players_dir_path(savegame_path.to_owned()))?,
+			users: Self::load_users(&Self::players_dir_path(savegame_path.to_owned()))
+				.context("loading users")?,
+
 			database: None,
 			systems: vec![],
 		})
 	}
 
-	fn create(savegame_path: &Path) -> Result<()> {
+	fn create(root: &Path) -> Result<()> {
 		use crate::common::utility::DataFile;
 		log::info!(target: LOG, "Creating data");
-		std::fs::create_dir_all(savegame_path)?;
-		account::Key::new().save(&Self::auth_key_path(savegame_path.to_owned()))?;
-		let (certificate, private_key) = key::new()?;
-		certificate.save(&savegame_path)?;
-		private_key.save(&savegame_path)?;
+		std::fs::create_dir_all(root)?;
+
+		account::Key::new().save(&Self::auth_key_path(root.to_owned()))?;
+
+		let (_, certificate, private_key) = key::create_pem()?;
+		std::fs::write(&key::Certificate::make_path(&root), certificate)?;
+		std::fs::write(&key::PrivateKey::make_path(&root), private_key)?;
+
 		Ok(())
 	}
 
@@ -84,18 +107,16 @@ impl Server {
 		self.root_dir.file_name().unwrap().to_str().unwrap()
 	}
 
-	fn load_saved_users(
-		path: &Path,
-	) -> Result<HashMap<account::Id, Arc<RwLock<user::saved::User>>>> {
+	fn load_users(path: &Path) -> Result<HashMap<account::Id, Arc<RwLock<User>>>> {
 		std::fs::create_dir_all(path)?;
 		let mut users = HashMap::new();
 		for entry in std::fs::read_dir(path)? {
 			let user_path = entry?.path();
 			if user_path.is_dir() {
-				match user::saved::User::load(&user_path) {
+				match User::load(&user_path) {
 					Ok(user) => {
-						log::info!(target: LOG, "Loaded user {}", user.id());
-						users.insert(user.id().clone(), Arc::new(RwLock::new(user)));
+						log::info!(target: LOG, "Loaded user {}", user.account().id());
+						users.insert(user.account().id().clone(), Arc::new(RwLock::new(user)));
 					}
 					Err(err) => {
 						log::warn!(
@@ -111,7 +132,7 @@ impl Server {
 		Ok(users)
 	}
 
-	pub fn add_user(&mut self, user: user::saved::User) {
+	pub fn add_saved_user(&mut self, user: user::saved::User) {
 		let id = user.id().clone();
 		let arc_user = Arc::new(RwLock::new(user));
 		let thread_user = arc_user.clone();
@@ -124,8 +145,20 @@ impl Server {
 		self.saved_users.insert(id, arc_user);
 	}
 
-	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {
+	pub fn find_saved_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {
 		self.saved_users.get(id)
+	}
+
+	pub fn add_user(&mut self, id: account::Id, user: Arc<RwLock<User>>) {
+		self.users.insert(id, user.clone());
+		engine::task::spawn(LOG.to_string(), async move {
+			user.read().unwrap().save()?;
+			Ok(())
+		});
+	}
+
+	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<User>>> {
+		self.users.get(id)
 	}
 
 	fn world_path(mut savegame_path: PathBuf) -> PathBuf {
@@ -147,16 +180,16 @@ impl Server {
 		T: EngineSystem + 'static + Send + Sync,
 	{
 		let system = Arc::new(RwLock::new(system));
-		Engine::get()
-			.write()
-			.unwrap()
-			.add_weak_system(Arc::downgrade(&system));
+		{
+			let mut engine = Engine::get().write().unwrap();
+			engine.add_weak_system(Arc::downgrade(&system));
+		}
 		self.systems.push(system);
 	}
 
 	pub fn create_config(&self) -> Result<endpoint::ServerConfig> {
-		let certificate = self.certificate.serialized()?;
-		let private_key = self.private_key.serialized()?;
+		let certificate: rustls::Certificate = self.certificate.clone().into();
+		let private_key: rustls::PrivateKey = self.private_key.clone().into();
 
 		let core_config = rustls::ServerConfig::builder()
 			.with_safe_defaults()

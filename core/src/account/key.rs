@@ -45,6 +45,11 @@ impl DataFile for Certificate {
 }
 
 impl Certificate {
+	pub fn fingerprint(&self) -> String {
+		let certificate = self.serialized().unwrap();
+		engine::network::socknet::utility::fingerprint(&certificate)
+	}
+
 	pub fn serialized(&self) -> Result<rustls::Certificate> {
 		let der_bytes = parse_pem(self.0.clone()).ok_or(InvalidPEM)?;
 		Ok(rustls::Certificate(der_bytes))
