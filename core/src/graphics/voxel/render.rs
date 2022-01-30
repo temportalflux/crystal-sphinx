@@ -54,7 +54,7 @@ impl RenderVoxel {
 			*,
 		};
 
-		let callback_render_chain = render_chain.clone();
+		let callback_render_chain = Arc::downgrade(&render_chain);
 		let callback_storage = storage.clone();
 		let callback_model_cache = model_cache;
 		let callback_camera = Arc::downgrade(&camera);
@@ -65,7 +65,8 @@ impl RenderVoxel {
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
-				let mut render_chain = callback_render_chain.write().unwrap();
+				log::trace!(target: ID, "Received Enter(InGame) transition");
+				let render_chain = callback_render_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
 
 				let chunk_cache = match callback_storage.upgrade() {
@@ -76,14 +77,20 @@ impl RenderVoxel {
 								let client = arc_client.read().unwrap();
 								client.chunk_cache().clone()
 							}
-							None => return None,
+							None => {
+								log::error!(target: ID, "Failed to find client storage");
+								return None;
+							}
 						}
 					}
-					None => return None,
+					None => {
+						log::error!(target: ID, "Failed to find storage");
+						return None;
+					}
 				};
 
 				match Self::create(
-					&mut render_chain,
+					render_chain,
 					arc_camera,
 					&callback_model_cache,
 					chunk_cache,
@@ -99,22 +106,34 @@ impl RenderVoxel {
 	}
 
 	fn create(
-		render_chain: &mut RenderChain,
+		render_chain: Arc<RwLock<RenderChain>>,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: &Arc<model::Cache>,
 		chunk_cache: cache::ArcLock,
 		gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<ArcLockRenderVoxel> {
+		log::info!(target: ID, "Initializing");
+		let render_chunks = {
+			let render_chain = render_chain.read().unwrap();
+			Self::new(
+				&render_chain,
+				camera,
+				model_cache.clone(),
+				chunk_cache,
+				gpu_signals,
+			)?
+			.arclocked()
+		};
+
 		let subpass_id = Self::subpass_id();
-		let render_chunks = Self::new(
-			&render_chain,
-			camera,
-			model_cache.clone(),
-			chunk_cache,
-			gpu_signals,
-		)?
-		.arclocked();
-		render_chain.add_render_chain_element(Some(subpass_id.as_string()), &render_chunks)?;
+		let element = render_chunks.clone();
+		engine::task::spawn(ID.to_owned(), async move {
+			log::trace!(target: ID, "Adding to render chain");
+			let mut render_chain = render_chain.write().unwrap();
+			render_chain.add_render_chain_element(Some(subpass_id.as_string()), &element)?;
+			Ok(())
+		});
+
 		Ok(render_chunks)
 	}
 
@@ -125,6 +144,8 @@ impl RenderVoxel {
 		chunk_cache: cache::ArcLock,
 		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<Self> {
+		log::trace!(target: ID, "Creating renderer");
+
 		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;

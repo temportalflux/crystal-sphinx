@@ -1,5 +1,9 @@
 use crate::common::network::ConnectionList;
-use engine::socknet::{connection::Connection, stream, utility::PinFutureResult};
+use engine::socknet::{
+	connection::{self, Connection},
+	stream,
+	utility::PinFutureResult,
+};
 use std::{
 	collections::HashSet,
 	net::SocketAddr,
@@ -32,6 +36,7 @@ where
 	}
 
 	pub fn ignore(mut self, connection: Arc<Connection>) -> Self {
+		use connection::Active;
 		self.ignored_addresses.insert(connection.remote_address());
 		self
 	}

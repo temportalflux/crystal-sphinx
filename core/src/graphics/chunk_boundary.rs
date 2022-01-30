@@ -54,6 +54,7 @@ enum Type {
 }
 impl BoundaryControl {
 	fn create(kind: Type, weak_action: input::action::WeakLockState) -> Arc<RwLock<Self>> {
+		log::trace!(target: ID, "Creating action listener");
 		let control = Arc::new(RwLock::new(Self { kind, weak_action }));
 		if let Ok(mut engine) = Engine::get().write() {
 			engine.add_weak_system(Arc::downgrade(&control));
@@ -231,7 +232,7 @@ impl Render {
 			*,
 		};
 
-		let callback_render_chain = render_chain.clone();
+		let callback_render_chain = Arc::downgrade(&render_chain);
 		let callback_camera = Arc::downgrade(&camera);
 		let callback_action =
 			input::User::get_action_in(&arc_user, crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES)
@@ -242,9 +243,10 @@ impl Render {
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
-				let mut render_chain = callback_render_chain.write().unwrap();
+				log::trace!(target: ID, "Received Enter(InGame) transition");
+				let arc_render_chain = callback_render_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
-				match Self::create(&mut render_chain, arc_camera, callback_action.clone()) {
+				match Self::create(arc_render_chain, arc_camera, callback_action.clone()) {
 					Ok(arclocked) => Some(arclocked),
 					Err(err) => {
 						log::error!(target: ID, "{}", err);
@@ -255,13 +257,25 @@ impl Render {
 	}
 
 	fn create(
-		render_chain: &mut RenderChain,
+		render_chain: Arc<RwLock<RenderChain>>,
 		camera: Arc<RwLock<camera::Camera>>,
 		weak_action: input::action::WeakLockState,
 	) -> Result<ArcLockRender> {
+		log::info!(target: ID, "Initializing");
+		let render_chunks = {
+			let render_chain = render_chain.read().unwrap();
+			Self::new(&render_chain, camera, weak_action)?.arclocked()
+		};
+
 		let subpass_id = Self::subpass_id();
-		let render_chunks = Self::new(&render_chain, camera, weak_action)?.arclocked();
-		render_chain.add_render_chain_element(Some(subpass_id.as_string()), &render_chunks)?;
+		let element = render_chunks.clone();
+		engine::task::spawn(ID.to_owned(), async move {
+			log::trace!(target: ID, "Adding to render chain");
+			let mut render_chain = render_chain.write().unwrap();
+			render_chain.add_render_chain_element(Some(subpass_id.as_string()), &element)?;
+			Ok(())
+		});
+
 		Ok(render_chunks)
 	}
 
@@ -270,6 +284,8 @@ impl Render {
 		camera: Arc<RwLock<camera::Camera>>,
 		weak_action: input::action::WeakLockState,
 	) -> Result<Self> {
+		log::trace!(target: ID, "Creating renderer");
+
 		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
 		drawable.add_shader(&CrystalSphinx::get_asset_id(
@@ -297,6 +313,8 @@ impl Render {
 			vertices.append(&mut kind_vertices);
 			indices.append(&mut kind_indices);
 		}
+
+		log::trace!(target: ID, "Creating buffers");
 
 		let vertex_buffer = buffer::Buffer::create_gpu(
 			Some(format!("ChunkBoundary.VertexBuffer")),
@@ -339,6 +357,8 @@ impl Render {
 
 		let recorded_kind = Type::None;
 		let control = BoundaryControl::create(recorded_kind, weak_action);
+
+		log::trace!(target: ID, "Finalizing construction");
 		Ok(Self {
 			drawable,
 			control,

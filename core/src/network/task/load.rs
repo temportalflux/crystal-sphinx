@@ -1,12 +1,12 @@
 use super::Instruction;
 use crate::{
 	app::{self, state::ArcLockMachine},
-	common::network::ConnectionList,
+	common::network::{mode, ConnectionList},
 	entity::{self, ArcLockEntityWorld},
 	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage},
 };
 use engine::{
-	network::{self, endpoint::Endpoint, mode, Config, LocalData},
+	network::{self, endpoint::Endpoint, Config, LocalData},
 	utility::{Context, Result},
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -79,9 +79,11 @@ pub fn add_load_network_listener(
 					if instruction.mode.contains(mode::Kind::Client) {
 						use crate::common::network::Handshake;
 						use engine::network::stream::handler::Initiator;
-						let url = instruction.server_url.unwrap();
-						let connection =
-							endpoint.connect(url.parse()?, "server".to_owned()).await?;
+						let url = match instruction.mode == mode::Kind::Client {
+							true => instruction.server_url.unwrap().parse()?,
+							false => endpoint.address(),
+						};
+						let connection = endpoint.connect(url, "server".to_owned()).await?;
 						Handshake::open(&connection)?.await?.initiate();
 					}
 
@@ -99,6 +101,8 @@ fn load_network(
 	entity_world: &Weak<RwLock<entity::World>>,
 	instruction: &Instruction,
 ) -> Result<Arc<Endpoint>> {
+	mode::set(instruction.mode.clone());
+
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
 		let server = Server::load(&world_name).context("loading server")?;

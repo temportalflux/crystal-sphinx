@@ -205,12 +205,13 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
 		{
 			let thread_app_state = app_state.clone();
-			std::thread::spawn(move || {
-				std::thread::sleep(std::time::Duration::from_secs(3));
+			engine::task::spawn("temp".to_owned(), async move {
+				tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 				thread_app_state
 					.write()
 					.unwrap()
 					.transition_to(app::state::State::MainMenu, None);
+				Ok(())
 			});
 		}
 

@@ -1,5 +1,6 @@
 use crate::{
 	account,
+	common::network::mode,
 	entity::{self, component, ArcLockEntityWorld},
 	network::packet::MovePlayer,
 };
@@ -199,7 +200,7 @@ impl EngineSystem for PlayerController {
 				look_action.concat_into(*value, &mut (**orientation));
 			}
 
-			if network::Network::local_data().is_dedicated(network::mode::Kind::Client) {
+			if mode::get() == mode::Kind::Client {
 				const SIG_VEL_MAGNITUDE: f32 = 0.05;
 				const SIG_ORIENTATION_ANGLE_DIFF: f32 = 0.005;
 
@@ -212,6 +213,7 @@ impl EngineSystem for PlayerController {
 				}
 
 				if has_significantly_changed {
+					/* TODO: Reimplement with new networking
 					use network::{enums::*, packet::Packet, Network};
 					assert!(replicated.get_id_on_server().is_some());
 					let server_entity = *replicated.get_id_on_server().unwrap();
@@ -225,6 +227,7 @@ impl EngineSystem for PlayerController {
 								orientation: **orientation,
 							}),
 					);
+					*/
 				}
 			}
 		}

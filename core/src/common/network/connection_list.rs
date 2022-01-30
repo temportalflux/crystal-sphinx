@@ -1,5 +1,5 @@
 use engine::socknet::{
-	connection::{self, Connection},
+	connection::{self, Active, Connection},
 	utility::JoinHandleList,
 };
 use std::{
@@ -15,7 +15,7 @@ pub struct ConnectionList {
 }
 
 impl ConnectionList {
-	pub fn new(connection_receiver: connection::Receiver) -> Arc<RwLock<Self>> {
+	pub fn new(connection_receiver: connection::event::Receiver) -> Arc<RwLock<Self>> {
 		let handles = Arc::new(JoinHandleList::new());
 		let list = Arc::new(RwLock::new(Self {
 			connections: HashMap::new(),
@@ -25,7 +25,7 @@ impl ConnectionList {
 		let async_list = list.clone();
 		let target = "connection-list".to_owned();
 		handles.spawn(target.clone(), async move {
-			use connection::Event::*;
+			use connection::event::Event::*;
 			while let Ok(event) = connection_receiver.recv().await {
 				match event {
 					Created(connection) => {

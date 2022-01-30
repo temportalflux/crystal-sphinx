@@ -1,6 +1,9 @@
 use crate::common::account;
 use engine::{
-	network::socknet::{connection::Connection, stream},
+	network::socknet::{
+		connection::{self, Connection},
+		stream,
+	},
 	utility::Result,
 };
 use std::sync::Arc;
@@ -69,6 +72,7 @@ impl From<RecvContext> for RecvClientJoined {
 impl stream::handler::Receiver for RecvClientJoined {
 	type Builder = ClientJoined;
 	fn receive(mut self) {
+		use connection::Active;
 		use stream::Identifier;
 		let log = format!(
 			"{}[{}]",

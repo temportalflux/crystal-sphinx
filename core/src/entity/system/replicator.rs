@@ -101,8 +101,10 @@ impl EngineSystem for Replicator {
 
 		let entity_packets = self.replicate_entities(&arc_world, updated_connections);
 
+		/* TODO: Reimplement with new networking
 		let _ = engine::network::Network::send_all_packets(entity_packets);
 		let _ = engine::network::Network::send_all_packets(chunk_packets);
+		*/
 
 		// TODO: Replicate updates on net::BinarySerializable components
 		// - (net::BinarySerializable should have a flag to indicate that it is dirty)
@@ -175,6 +177,7 @@ impl Replicator {
 		}
 
 		let mut packets = Vec::with_capacity(2);
+		/*
 		{
 			profiling::scope!("send-packets");
 			packets.push(
@@ -196,6 +199,7 @@ impl Replicator {
 					.with_payloads(&updates[..]),
 			);
 		}
+		*/
 		packets
 	}
 
@@ -333,6 +337,7 @@ impl Replicator {
 
 		let mut packets = Vec::with_capacity(operations.keys().count());
 		for (address, operations) in operations.iter_all() {
+			/*
 			profiling::scope!("send-entity-packets", &format!("connection:{address}"));
 			let operations = operations
 				.iter()
@@ -352,6 +357,7 @@ impl Replicator {
 					.with_guarantee(Reliable + Unordered)
 					.with_payload(&replicate_entity::Packet { operations }),
 			);
+			*/
 		}
 		packets
 	}

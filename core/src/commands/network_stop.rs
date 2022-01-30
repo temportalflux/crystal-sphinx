@@ -1,6 +1,6 @@
 use super::Command;
 use crate::app;
-use engine::network::{mode, Network};
+use crate::common::network::mode;
 use std::sync::{Arc, RwLock};
 
 pub struct UnloadNetwork {
@@ -13,7 +13,7 @@ impl UnloadNetwork {
 	}
 
 	fn is_dedicated_client(&self) -> bool {
-		Network::local_data().is_dedicated(mode::Kind::Client)
+		mode::get() == mode::Kind::Client
 	}
 }
 
@@ -35,7 +35,6 @@ impl Command for UnloadNetwork {
 				.write()
 				.unwrap()
 				.transition_to(next_state, None);
-			let _ = engine::network::Network::stop();
 		}
 	}
 }

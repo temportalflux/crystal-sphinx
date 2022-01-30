@@ -3,7 +3,8 @@ use super::{
 	server::{ArcLockServer, Server},
 };
 use crate::{
-	app::state::ArcLockMachine, common::network::ConnectionList, entity::ArcLockEntityWorld,
+	app::state::ArcLockMachine, common::network::mode, common::network::ConnectionList,
+	entity::ArcLockEntityWorld,
 };
 use engine::{
 	network::endpoint::{Config, Endpoint},
@@ -32,6 +33,7 @@ impl Storage {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Disconnecting)),
 				move |_operation| {
+					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.client = None;
 						storage.endpoint = None;
@@ -47,6 +49,7 @@ impl Storage {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Unloading)),
 				move |_operation| {
+					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.server = None;
 						storage.endpoint = None;
