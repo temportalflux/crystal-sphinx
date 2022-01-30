@@ -4,6 +4,7 @@ use crate::{
 		account,
 		network::{Broadcast, CloseCode, ConnectionList, SendClientJoined},
 	},
+	entity,
 	network::storage::{server::ArcLockServer, Storage},
 };
 use engine::{
@@ -14,8 +15,9 @@ use std::sync::{Arc, RwLock, Weak};
 
 pub type Context = stream::Context<Builder, stream::kind::Bidirectional>;
 pub struct Builder {
-	storage: Weak<RwLock<Storage>>,
-	app_state: Weak<RwLock<app::state::Machine>>,
+	pub storage: Weak<RwLock<Storage>>,
+	pub app_state: Weak<RwLock<app::state::Machine>>,
+	pub entity_world: Weak<RwLock<entity::World>>,
 }
 impl stream::Identifier for Builder {
 	fn unique_id() -> &'static str {
@@ -33,8 +35,8 @@ impl stream::recv::Builder for Builder {
 pub struct Handshake {
 	context: Arc<Builder>,
 	connection: Arc<Connection>,
-	send: stream::kind::Send,
-	recv: stream::kind::Recv,
+	send: stream::kind::send::Ongoing,
+	recv: stream::kind::recv::Ongoing,
 }
 
 impl From<Context> for Handshake {
@@ -49,13 +51,6 @@ impl From<Context> for Handshake {
 }
 
 impl Handshake {
-	pub fn builder(
-		storage: Weak<RwLock<Storage>>,
-		app_state: Weak<RwLock<app::state::Machine>>,
-	) -> Builder {
-		Builder { storage, app_state }
-	}
-
 	fn log(&self, side: &str) -> String {
 		use stream::Identifier;
 		format!(
@@ -87,6 +82,14 @@ impl Handshake {
 		Ok(storage.connection_list().clone())
 	}
 
+	fn entity_world(&self) -> Result<Arc<RwLock<entity::World>>> {
+		Ok(self
+			.context
+			.entity_world
+			.upgrade()
+			.ok_or(Error::InvalidEntityWorld)?)
+	}
+
 	fn app_state(&self) -> Result<Arc<RwLock<app::state::Machine>>> {
 		Ok(self
 			.context
@@ -95,9 +98,6 @@ impl Handshake {
 			.ok_or(Error::InvalidAppState)?)
 	}
 }
-
-static PASSED_AUTH: u32 = 0;
-static FAILED_AUTH: u32 = 1;
 
 impl stream::handler::Initiator for Handshake {
 	type Builder = Builder;
@@ -178,13 +178,7 @@ impl Handshake {
 			.context("writing token")?;
 
 		// Step 4: Receive an approval byte if we've been authenticated.
-		let code = self
-			.send
-			.stopped()
-			.await
-			.context("waiting for end-of-stream")?;
-		assert!(code == PASSED_AUTH || code == FAILED_AUTH);
-		let authenticated = code == PASSED_AUTH;
+		let authenticated = self.recv.read::<bool>().await?;
 
 		// Streams are going to be stopped regardless.
 		// If we have failed auth, the connection will also be closed.
@@ -211,7 +205,7 @@ impl stream::handler::Receiver for Handshake {
 	fn receive(mut self) {
 		let log = self.log("server");
 		engine::task::spawn(log.clone(), async move {
-			use stream::kind::Write;
+			use stream::kind::{Recv, Send};
 			use utility::Context;
 			if let Err(error) = self
 				.process_server(&log)
@@ -219,7 +213,7 @@ impl stream::handler::Receiver for Handshake {
 				.context("Failed authentication")
 			{
 				log::error!(target: &log, "{:?}", error);
-				self.recv.stop(FAILED_AUTH).await?;
+				self.recv.stop().await?;
 				self.send.finish().await?;
 				self.connection
 					.close(CloseCode::FailedAuthentication as u32, &vec![0u8]);
@@ -232,7 +226,7 @@ impl stream::handler::Receiver for Handshake {
 impl Handshake {
 	async fn process_server(&mut self, log: &String) -> Result<()> {
 		use account::key::{Key, PublicKey};
-		use stream::kind::{Read, Write};
+		use stream::kind::{Read, Recv, Send, Write};
 		use utility::Context;
 		log::info!(target: &log, "Received handshake");
 
@@ -320,19 +314,19 @@ impl Handshake {
 			key.verify(&token, &signed_token).is_ok()
 		};
 
+		self.send.write(&verified).await?;
+
+		self.recv.stop().await?;
+		self.send.finish().await?;
+
 		if !verified {
 			log::info!(target: &log, "Failed authentication");
-			self.recv.stop(FAILED_AUTH).await?;
-			self.send.finish().await?;
-
 			self.connection
 				.close(CloseCode::FailedAuthentication as u32, &vec![]);
 			return Ok(());
 		}
 
 		log::info!(target: &log, "Passed authentication");
-		self.recv.stop(PASSED_AUTH).await?;
-		self.send.finish().await?;
 
 		if is_new {
 			let server = self.server().context("fetching server data")?;
@@ -343,13 +337,44 @@ impl Handshake {
 			server.add_user(account_id.clone(), arc_user);
 		}
 
-		// TODO: spawn the user entity in the world
+		{
+			use entity::archetype;
+			let arc_world = self.entity_world()?;
+			let mut world = arc_world.write().unwrap();
+			log::debug!(
+				target: &log,
+				"Initializing entity for new player({})",
+				account_id
+			);
+
+			// Build an entity for the player which is marked with
+			// the account id of the user and the ip address of the connection.
+			let mut builder = archetype::player::Server::new()
+				.with_user_id(account_id.clone())
+				.with_address(self.connection.remote_address())
+				.build();
+
+			// Integrated Client-Server needs to spawn client-only components
+			// if its the local player's entity.
+			/*
+			if local_data.is_client() {
+				let client_reg = crate::client::account::Manager::read().unwrap();
+				let local_account = client_reg.active_account().unwrap();
+				// If the account ids match, then this entity is the local player's avatar
+				if *local_account.id() == *account_id {
+					builder = archetype::player::Client::apply_to(builder);
+				}
+			}
+			*/
+
+			world.spawn(builder.build());
+		}
 
 		Broadcast::<SendClientJoined>::new(self.connection_list()?)
 			.with_on_established(move |client_joined: SendClientJoined| {
 				let account_id = account_id.clone();
 				Box::pin(async move {
-					client_joined.initiate(&account_id).await?;
+					client_joined.initiate(account_id).await?;
 					Ok(())
 				})
 			})
@@ -385,6 +410,8 @@ enum Error {
 	#[error("provided public key did not match previous login")]
 	InvalidPublicKey,
 
-	#[error("app_states is invalid")]
+	#[error("Entity World is invalid")]
+	InvalidEntityWorld,
+	#[error("Application state machine is invalid")]
 	InvalidAppState,
 }

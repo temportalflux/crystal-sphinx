@@ -19,13 +19,13 @@ impl stream::recv::Builder for ClientJoined {
 	type Receiver = RecvClientJoined;
 }
 
-pub type SendContext = stream::Context<ClientJoined, stream::kind::Send>;
+pub type SendContext = stream::Context<ClientJoined, stream::kind::send::Ongoing>;
 pub struct SendClientJoined {
 	#[allow(dead_code)]
 	context: Arc<ClientJoined>,
 	#[allow(dead_code)]
 	connection: Arc<Connection>,
-	send: stream::kind::Send,
+	send: stream::kind::send::Ongoing,
 }
 impl From<SendContext> for SendClientJoined {
 	fn from(context: SendContext) -> Self {
@@ -40,7 +40,7 @@ impl stream::handler::Initiator for SendClientJoined {
 	type Builder = ClientJoined;
 }
 impl SendClientJoined {
-	pub async fn initiate(mut self, account_id: &account::Id) -> Result<()> {
+	pub async fn initiate(mut self, account_id: account::Id) -> Result<()> {
 		use stream::{kind::Write, Identifier};
 		self.send
 			.write(&ClientJoined::unique_id().to_owned())
@@ -50,12 +50,12 @@ impl SendClientJoined {
 	}
 }
 
-pub type RecvContext = stream::Context<ClientJoined, stream::kind::Recv>;
+pub type RecvContext = stream::Context<ClientJoined, stream::kind::recv::Ongoing>;
 pub struct RecvClientJoined {
 	#[allow(dead_code)]
 	context: Arc<ClientJoined>,
 	connection: Arc<Connection>,
-	recv: stream::kind::Recv,
+	recv: stream::kind::recv::Ongoing,
 }
 impl From<RecvContext> for RecvClientJoined {
 	fn from(context: RecvContext) -> Self {

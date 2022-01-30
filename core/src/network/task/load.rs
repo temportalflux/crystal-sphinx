@@ -76,7 +76,7 @@ pub fn add_load_network_listener(
 					// initialization for entities on the server in the handshake and
 					// initialization for entities on the client in the replication packet,
 					// running both for Integrated Client-Server/Client-on-top-of-Server.
-					if instruction.mode == mode::Kind::Client {
+					if instruction.mode.contains(mode::Kind::Client) {
 						use crate::common::network::Handshake;
 						use engine::network::stream::handler::Initiator;
 						let url = instruction.server_url.unwrap();
@@ -121,10 +121,11 @@ fn load_network(
 				use crate::common::network::*;
 				use network::stream::Registry;
 				let mut registry = Registry::default();
-				registry.register(Handshake::builder(
-					Arc::downgrade(&storage),
-					Arc::downgrade(&app_state),
-				));
+				registry.register(handshake::Builder {
+					storage: Arc::downgrade(&storage),
+					app_state: Arc::downgrade(&app_state),
+					entity_world: entity_world.clone(),
+				});
 				registry.register(ClientJoined {});
 				registry
 			}),
