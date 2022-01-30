@@ -187,20 +187,10 @@ impl Server {
 		self.systems.push(system);
 	}
 
-	pub fn create_config(&self) -> Result<endpoint::ServerConfig> {
+	pub fn get_keys(&self) -> Result<(rustls::Certificate, rustls::PrivateKey)> {
 		let certificate: rustls::Certificate = self.certificate.clone().into();
 		let private_key: rustls::PrivateKey = self.private_key.clone().into();
-
-		let core_config = rustls::ServerConfig::builder()
-			.with_safe_defaults()
-			.with_client_cert_verifier(AllowAnyClient::new())
-			.with_single_cert(vec![certificate.clone()], private_key.clone())?;
-
-		Ok(endpoint::ServerConfig {
-			core: quinn::ServerConfig::with_crypto(Arc::new(core_config)),
-			certificate,
-			private_key,
-		})
+		Ok((certificate, private_key))
 	}
 
 	#[profiling::function]
@@ -217,10 +207,10 @@ impl Server {
 }
 
 // Implementation of `ClientCertVerifier` that verifies everything as trustworthy.
-struct AllowAnyClient;
+pub struct AllowAnyClient;
 
 impl AllowAnyClient {
-	fn new() -> Arc<Self> {
+	pub fn new() -> Arc<Self> {
 		Arc::new(Self)
 	}
 }

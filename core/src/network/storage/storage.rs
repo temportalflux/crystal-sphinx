@@ -1,6 +1,6 @@
 use super::{
-	client::ArcLockClient,
-	server::{ArcLockServer, Server},
+	client::{self, ArcLockClient},
+	server::{self, ArcLockServer, Server},
 };
 use crate::{
 	app::state::ArcLockMachine, common::network::mode, common::network::ConnectionList,
@@ -83,10 +83,39 @@ impl Storage {
 	}
 
 	pub fn create_config(&self) -> Result<Config> {
-		match (self.server.as_ref(), self.client.as_ref()) {
-			(None, Some(client)) => Ok(Config::Client(client.read().unwrap().create_config()?)),
-			(Some(server), _) => Ok(Config::Server(server.read().unwrap().create_config()?)),
+		use engine::network::socknet::endpoint;
+
+		// If this is a client (regardless of also being a server or not),
+		// use the clients certifications.
+		let (certificate, private_key) = match (self.client.as_ref(), self.server.as_ref()) {
+			(Some(client), _) => client.read().unwrap().get_keys()?,
+			(None, Some(server)) => server.read().unwrap().get_keys()?,
 			(None, None) => unimplemented!(),
+		};
+
+		// Integrated & Dedicated servers both use the ServerConfig route
+		if self.server.is_some() {
+			let crypto_config = rustls::ServerConfig::builder()
+				.with_safe_defaults()
+				.with_client_cert_verifier(server::AllowAnyClient::new())
+				.with_single_cert(vec![certificate.clone()], private_key.clone())?;
+			let quinn_config = quinn::ServerConfig::with_crypto(Arc::new(crypto_config));
+			Ok(Config::Server(endpoint::ServerConfig {
+				core: quinn_config,
+				certificate,
+				private_key,
+			}))
+		} else {
+			let crypto_config = rustls::ClientConfig::builder()
+				.with_safe_defaults()
+				.with_custom_certificate_verifier(client::SkipServerVerification::new())
+				.with_single_cert(vec![certificate.clone()], private_key.clone())?;
+			let quinn_config = quinn::ClientConfig::new(Arc::new(crypto_config));
+			Ok(Config::Client(endpoint::ClientConfig {
+				core: quinn_config,
+				certificate,
+				private_key,
+			}))
 		}
 	}
 

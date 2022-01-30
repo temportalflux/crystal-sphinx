@@ -2,7 +2,7 @@ use crate::{
 	app,
 	common::{
 		account,
-		network::{Broadcast, CloseCode, ConnectionList, SendClientJoined},
+		network::{mode, Broadcast, CloseCode, ConnectionList, SendClientJoined},
 	},
 	entity,
 	network::storage::{server::ArcLockServer, Storage},
@@ -233,9 +233,13 @@ impl Handshake {
 		use account::key::{Key, PublicKey};
 		use stream::kind::{Read, Recv, Send, Write};
 		use utility::Context;
-		log::info!(target: &log, "Received handshake");
 
 		let account_id = self.connection.fingerprint()?;
+		log::info!(
+			target: &log,
+			"Received handshake from account({})",
+			account_id
+		);
 
 		// Step 1: Receive the client's public key
 		// (which is derived from there private_key and is different from the certificate)
@@ -363,8 +367,7 @@ impl Handshake {
 
 			// Integrated Client-Server needs to spawn client-only components
 			// if its the local player's entity.
-			/*
-			if local_data.is_client() {
+			if mode::get().contains(mode::Kind::Client) {
 				let client_reg = crate::client::account::Manager::read().unwrap();
 				let local_account = client_reg.active_account().unwrap();
 				// If the account ids match, then this entity is the local player's avatar
@@ -372,7 +375,6 @@ impl Handshake {
 					builder = archetype::player::Client::apply_to(builder);
 				}
 			}
-			*/
 
 			world.spawn(builder.build());
 		}
@@ -386,8 +388,6 @@ impl Handshake {
 				})
 			})
 			.open();
-
-		// TODO: Add the user to the active cache
 
 		Ok(())
 	}

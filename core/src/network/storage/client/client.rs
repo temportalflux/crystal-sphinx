@@ -20,7 +20,7 @@ impl Client {
 		&self.chunk_cache
 	}
 
-	pub fn create_config(&self) -> Result<endpoint::ClientConfig> {
+	pub fn get_keys(&self) -> Result<(rustls::Certificate, rustls::PrivateKey)> {
 		let certificate: rustls::Certificate;
 		let private_key: rustls::PrivateKey;
 		{
@@ -34,24 +34,15 @@ impl Client {
 				key::Key::Public(_) => return Err(key::Error::InvalidPrivacyPublic)?,
 			}
 		}
-
-		let core_config = rustls::ClientConfig::builder()
-			.with_safe_defaults()
-			.with_custom_certificate_verifier(SkipServerVerification::new())
-			.with_single_cert(vec![certificate.clone()], private_key.clone())?;
-		Ok(endpoint::ClientConfig {
-			core: quinn::ClientConfig::new(Arc::new(core_config)),
-			certificate,
-			private_key,
-		})
+		Ok((certificate, private_key))
 	}
 }
 
 // Implementation of `ServerCertVerifier` that verifies everything as trustworthy.
-struct SkipServerVerification;
+pub struct SkipServerVerification;
 
 impl SkipServerVerification {
-	fn new() -> Arc<Self> {
+	pub fn new() -> Arc<Self> {
 		Arc::new(Self)
 	}
 }

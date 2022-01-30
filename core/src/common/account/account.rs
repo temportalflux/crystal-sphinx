@@ -37,6 +37,7 @@ impl Account {
 
 		let certificate = Certificate::load(&root)?;
 		let private_key = PrivateKey::load(&root)?;
+		assert_eq!(id, certificate.fingerprint());
 		let key = Key::Private(certificate, private_key);
 
 		Ok(Self {

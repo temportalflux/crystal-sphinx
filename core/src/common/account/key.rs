@@ -8,9 +8,10 @@ pub fn create_pem() -> Result<(String, String, String)> {
 	// Default algo: rcgen::PKCS_ECDSA_P256_SHA256
 	let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
 	let certificate = cert.serialize_pem()?;
+	let fingerprint = Certificate::from_pem(certificate.clone())?.fingerprint();
 	let private_key = cert.serialize_private_key_pem();
 	Ok((
-		Certificate(cert.serialize_der()?).fingerprint(),
+		fingerprint,
 		certificate,
 		private_key,
 	))
@@ -59,12 +60,16 @@ impl DataFile for Certificate {
 
 	fn load_from(file_path: &Path) -> Result<Self> {
 		let pem = std::fs::read_to_string(&file_path)?;
-		let bytes = parse_pem(pem).ok_or(Error::InvalidPEM)?;
-		Ok(Self(bytes))
+		Self::from_pem(pem)
 	}
 }
 
 impl Certificate {
+	pub fn from_pem(pem: String) -> Result<Self> {
+		let bytes = parse_pem(pem).ok_or(Error::InvalidPEM)?;
+		Ok(Self(bytes))
+	}
+
 	pub fn fingerprint(&self) -> String {
 		use engine::network::socknet::utility::fingerprint;
 		fingerprint(&self.clone().into())
