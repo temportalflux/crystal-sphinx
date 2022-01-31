@@ -93,7 +93,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 	let is_server = std::env::args().any(|arg| arg == "-server");
 	assert_ne!(is_client, is_server);
 
-	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+	let app_state = app::state::Machine::create(app::state::State::Launching, &mut engine);
 	let entity_world = entity::ArcLockEntityWorld::default();
 	entity::add_state_listener(&app_state, Arc::downgrade(&entity_world));
 

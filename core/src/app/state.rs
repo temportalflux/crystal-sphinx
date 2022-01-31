@@ -1,4 +1,4 @@
-use engine::utility::Result;
+use engine::{utility::Result, Engine, EngineSystem};
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock},
@@ -91,22 +91,26 @@ pub type ArcLockMachine = Arc<RwLock<Machine>>;
 pub struct Machine {
 	state: State,
 	callbacks: HashMap<OperationKey, Vec<FnOperation>>,
-	pending_transition: Option<State>,
 	next_transition: Option<(State, TransitionData)>,
 }
 
 impl Machine {
-	pub fn new(state: State) -> Self {
+	fn new(state: State) -> Self {
 		Self {
 			state,
 			callbacks: HashMap::new(),
-			pending_transition: None,
 			next_transition: None,
 		}
 	}
 
-	pub fn arclocked(self) -> Arc<RwLock<Self>> {
+	fn arclocked(self) -> Arc<RwLock<Self>> {
 		Arc::new(RwLock::new(self))
+	}
+
+	pub fn create(state: State, engine: &mut Engine) -> Arc<RwLock<Self>> {
+		let machine = Self::new(state).arclocked();
+		engine.add_weak_system(Arc::downgrade(&machine));
+		machine
 	}
 
 	pub fn get(&self) -> State {
@@ -119,18 +123,12 @@ impl Machine {
 
 	pub fn transition_to(&mut self, next_state: State, data: TransitionData) {
 		assert!(!self.has_next_transition());
-		if self.pending_transition.is_some() {
-			log::info!(target: "app-state", "Enqueuing next state {:?}", next_state);
-			self.next_transition = Some((next_state, data));
-		} else {
-			self.perform_transition((next_state, data));
-		}
+		log::info!(target: "app-state", "Enqueuing next state {:?}", next_state);
+		self.next_transition = Some((next_state, data));
 	}
 
 	fn perform_transition(&mut self, transition: (State, TransitionData)) {
-		assert!(self.pending_transition.is_none());
 		let (next_state, data) = transition;
-		self.pending_transition = Some(next_state);
 
 		let prev_state = self.state;
 		log::info!(target: "app-state", "Transition: {:?} -> {:?}", prev_state, next_state);
@@ -147,12 +145,6 @@ impl Machine {
 			next_state,
 			&data,
 		));
-
-		let _completed_transition = self.pending_transition.take();
-
-		if let Some(next_transition) = self.next_transition.take() {
-			self.perform_transition(next_transition);
-		}
 	}
 
 	pub fn add_callback<F>(&mut self, key: OperationKey, callback: F)
@@ -190,6 +182,14 @@ impl Machine {
 			.flatten();
 		for callback in relevant_callbacks {
 			callback(&operation);
+		}
+	}
+}
+
+impl EngineSystem for Machine {
+	fn update(&mut self, _delta_time: std::time::Duration, _has_focus: bool) {
+		if let Some(transition) = self.next_transition.take() {
+			self.perform_transition(transition);
 		}
 	}
 }
