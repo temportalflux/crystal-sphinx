@@ -2,14 +2,13 @@ use crate::{
 	app::{self, state},
 	common::network::{connection, mode},
 	entity::{self, ArcLockEntityWorld},
-	network::storage::{Storage, client::ArcLockClient, server::Server, ArcLockStorage},
+	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage, Storage},
 };
 use bus::BusReader;
 use engine::{
-	Engine,
-	EngineSystem,
 	network::{self, endpoint::Endpoint, Config, LocalData},
 	utility::{Context, Result},
+	Engine, EngineSystem,
 };
 use std::{
 	collections::HashSet,
@@ -73,7 +72,7 @@ impl OwnedByConnection {
 					None => {
 						log::error!(target: LOG, "Failed to find storage");
 						return None;
-					},
+					}
 				};
 
 				let arc_self = Arc::new(RwLock::new(Self { world, receiver }));
@@ -158,7 +157,12 @@ impl OwnedByConnection {
 		for (entity, address) in entities.into_iter() {
 			match world.despawn(entity) {
 				Ok(_) => {
-					log::trace!(target: LOG, "Successfully despawned entity({}) because its owner({}) disconnected.", entity.id(), address);
+					log::trace!(
+						target: LOG,
+						"Successfully despawned entity({}) because its owner({}) disconnected.",
+						entity.id(),
+						address
+					);
 				}
 				Err(err) => {
 					log::error!(
