@@ -1,7 +1,7 @@
 use super::Instruction;
 use crate::{
 	app::{self, state::ArcLockMachine},
-	common::network::{mode, ConnectionList},
+	common::network::{connection, mode},
 	entity::{self, ArcLockEntityWorld},
 	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage},
 };
@@ -144,7 +144,9 @@ fn load_network(
 	};
 
 	if let Ok(mut storage) = storage.write() {
-		storage.set_connection_list(ConnectionList::new(endpoint.connection_receiver().clone()));
+		storage.set_connection_list(connection::List::new(
+			endpoint.connection_receiver().clone(),
+		));
 		storage.start_loading(&entity_world.upgrade().unwrap());
 	}
 

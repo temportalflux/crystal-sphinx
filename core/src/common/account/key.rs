@@ -10,11 +10,7 @@ pub fn create_pem() -> Result<(String, String, String)> {
 	let certificate = cert.serialize_pem()?;
 	let fingerprint = Certificate::from_pem(certificate.clone())?.fingerprint();
 	let private_key = cert.serialize_private_key_pem();
-	Ok((
-		fingerprint,
-		certificate,
-		private_key,
-	))
+	Ok((fingerprint, certificate, private_key))
 }
 
 fn parse_pem(pem: String) -> Option<Vec<u8>> {

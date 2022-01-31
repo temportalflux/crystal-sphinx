@@ -95,8 +95,15 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 	let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
 	let entity_world = entity::ArcLockEntityWorld::default();
+	entity::add_state_listener(&app_state, Arc::downgrade(&entity_world));
+
 	let network_storage = network::storage::Storage::new(&app_state);
 	network::task::add_unloading_state_listener(&app_state);
+	entity::system::OwnedByConnection::add_state_listener(
+		&app_state,
+		Arc::downgrade(&network_storage),
+		Arc::downgrade(&entity_world),
+	);
 
 	// Both clients and servers run the physics simulation.
 	// The server will broadcast authoritative values (via components marked as `Replicatable`),

@@ -2,16 +2,13 @@ use crate::{
 	app,
 	common::{
 		account,
-		network::{mode, Broadcast, CloseCode, ConnectionList, SendClientJoined},
+		network::{connection, mode, Broadcast, CloseCode, SendClientJoined},
 	},
 	entity,
 	network::storage::{server::ArcLockServer, Storage},
 };
 use engine::{
-	network::socknet::{
-		connection::{self, Connection},
-		stream,
-	},
+	network::socknet::{self, connection::Connection, stream},
 	utility::{self, Result},
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -55,7 +52,7 @@ impl From<Context> for Handshake {
 
 impl Handshake {
 	fn log(&self, side: &str) -> String {
-		use connection::Active;
+		use socknet::connection::Active;
 		use stream::Identifier;
 		format!(
 			"{}/{}[{}]",
@@ -80,7 +77,7 @@ impl Handshake {
 		Ok(server.clone())
 	}
 
-	fn connection_list(&self) -> Result<Arc<RwLock<ConnectionList>>> {
+	fn connection_list(&self) -> Result<Arc<RwLock<connection::List>>> {
 		let arc = self.storage()?;
 		let storage = arc.read().map_err(|_| Error::FailedToReadStorage)?;
 		Ok(storage.connection_list().clone())
@@ -216,7 +213,7 @@ impl stream::handler::Receiver for Handshake {
 				.await
 				.context("Failed authentication")
 			{
-				use connection::Active;
+				use socknet::connection::Active;
 				log::error!(target: &log, "{:?}", error);
 				self.recv.stop().await?;
 				self.send.finish().await?;
@@ -329,7 +326,7 @@ impl Handshake {
 		self.send.finish().await?;
 
 		if !verified {
-			use connection::Active;
+			use socknet::connection::Active;
 			log::info!(target: &log, "Failed authentication");
 			self.connection
 				.close(CloseCode::FailedAuthentication as u32, &vec![]);
@@ -348,8 +345,8 @@ impl Handshake {
 		}
 
 		{
-			use connection::Active;
 			use entity::archetype;
+			use socknet::connection::Active;
 			let arc_world = self.entity_world()?;
 			let mut world = arc_world.write().unwrap();
 			log::debug!(

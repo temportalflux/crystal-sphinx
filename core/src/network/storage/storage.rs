@@ -3,7 +3,7 @@ use super::{
 	server::{self, ArcLockServer, Server},
 };
 use crate::{
-	app::state::ArcLockMachine, common::network::mode, common::network::ConnectionList,
+	app::state::ArcLockMachine, common::network::connection, common::network::mode,
 	entity::ArcLockEntityWorld,
 };
 use engine::{
@@ -18,7 +18,7 @@ pub struct Storage {
 	client: Option<ArcLockClient>,
 	server: Option<ArcLockServer>,
 	endpoint: Option<Arc<Endpoint>>,
-	connection_list: Option<Arc<RwLock<ConnectionList>>>,
+	connection_list: Option<Arc<RwLock<connection::List>>>,
 }
 
 impl Storage {
@@ -123,11 +123,11 @@ impl Storage {
 		self.endpoint = Some(endpoint);
 	}
 
-	pub fn set_connection_list(&mut self, list: Arc<RwLock<ConnectionList>>) {
+	pub fn set_connection_list(&mut self, list: Arc<RwLock<connection::List>>) {
 		self.connection_list = Some(list);
 	}
 
-	pub fn connection_list(&self) -> &Arc<RwLock<ConnectionList>> {
+	pub fn connection_list(&self) -> &Arc<RwLock<connection::List>> {
 		self.connection_list.as_ref().unwrap()
 	}
 

@@ -11,6 +11,8 @@ profile = []
 debug = []
 
 [dependencies]
+# [utility] for implementing single-producer-multi-receiver (broadcast) delegates
+bus = "2.2"
 chrono = { version = "0.4", features = ["serde"]}
 crossbeam-channel = "0.5"
 egui = "0.15"

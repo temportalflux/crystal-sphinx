@@ -1,9 +1,5 @@
-use crate::common::network::ConnectionList;
-use engine::socknet::{
-	connection::{self, Connection},
-	stream,
-	utility::PinFutureResult,
-};
+use crate::common::network::connection;
+use engine::socknet::{self, connection::Connection, stream, utility::PinFutureResult};
 use std::{
 	collections::HashSet,
 	net::SocketAddr,
@@ -11,7 +7,7 @@ use std::{
 };
 
 pub struct Broadcast<T> {
-	connection_list: Arc<RwLock<ConnectionList>>,
+	connection_list: Arc<RwLock<connection::List>>,
 	ignored_addresses: HashSet<SocketAddr>,
 	on_established: Option<Arc<dyn Fn(T) -> PinFutureResult<()> + 'static + Send + Sync>>,
 	_marker: std::marker::PhantomData<T>,
@@ -26,7 +22,7 @@ where
 		+ Send,
 	T::Builder: stream::send::Builder + Send + Sync + 'static,
 {
-	pub fn new(connection_list: Arc<RwLock<ConnectionList>>) -> Self {
+	pub fn new(connection_list: Arc<RwLock<connection::List>>) -> Self {
 		Self {
 			connection_list,
 			ignored_addresses: HashSet::new(),
@@ -36,7 +32,7 @@ where
 	}
 
 	pub fn ignore(mut self, connection: Arc<Connection>) -> Self {
-		use connection::Active;
+		use socknet::connection::Active;
 		self.ignored_addresses.insert(connection.remote_address());
 		self
 	}

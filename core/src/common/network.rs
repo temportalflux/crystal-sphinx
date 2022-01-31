@@ -6,8 +6,7 @@ pub use broadcast::*;
 mod close_code;
 pub use close_code::*;
 
-mod connection_list;
-pub use connection_list::*;
+pub mod connection;
 
 pub(crate) mod handshake;
 pub use handshake::Handshake;
