@@ -33,12 +33,15 @@ impl Storage {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Disconnecting)),
 				move |_operation| {
+					assert!(mode::get() == mode::Kind::Client);
 					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.client = None;
 						storage.endpoint = None;
 						storage.connection_list = None;
 					}
+					// TODO: When the endpoint is dropped/disconnected, clients need to move the to MainMenu state.
+					// The disconnected behavior is handled already, but dedicated clients arent moving back to their proper state.
 				},
 			);
 		}
@@ -49,9 +52,12 @@ impl Storage {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Unloading)),
 				move |_operation| {
+					assert!(mode::get().contains(mode::Kind::Server));
 					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {
 						storage.server = None;
+						// Clear out client if it was integrated
+						storage.client = None;
 						storage.endpoint = None;
 						storage.connection_list = None;
 					}
@@ -110,7 +116,13 @@ impl Storage {
 				.with_safe_defaults()
 				.with_custom_certificate_verifier(client::SkipServerVerification::new())
 				.with_single_cert(vec![certificate.clone()], private_key.clone())?;
-			let quinn_config = quinn::ClientConfig::new(Arc::new(crypto_config));
+
+			let mut transport_config = quinn::TransportConfig::default();
+			transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
+
+			let mut quinn_config = quinn::ClientConfig::new(Arc::new(crypto_config));
+			quinn_config.transport = Arc::new(transport_config);
+
 			Ok(Config::Client(endpoint::ClientConfig {
 				core: quinn_config,
 				certificate,
