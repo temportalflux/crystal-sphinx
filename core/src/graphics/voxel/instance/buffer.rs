@@ -12,6 +12,8 @@ use engine::{
 };
 use std::sync::{Arc, Mutex, Weak};
 
+static LOG: &'static str = "voxel-instance-buffer";
+
 /// Controls the instance buffer data for rendering voxels.
 /// Keeps track of what chunks and blocks are old and updates the instances accordingly.
 pub struct Buffer {
@@ -50,7 +52,7 @@ impl Buffer {
 		let max_rendered_instances = rendered_chunk_count * chunk_volume;
 		let instance_buffer_size = max_rendered_instances * std::mem::size_of::<Instance>();
 
-		log::debug!("Initializing voxel instance buffer: chunk_radius={} total_chunk_count={}, buffer_size={}(bytes)", render_radius, rendered_chunk_count, instance_buffer_size);
+		log::info!(target: LOG, "Initializing with chunk_radius={} total_chunk_count={} buffer_size={}(bytes)", render_radius, rendered_chunk_count, instance_buffer_size);
 
 		let local_integrated_buffer = Arc::new(Mutex::new(local::IntegratedBuffer::new(
 			max_rendered_instances,
@@ -73,7 +75,7 @@ impl Buffer {
 		chunk_cache: cache::WeakLock,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> Arc<()> {
-		static LOG: &'static str = "voxel-instance-buffer";
+		static LOG: &'static str = "_";
 		let handle = Arc::new(());
 		let weak_handle = Arc::downgrade(&handle);
 		utility::spawn_thread(LOG, move || -> Result<()> {

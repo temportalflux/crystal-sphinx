@@ -203,7 +203,7 @@ pub struct Render {
 	drawable: Drawable,
 
 	control: Arc<RwLock<BoundaryControl>>,
-	recorded_kind: Type,
+	recorded_kind: Vec<Type>,
 	type_settings: HashMap<Type, TypeSettings>,
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
@@ -355,14 +355,13 @@ impl Render {
 		let camera_uniform =
 			Uniform::new::<camera::UniformData, &str>("ChunkBoundary.Camera", &render_chain)?;
 
-		let recorded_kind = Type::None;
-		let control = BoundaryControl::create(recorded_kind, weak_action);
+		let control = BoundaryControl::create(Type::None, weak_action);
 
 		log::trace!(target: ID, "Finalizing construction");
 		Ok(Self {
 			drawable,
 			control,
-			recorded_kind,
+			recorded_kind: Vec::new(),
 			type_settings,
 			vertex_buffer,
 			index_buffer,
@@ -396,6 +395,9 @@ impl RenderChainElement for Render {
 
 		self.drawable.create_shaders(render_chain)?;
 		self.camera_uniform.write_descriptor_sets(render_chain);
+		
+		let control_kind = self.control.read().unwrap().kind;
+		self.recorded_kind = vec![control_kind; render_chain.frame_count()];
 
 		Ok(gpu_signals)
 	}
@@ -451,9 +453,9 @@ impl RenderChainElement for Render {
 		self.camera_uniform.write_data(frame, &data)?;
 
 		let control_kind = self.control.read().unwrap().kind;
-		let has_changed_kind = self.recorded_kind != control_kind;
+		let has_changed_kind = self.recorded_kind[frame] != control_kind;
 		if has_changed_kind {
-			self.recorded_kind = control_kind;
+			self.recorded_kind[frame] = control_kind;
 		}
 
 		Ok(has_changed_kind)
@@ -471,7 +473,7 @@ impl RenderChainElement for Render {
 			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
-			for kind in self.recorded_kind.rendered_kinds().into_iter() {
+			for kind in self.recorded_kind[frame].rendered_kinds().into_iter() {
 				if let Some(settings) = self.type_settings.get(&kind) {
 					buffer.draw(
 						settings.index_count,
