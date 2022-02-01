@@ -1,7 +1,8 @@
-use std::net::SocketAddr;
+use engine::network::socknet::connection::Connection;
+use std::{net::SocketAddr, sync::Weak};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub enum Event {
-	Created(SocketAddr),
+	Created(SocketAddr, Weak<Connection>, /*is_local*/ bool),
 	Dropped(SocketAddr),
 }

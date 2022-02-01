@@ -131,6 +131,7 @@ fn load_network(
 					entity_world: entity_world.clone(),
 				});
 				registry.register(ClientJoined {});
+				registry.register(replication::entity::Builder {});
 				registry
 			}),
 		};

@@ -3,7 +3,7 @@ use crate::{
 	common::account::key,
 	entity::{self, ArcLockEntityWorld},
 	server::user::User,
-	server::world::Database,
+	server::world::{chunk, Database},
 };
 use engine::{
 	network::endpoint,
@@ -167,15 +167,10 @@ impl Server {
 	}
 
 	pub fn initialize_systems(&mut self, entity_world: &ArcLockEntityWorld) {
-		let chunk_cache = {
-			let database = self.database.as_ref().unwrap().read().unwrap();
-			Arc::downgrade(database.chunk_cache())
-		};
-		self.add_system(entity::system::Replicator::new(chunk_cache, &entity_world));
 		self.add_system(entity::system::UserChunkTicketUpdater::new(&entity_world));
 	}
 
-	fn add_system<T>(&mut self, system: T)
+	pub fn add_system<T>(&mut self, system: T)
 	where
 		T: EngineSystem + 'static + Send + Sync,
 	{
@@ -203,6 +198,11 @@ impl Server {
 		assert!(origin_res.is_ok());
 
 		self.database = Some(arc_database);
+	}
+
+	pub fn chunk_cache(&self) -> chunk::cache::WeakLock {
+		let database = self.database.as_ref().unwrap().read().unwrap();
+		Arc::downgrade(database.chunk_cache())
 	}
 }
 

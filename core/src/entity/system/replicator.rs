@@ -1,45 +1,115 @@
 use crate::{
+	app::state,
+	common::network::connection,
 	entity::{
 		self,
 		component::{self, binary, network},
 		ArcLockEntityWorld,
 	},
+	network::storage::Storage,
 	server::world::chunk,
 };
+use bus::BusReader;
 use engine::{
-	math::nalgebra::Point3, network::packet::PacketBuilder, utility::Result, EngineSystem,
+	math::nalgebra::Point3,
+	network::{packet::PacketBuilder, socknet::connection::Connection},
+	utility::Result,
+	Engine, EngineSystem,
 };
 use multimap::MultiMap;
 use std::{
 	collections::{HashMap, HashSet},
+	net::SocketAddr,
 	sync::{Arc, RwLock, Weak},
 };
+
+static LOG: &'static str = "subsystem:replicator";
+
+mod stream_handle;
+use stream_handle::*;
 
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
 pub struct Replicator {
 	world: Weak<RwLock<entity::World>>,
 	chunk_cache: chunk::cache::WeakLock,
+	connection_recv: BusReader<connection::Event>,
+	connections: HashMap<SocketAddr, StreamHandle>,
+
 	// Mapping of Entity -> Address List to keep track of to what connections a given entity has been replicated to.
 	entities_replicated_to: MultiMap<hecs::Entity, std::net::SocketAddr>,
 }
 
 impl Replicator {
-	pub fn new(chunk_cache: chunk::cache::WeakLock, world: &ArcLockEntityWorld) -> Self {
-		Self {
-			chunk_cache,
-			world: Arc::downgrade(&world),
-			entities_replicated_to: MultiMap::new(),
-		}
-	}
+	pub fn add_state_listener(
+		app_state: &Arc<RwLock<state::Machine>>,
+		storage: Weak<RwLock<Storage>>,
+		world: Weak<RwLock<entity::World>>,
+	) {
+		use state::{
+			storage::{Event::*, Storage},
+			State::*,
+			Transition::*,
+			*,
+		};
 
-	pub fn arclocked(self) -> Arc<RwLock<Self>> {
-		Arc::new(RwLock::new(self))
+		let callback_storage = storage.clone();
+		let callback_world = world.clone();
+		Storage::<Arc<RwLock<Self>>>::default()
+			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
+			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
+			.create_callbacks(&app_state, move || {
+				use crate::common::network::mode;
+
+				// This system should only be active/present while
+				// in-game on the (integrated or dedicated) server.
+				if !mode::get().contains(mode::Kind::Server) {
+					return None;
+				}
+
+				log::info!(target: LOG, "Initializing");
+
+				let arc_storage = match callback_storage.upgrade() {
+					Some(arc_storage) => arc_storage,
+					None => {
+						log::error!(target: LOG, "Failed to find storage");
+						return None;
+					}
+				};
+				let (server, connection_recv) = {
+					let storage = arc_storage.read().unwrap();
+					let server = storage.server().as_ref().unwrap().clone();
+					let connection_recv = {
+						let arc_connection_list = storage.connection_list().clone();
+						let mut connection_list = arc_connection_list.write().unwrap();
+						connection_list.add_recv()
+					};
+					(server, connection_recv)
+				};
+
+				let chunk_cache = server.read().unwrap().chunk_cache();
+				let world = callback_world.clone();
+				let arc_self = Arc::new(RwLock::new(Self {
+					chunk_cache,
+					world,
+					connection_recv,
+					connections: HashMap::new(),
+					entities_replicated_to: MultiMap::new(),
+				}));
+
+				if let Ok(mut engine) = Engine::get().write() {
+					engine.add_weak_system(Arc::downgrade(&arc_self));
+				}
+
+				return Some(arc_self);
+			});
 	}
 }
 
 impl EngineSystem for Replicator {
 	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
-		profiling::scope!("subsystem:replicator");
+		profiling::scope!(LOG);
+
+		let new_connections = self.poll_connections();
 
 		type QueryBundle<'c> = hecs::PreparedQuery<(
 			&'c component::physics::linear::Position,
@@ -108,6 +178,52 @@ impl EngineSystem for Replicator {
 
 		// TODO: Replicate updates on net::BinarySerializable components
 		// - (net::BinarySerializable should have a flag to indicate that it is dirty)
+	}
+}
+
+impl Replicator {
+	fn poll_connections(&mut self) -> HashSet<SocketAddr> {
+		use connection::Event;
+		use std::sync::mpsc::TryRecvError;
+		let mut new_connections = HashSet::new();
+		'poll: loop {
+			match self.connection_recv.try_recv() {
+				Ok(Event::Created(address, connection, is_local)) => {
+					// We do not create a replication stream for "local" connections,
+					// where the defn of local in this context is the same application,
+					// aka an Integrated Server / Client-on-top-of-Server situation.
+					// Since a CotoS has a shared world between client and server,
+					// there is no point in wasting cycles pretending to replicate data.
+					if !is_local {
+						self.add_connection(address.clone(), connection);
+						new_connections.insert(address);
+					}
+				}
+				Ok(Event::Dropped(address)) => {
+					self.remove_connection(&address);
+				}
+				Err(TryRecvError::Empty | TryRecvError::Disconnected) => {
+					// NO-OP:
+					// If empty, there is nothing to do.
+					// If disconnected, then the appstate will transition
+					// soon and the replicator will be destroyed.
+					break 'poll;
+				}
+			}
+		}
+		new_connections
+	}
+
+	fn add_connection(&mut self, address: SocketAddr, connection: Weak<Connection>) {
+		let handle = StreamHandle::new(address.clone(), connection);
+		self.connections.insert(address, handle);
+	}
+
+	fn remove_connection(&mut self, address: &SocketAddr) {
+		// Dropping the stream handler will allow it to finalize any currently
+		// transmitting data until the client has fully acknowledged it.
+		// The stream will be dropped then, or when the connection is closed (whichever is sooner).
+		self.connections.remove(&address);
 	}
 }
 

@@ -104,6 +104,11 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		Arc::downgrade(&network_storage),
 		Arc::downgrade(&entity_world),
 	);
+	entity::system::Replicator::add_state_listener(
+		&app_state,
+		Arc::downgrade(&network_storage),
+		Arc::downgrade(&entity_world),
+	);
 
 	// Both clients and servers run the physics simulation.
 	// The server will broadcast authoritative values (via components marked as `Replicatable`),

@@ -29,7 +29,7 @@ impl List {
 		let async_list = list.clone();
 		let target = "connection-list".to_owned();
 		handles.spawn(target.clone(), async move {
-			use connection::event::Event::*;
+			use connection::{event::Event::*, Active};
 			while let Ok(event) = receiver.recv().await {
 				match event {
 					Created(connection) => {
@@ -40,11 +40,16 @@ impl List {
 							arc.remote_address(),
 							arc.fingerprint()?
 						);
+						let is_local = arc.is_local();
 
 						let mut list = async_list.write().unwrap();
-						list.insert(arc.remote_address(), connection);
+						list.insert(arc.remote_address(), connection.clone());
 
-						list.broadcast(super::Event::Created(arc.remote_address()));
+						list.broadcast(super::Event::Created(
+							arc.remote_address(),
+							connection,
+							is_local,
+						));
 					}
 					Dropped(address) => {
 						log::info!(target: &target, "disconnected from address({})", address);
