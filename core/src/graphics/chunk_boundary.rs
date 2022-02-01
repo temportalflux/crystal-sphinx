@@ -243,6 +243,7 @@ impl Render {
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
+				profiling::scope!("init-render", ID);
 				log::trace!(target: ID, "Received Enter(InGame) transition");
 				let arc_render_chain = callback_render_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();

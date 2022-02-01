@@ -75,12 +75,12 @@ impl Buffer {
 		chunk_cache: cache::WeakLock,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> Arc<()> {
-		static LOG: &'static str = "_";
 		let handle = Arc::new(());
 		let weak_handle = Arc::downgrade(&handle);
 		utility::spawn_thread(LOG, move || -> Result<()> {
 			use std::thread::sleep;
 			use std::time::Duration;
+			static LOG: &'static str = "_";
 			log::info!(target: LOG, "Starting thread");
 			let mut operations = Vec::new();
 			while weak_handle.strong_count() > 0 {

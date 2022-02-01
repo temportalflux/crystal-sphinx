@@ -86,6 +86,7 @@ impl AppStateViewport {
 				app_state.add_callback(
 					OperationKey(None, Some(Enter), Some(presentation.0)),
 					move |_operation| {
+						profiling::scope!("updating-ui-root");
 						if let Ok(mut viewport) = callback_viewport.write() {
 							viewport.set_root(ui_instantiator());
 						}

@@ -30,6 +30,7 @@ impl Storage {
 		// Add callback to clear the client storage if the client disconnects
 		{
 			let callback_storage = arclocked.clone();
+			let callback_app_state = Arc::downgrade(&app_state);
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Disconnecting)),
 				move |_operation| {
@@ -40,8 +41,20 @@ impl Storage {
 						storage.endpoint = None;
 						storage.connection_list = None;
 					}
-					// TODO: When the endpoint is dropped/disconnected, clients need to move the to MainMenu state.
-					// The disconnected behavior is handled already, but dedicated clients arent moving back to their proper state.
+					
+					let async_app_state = callback_app_state.clone();
+					engine::task::spawn("disconnecting".to_owned(), async move {
+						profiling::scope!("finalize-disconnect");
+						use crate::app::state::State::MainMenu;
+						let app_state = async_app_state.upgrade().unwrap();
+						// This will be blocked for some ms until after the transition is complete,
+						// because this callback is being performed via a mutable app_state.
+						if let Ok(mut app_state) = app_state.write() {
+							app_state.transition_to(MainMenu, None);
+						}
+						Ok(())
+					});
+
 				},
 			);
 		}
@@ -52,6 +65,7 @@ impl Storage {
 			app_state.write().unwrap().add_callback(
 				OperationKey(None, Some(Enter), Some(Unloading)),
 				move |_operation| {
+					profiling::scope!("unloading-network");
 					assert!(mode::get().contains(mode::Kind::Server));
 					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {

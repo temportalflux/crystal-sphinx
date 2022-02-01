@@ -123,11 +123,13 @@ impl Machine {
 
 	pub fn transition_to(&mut self, next_state: State, data: TransitionData) {
 		assert!(!self.has_next_transition());
+		profiling::scope!("transition_to", &format!("{:?}", next_state));
 		log::info!(target: "app-state", "Enqueuing next state {:?}", next_state);
 		self.next_transition = Some((next_state, data));
 	}
-
+	
 	fn perform_transition(&mut self, transition: (State, TransitionData)) {
+		profiling::scope!("perform_transition", &format!("{:?} -> {:?}", self.state, transition.0));
 		let (next_state, data) = transition;
 
 		let prev_state = self.state;
