@@ -68,13 +68,9 @@ impl super::network::Replicatable for OwnedByConnection {
 
 impl super::binary::Serializable for OwnedByConnection {
 	fn serialize(&self) -> Result<Vec<u8>> {
-		Ok(rmp_serde::to_vec(&self)?)
+		super::binary::serialize(&self)
 	}
-}
-
-impl std::convert::TryFrom<Vec<u8>> for OwnedByConnection {
-	type Error = rmp_serde::decode::Error;
-	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+	fn deserialize(bytes: Vec<u8>) -> Result<Self> {
 		super::binary::deserialize::<Self>(&bytes)
 	}
 }

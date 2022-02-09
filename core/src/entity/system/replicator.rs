@@ -1,6 +1,7 @@
 use crate::{
 	app::state,
 	common::network::connection,
+	common::utility::MultiSet,
 	entity::{
 		self,
 		component::{self, binary, network},
@@ -25,18 +26,21 @@ use std::{
 
 static LOG: &'static str = "subsystem:replicator";
 
-mod stream_handle;
-use stream_handle::*;
+mod handle;
+use handle::*;
+
+pub mod relevancy;
+
+mod instigator;
+use instigator::*;
 
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
 pub struct Replicator {
 	world: Weak<RwLock<entity::World>>,
 	chunk_cache: chunk::cache::WeakLock,
 	connection_recv: BusReader<connection::Event>,
-	connections: HashMap<SocketAddr, StreamHandle>,
-
-	// Mapping of Entity -> Address List to keep track of to what connections a given entity has been replicated to.
-	entities_replicated_to: MultiMap<hecs::Entity, std::net::SocketAddr>,
+	connection_handles: HashMap<SocketAddr, Handle>,
+	entities_relevant: MultiSet<hecs::Entity, SocketAddr>,
 }
 
 impl Replicator {
@@ -93,8 +97,8 @@ impl Replicator {
 					chunk_cache,
 					world,
 					connection_recv,
-					connections: HashMap::new(),
-					entities_replicated_to: MultiMap::new(),
+					connection_handles: HashMap::new(),
+					entities_relevant: MultiSet::default(),
 				}));
 
 				if let Ok(mut engine) = Engine::get().write() {
@@ -106,83 +110,300 @@ impl Replicator {
 	}
 }
 
+#[derive(Default)]
+struct OperationGroup {
+	socket_ops: MultiMap<SocketAddr, (EntityOperation, hecs::Entity)>,
+	entity_ops: MultiMap<hecs::Entity, (EntityOperation, SocketAddr)>,
+}
+impl OperationGroup {
+	fn insert(&mut self, operation: EntityOperation, address: SocketAddr, entity: hecs::Entity) {
+		self.socket_ops.insert(address, (operation, entity));
+		self.entity_ops.insert(entity, (operation, address));
+	}
+}
+
 impl EngineSystem for Replicator {
-	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
+	fn update(&mut self, _delta_time: std::time::Duration, _has_focus: bool) {
 		profiling::scope!(LOG);
-
-		let new_connections = self.poll_connections();
-
-		type QueryBundle<'c> = hecs::PreparedQuery<(
-			&'c component::physics::linear::Position,
-			&'c mut component::OwnedByConnection,
-			&'c mut component::chunk::Relevancy,
-		)>;
 
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
 			None => return,
 		};
 
-		let (updated_connections, chunk_packets) = {
-			// its possible for a connection to have multiple owned entities (in theory),
-			// so this needs to be a multimap where each address can have multiple chunk locations.
-			let mut connections = MultiMap::new();
-			let mut chunk_packets = Vec::with_capacity(10);
-			let mut world = arc_world.write().unwrap();
-			let mut query_bundle = QueryBundle::new();
-			for (entity, (position, owner, relevancy)) in query_bundle.query_mut(&mut world) {
-				// Get a list of all connections which have not been replicated to.
-				// This marks each as having been replicated (because it is garunteed to happen in this update).
-				let already_replicated = owner.has_been_replicated();
-				if !already_replicated {
-					connections.insert(
-						*owner.address(),
-						(None, *position.chunk(), relevancy.entity_radius()),
-					);
-					owner.mark_as_replicated();
-				}
+		// Look for any new network connections so their replication streams can be set up.
+		let _new_connections = self.poll_connections();
 
-				// Replicate relevant chunks to connections based on the position of owner entities.
-				{
-					// Chunk coordinate of where the entity is now
-					let current_chunk = *position.chunk();
-					// Chunk coordinate of the last replication
-					let previous_chunk = *relevancy.chunk();
-					// If the current chunk is unchanged and there are no
-					// chunks to replicate, then this can early out.
-					if current_chunk != previous_chunk || !relevancy.has_replicated_all() {
-						if already_replicated {
-							connections.insert(
-								*owner.address(),
-								(
-									Some(previous_chunk),
-									current_chunk,
-									relevancy.entity_radius(),
-								),
+		// Query the world for any updates to entities. This can include but is not limited to entities being:
+		// - spawned
+		// - data changed (e.g. moved position)
+		// - destroyed
+		let updates = EntityUpdates::new(&self.entities_relevant);
+		let updates = updates.query(&arc_world);
+		let updates = updates.collect_chunks(&self.connection_handles);
+
+		// Entity updates are turned into operations on a given set of connections.
+		// This can result in multiple of the same operation for different connections
+		// depending on what entities are relevant to which connections.
+		let operations =
+			updates.as_operations(&mut self.entities_relevant, &self.connection_handles);
+
+		for (address, (relevance, new_chunks)) in updates.into_items().into_iter() {
+			let mut handle = self.get_handle_mut(&address);
+			handle.set_entity_relevance(relevance.entity);
+			handle.set_chunk_relevance(relevance.chunk, new_chunks);
+		}
+
+		// Sends the operations to each connection's handle/input stream
+		self.send_entity_updates(&arc_world, operations);
+	}
+}
+
+#[derive(Default)]
+struct RelevanceByConnection(HashMap<SocketAddr, relevancy::PairedRelevance>);
+impl RelevanceByConnection {
+	fn get_or_insert_mut(&mut self, address: &SocketAddr) -> &mut relevancy::PairedRelevance {
+		if !self.0.contains_key(&address) {
+			self.0
+				.insert(address.clone(), relevancy::PairedRelevance::default());
+		}
+		self.0.get_mut(&address).unwrap()
+	}
+
+	fn into_inner(self) -> HashMap<SocketAddr, relevancy::PairedRelevance> {
+		self.0
+	}
+}
+
+struct GatherEntity<'c> {
+	entity: hecs::Entity,
+	components: GatherComponents<'c>,
+}
+
+use hecs::Query;
+#[derive(Query)]
+struct GatherComponents<'c> {
+	position: &'c mut component::physics::linear::Position,
+	owner: Option<&'c component::OwnedByConnection>,
+	relevancy: Option<&'c component::chunk::Relevancy>,
+	// The `Replicated` component here acts as a flag indicating what entities should get replicated to clients.
+	replicated: Option<&'c component::network::Replicated>,
+}
+
+impl<'c> GatherEntity<'c> {
+	fn query_mut(world: &'c mut hecs::World) -> impl std::iter::Iterator<Item = GatherEntity<'c>> {
+		world
+			.query_mut::<GatherComponents>()
+			.into_iter()
+			.map(|(entity, components)| Self { entity, components })
+	}
+
+	fn chunk(&self) -> Point3<i64> {
+		*self.components.position.chunk()
+	}
+
+	fn push_relevance(&self, relevance: &mut RelevanceByConnection) {
+		let owner = match self.components.owner {
+			Some(comp) => comp,
+			None => return,
+		};
+		let relevancy = match self.components.relevancy {
+			Some(comp) => comp,
+			None => return,
+		};
+
+		let relevance = relevance.get_or_insert_mut(owner.address());
+		relevance
+			.chunk
+			.push(relevancy::Area::new(self.chunk(), relevancy.radius()));
+		relevance.entity.push(relevancy::Area::new(
+			self.chunk(),
+			relevancy.entity_radius(),
+		));
+	}
+
+	fn is_entity_replicated(&self) -> bool {
+		self.components.replicated.is_some()
+	}
+
+	fn get_update(&mut self) -> Option<(Option<SocketAddr>, UpdatedEntity)> {
+		// If the entity is marked for replication and its position has changed
+		// (either it was never acknowledged or it has actually changed),
+		// then this will be Some(UpdatedEntity).
+		match UpdatedEntity::acknowledged(&self.entity, self.components.position) {
+			Some(update) => {
+				let address = self.components.owner.map(|owner| *owner.address());
+				Some((address, update))
+			}
+			None => None,
+		}
+	}
+}
+
+struct EntityUpdates {
+	relevance: RelevanceByConnection,
+	updates: MultiMap<Option<SocketAddr>, UpdatedEntity>,
+	destroyed: HashSet<hecs::Entity>,
+	new_chunks: HashMap<SocketAddr, HashSet<Point3<i64>>>,
+}
+
+impl EntityUpdates {
+	fn new(relevant_entities: &MultiSet<hecs::Entity, SocketAddr>) -> Self {
+		Self {
+			relevance: RelevanceByConnection::default(),
+			updates: MultiMap::new(),
+			destroyed: relevant_entities.keys().cloned().collect::<HashSet<_>>(),
+			new_chunks: HashMap::new(),
+		}
+	}
+
+	fn collect_chunks(mut self, connection_handles: &HashMap<SocketAddr, Handle>) -> Self {
+		for (handle_addr, handle) in connection_handles.iter() {
+			let prev_relevance = handle.chunk_relevance();
+			let next_relevance = match self.relevance.0.get(handle_addr) {
+				Some(relevance) => &relevance.chunk,
+				None => continue,
+			};
+			if *prev_relevance == *next_relevance {
+				continue;
+			}
+			let new_chunks = next_relevance.difference(&prev_relevance);
+			if !new_chunks.is_empty() {
+				self.new_chunks.insert(handle_addr.clone(), new_chunks);
+			}
+		}
+		self
+	}
+
+	fn query(mut self, arc_world: &Arc<RwLock<hecs::World>>) -> Self {
+		profiling::scope!("query-entity-updates");
+		let mut world = arc_world.write().unwrap();
+		for mut entity_query in GatherEntity::query_mut(&mut world) {
+			entity_query.push_relevance(&mut self.relevance);
+			if entity_query.is_entity_replicated() {
+				// Prune all entities from `destroyed_entities` that still exist,
+				// (leaving it only containing the entities which do not still exist).
+				self.destroyed.remove(&entity_query.entity);
+				if let Some((address, update)) = entity_query.get_update() {
+					self.updates.insert(address, update);
+				}
+			}
+		}
+		self
+	}
+
+	#[profiling::function]
+	fn as_operations(
+		&self,
+		relevant_entities: &mut MultiSet<hecs::Entity, SocketAddr>,
+		connection_handles: &HashMap<SocketAddr, Handle>,
+	) -> OperationGroup {
+		let mut operations = OperationGroup::default();
+		self.gather_destroyed_operations(relevant_entities, &mut operations);
+		self.gather_relevancy_diffs(&connection_handles, &mut operations);
+		operations
+	}
+
+	#[profiling::function]
+	fn gather_destroyed_operations(
+		&self,
+		relevant_entities: &mut MultiSet<hecs::Entity, SocketAddr>,
+		operations: &mut OperationGroup,
+	) {
+		for entity in self.destroyed.iter() {
+			if let Some(addresses) = relevant_entities.remove_key(&entity) {
+				for address in addresses.into_iter() {
+					operations.insert(EntityOperation::Destroyed, address, *entity);
+				}
+			}
+		}
+	}
+
+	fn gather_relevancy_diffs(
+		&self,
+		connection_handles: &HashMap<SocketAddr, Handle>,
+		operations: &mut OperationGroup,
+	) {
+		profiling::scope!(
+			"gather_relevancy_diffs",
+			&format!("connections={}", connection_handles.len())
+		);
+		for (_address, updated_entities) in self.updates.iter_all() {
+			let _address_id = match _address {
+				Some(addr) => addr.to_string(),
+				None => "server".to_string(),
+			};
+			for updated_entity in updated_entities.iter() {
+				profiling::scope!(
+					"scan-entity",
+					&format!(
+						"owner={} entity={}",
+						_address_id,
+						updated_entity.entity.id()
+					)
+				);
+				for (handle_addr, handle) in connection_handles.iter() {
+					let was_relevant = match updated_entity.old_chunk {
+						Some(old_chunk) => handle.entity_relevance().is_relevant(&old_chunk),
+						None => false,
+					};
+					let is_relevant = match self.relevance.0.get(handle_addr) {
+						Some(relevance) => relevance.entity.is_relevant(&updated_entity.new_chunk),
+						None => false,
+					};
+					match (was_relevant, is_relevant) {
+						// NO-OP: entity wasn't relevant and still isn't relevant
+						(false, false) => {}
+						// Is newly relevant with this set of updates
+						(false, true) => {
+							operations.insert(
+								EntityOperation::Relevant,
+								*handle_addr,
+								updated_entity.entity,
 							);
 						}
-						let mut packets =
-							self.replicate_chunks_to(entity, owner, current_chunk, relevancy);
-						chunk_packets.append(&mut packets);
+						// Is no longer relevant with this set of updates
+						(true, false) => {
+							operations.insert(
+								EntityOperation::Irrelevant,
+								*handle_addr,
+								updated_entity.entity,
+							);
+						}
+						// Is still relevant and addr needs entity updates
+						(true, true) => {
+							operations.insert(
+								EntityOperation::Update,
+								*handle_addr,
+								updated_entity.entity,
+							);
+						}
 					}
 				}
 			}
-			(connections, chunk_packets)
-		};
+		}
+	}
 
-		let entity_packets = self.replicate_entities(&arc_world, updated_connections);
-
-		/* TODO: Reimplement with new networking
-		let _ = engine::network::Network::send_all_packets(entity_packets);
-		let _ = engine::network::Network::send_all_packets(chunk_packets);
-		*/
-
-		// TODO: Replicate updates on net::BinarySerializable components
-		// - (net::BinarySerializable should have a flag to indicate that it is dirty)
+	fn into_items(
+		mut self,
+	) -> HashMap<SocketAddr, (relevancy::PairedRelevance, Option<HashSet<Point3<i64>>>)>
+	{
+		let relevance = self.relevance.into_inner();
+		let mut items = HashMap::with_capacity(relevance.len());
+		for (address, relevance) in relevance.into_iter() {
+			items.insert(address,
+				(
+					relevance,
+					self.new_chunks.remove(&address),
+				)
+			);
+		}
+		items
 	}
 }
 
 impl Replicator {
+	#[profiling::function]
 	fn poll_connections(&mut self) -> HashSet<SocketAddr> {
 		use connection::Event;
 		use std::sync::mpsc::TryRecvError;
@@ -196,7 +417,7 @@ impl Replicator {
 					// Since a CotoS has a shared world between client and server,
 					// there is no point in wasting cycles pretending to replicate data.
 					if !is_local {
-						self.add_connection(address.clone(), connection);
+						self.add_connection(address.clone(), &connection);
 						new_connections.insert(address);
 					}
 				}
@@ -215,22 +436,82 @@ impl Replicator {
 		new_connections
 	}
 
-	fn add_connection(&mut self, address: SocketAddr, connection: Weak<Connection>) {
-		let handle = StreamHandle::new(address.clone(), connection);
-		self.connections.insert(address, handle);
+	fn add_connection(&mut self, address: SocketAddr, connection: &Weak<Connection>) {
+		let handle = Handle::new(address.clone(), &connection);
+		self.connection_handles.insert(address, handle);
 	}
 
 	fn remove_connection(&mut self, address: &SocketAddr) {
 		// Dropping the stream handler will allow it to finalize any currently
 		// transmitting data until the client has fully acknowledged it.
 		// The stream will be dropped then, or when the connection is closed (whichever is sooner).
-		self.connections.remove(&address);
+		self.connection_handles.remove(&address);
+		self.entities_relevant.remove_value(&address);
 	}
-}
 
-enum EntityOperation {
-	Replicate(hecs::Entity),
-	Destroy(hecs::Entity),
+	fn get_handle_mut(&mut self, address: &SocketAddr) -> &mut Handle {
+		self.connection_handles.get_mut(&address).unwrap()
+	}
+
+	#[profiling::function]
+	fn send_entity_updates(&mut self, arc_world: &ArcLockEntityWorld, operations: OperationGroup) {
+		// Serialize entities which are being replicated for one or more connections
+		let entity_data = {
+			let world = arc_world.read().unwrap();
+			let entities = operations.entity_ops.keys().cloned().collect();
+			self.serialize_entities(&world, entities)
+		};
+		// Update relevancy cache
+		for (entity, operations) in operations.entity_ops.into_iter() {
+			for (operation, address) in operations.into_iter() {
+				match operation {
+					EntityOperation::Relevant => {
+						self.entities_relevant.insert(&entity, address);
+					}
+					// NO-OP: Entity has not changed relevancy
+					EntityOperation::Update => {}
+					EntityOperation::Irrelevant => {
+						self.entities_relevant.remove(&entity, &address);
+					}
+					// NO-OP, addresses for dropped are gathered by removing them from the `entities_relevant` map
+					EntityOperation::Destroyed => {}
+				}
+			}
+		}
+		// Send operations to relevant connections
+		for (address, operations) in operations.socket_ops.into_iter() {
+			if let Some(handle) = self.connection_handles.get(&address) {
+				handle.send_entity_operations(operations, &entity_data);
+			}
+		}
+	}
+
+	fn serialize_entities(
+		&self,
+		world: &entity::World,
+		entities: HashSet<hecs::Entity>,
+	) -> HashMap<hecs::Entity, binary::SerializedEntity> {
+		let count = entities.len();
+		profiling::scope!("serialize_entities", &format!("count={}", count));
+		let mut serialized_entities = HashMap::with_capacity(count);
+
+		let registry = component::Registry::read();
+		for entity in entities.into_iter() {
+			let entity_ref = world.entity(entity).unwrap();
+			assert!(entity_ref.has::<network::Replicated>());
+
+			match self.serialize_entity(&registry, entity_ref) {
+				Ok(serialized) => {
+					serialized_entities.insert(entity, serialized);
+				}
+				Err(err) => {
+					log::error!(target: "entity-replicator", "Encountered error while serializing entity: {}", err)
+				}
+			}
+		}
+
+		serialized_entities
+	}
 }
 
 impl Replicator {
@@ -325,165 +606,15 @@ impl Replicator {
 		origin_to_coord.dot(&origin_to_coord) <= (radius as i64).pow(2)
 	}
 
-	#[profiling::function]
-	fn replicate_entities(
-		&mut self,
-		arc_world: &ArcLockEntityWorld,
-		updated_connections: MultiMap<
-			std::net::SocketAddr,
-			(Option<Point3<i64>>, Point3<i64>, usize),
-		>,
-	) -> Vec<PacketBuilder> {
-		use crate::network::packet::replicate_entity;
-		use engine::network::{enums::*, packet::Packet};
-		type QueryBundle<'c> = hecs::PreparedQuery<(
-			&'c component::physics::linear::Position,
-			&'c component::network::Replicated,
-		)>;
-
-		let mut world = arc_world.write().unwrap();
-
-		// List of all entities that need to be serialized,
-		// because they are in at least 1 `EntityOperation::Replicate` in `operations`.
-		let mut additions = HashSet::new();
-		let mut removals = MultiMap::new();
-		// Map of address to the replication operations for adding/removing entities for that client.
-		let mut operations = MultiMap::new();
-		if !updated_connections.is_empty() {
-			profiling::scope!(
-				"gather-changes",
-				&format!("changed-connections:{}", updated_connections.len())
-			);
-			let mut query_bundle = QueryBundle::new();
-			for (entity, (position, _replicated)) in query_bundle.query_mut(&mut world) {
-				for (address, areas_of_effect) in updated_connections.iter_all() {
-					// true if the `entity` was relevant to this address for any of its "owned" areas
-					let mut was_relevant = false;
-					// true if the `entity` is relevant (still or newly) to this address for any of its "owned" areas
-					let mut is_relevant = false;
-					'owned_area_iter: for (prev_chunk, next_chunk, entity_radius) in
-						areas_of_effect.iter()
-					{
-						// once we determine that the entity was relevant to some area, we don't need to check for other areas
-						if !was_relevant {
-							if let Some(coord) = prev_chunk {
-								if Self::is_chunk_within_radius(
-									&coord,
-									position.chunk(),
-									*entity_radius,
-								) {
-									was_relevant = true;
-								}
-							}
-						}
-						// same here, once it becomes relevant, that cant be turned off by any other area
-						if !is_relevant {
-							is_relevant = Self::is_chunk_within_radius(
-								&next_chunk,
-								position.chunk(),
-								*entity_radius,
-							);
-						}
-						// if there are no more flags to update, we dont need to continue iterating over the areas
-						if was_relevant && is_relevant {
-							break 'owned_area_iter;
-						}
-					}
-					if was_relevant && !is_relevant {
-						operations.insert(*address, EntityOperation::Destroy(entity));
-						removals.insert(entity, *address);
-					} else if !was_relevant && is_relevant {
-						operations.insert(*address, EntityOperation::Replicate(entity));
-						additions.insert(entity);
-						// Record that the entity will be replicated to the client,
-						// so that if/when the entity is despawned, we can purge it from that client.
-						self.entities_replicated_to.insert(entity, *address);
-					}
-				}
-			}
-		}
-
-		if !removals.is_empty() {
-			// Remove addresses from the entity for which the entity is no longer relevant.
-			self.entities_replicated_to
-				.retain(|entity, address| match removals.get_vec(&entity) {
-					Some(addresses) => !addresses.contains(&address),
-					None => true,
-				});
-		}
-
-		let mut serialized_entities = HashMap::new();
-		if !additions.is_empty() {
-			profiling::scope!(
-				"serialize-relevant-entities",
-				&format!("{} entities", additions.len())
-			);
-			let registry = component::Registry::read();
-			for entity in additions.into_iter() {
-				profiling::scope!("serialize-entity", &format!("entity:{}", entity.id()));
-
-				let entity_ref = world.entity(entity).unwrap();
-				assert!(entity_ref.has::<network::Replicated>());
-				match self.serialize_entity(&registry, entity_ref) {
-					Ok(serialized) => {
-						serialized_entities.insert(entity, serialized);
-					}
-					Err(err) => {
-						log::error!(target: "entity-replicator", "Encountered error while serializing entity: {}", err)
-					}
-				}
-			}
-		}
-
-		// Purge any entities which have been despawned but were replicated to connections
-		if !self.entities_replicated_to.is_empty() {
-			let mut despawned_entities = Vec::new();
-			for (entity, addresses) in self.entities_replicated_to.iter_all() {
-				if !world.contains(*entity) {
-					despawned_entities.push(*entity);
-					for address in addresses.iter() {
-						operations.insert(*address, EntityOperation::Destroy(*entity));
-					}
-				}
-			}
-			if !despawned_entities.is_empty() {
-				self.entities_replicated_to
-					.retain(|entity, _| !despawned_entities.contains(entity));
-			}
-		}
-
-		let mut packets = Vec::with_capacity(operations.keys().count());
-		for (address, operations) in operations.iter_all() {
-			/*
-			profiling::scope!("send-entity-packets", &format!("connection:{address}"));
-			let operations = operations
-				.iter()
-				.map(|op| match op {
-					EntityOperation::Replicate(eid) => replicate_entity::Operation::Replicate(
-						serialized_entities.get(&eid).cloned().unwrap(),
-					),
-					EntityOperation::Destroy(eid) => replicate_entity::Operation::Destroy(*eid),
-				})
-				.collect();
-			packets.push(
-				Packet::builder()
-					.with_address(address)
-					.unwrap()
-					// Integrated Client-Server should not sent to itself
-					.ignore_local_address()
-					.with_guarantee(Reliable + Unordered)
-					.with_payload(&replicate_entity::Packet { operations }),
-			);
-			*/
-		}
-		packets
-	}
-
 	fn serialize_entity(
 		&self,
 		registry: &component::Registry,
 		entity_ref: hecs::EntityRef<'_>,
 	) -> Result<binary::SerializedEntity> {
+		profiling::scope!(
+			"serialize_entity",
+			&format!("entity={}", entity_ref.entity().id())
+		);
 		let mut serialized_components = Vec::new();
 		for type_id in entity_ref.component_types() {
 			if let Some(registered) = registry.find(&type_id) {

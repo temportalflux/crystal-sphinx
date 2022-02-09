@@ -7,8 +7,8 @@ use std::collections::HashSet;
 #[derive(Clone)]
 pub struct Relevancy {
 	/// The radius of chunks around the [`current chunk coordinate`](crate::entity::component::physics::linear::Position::chunk).
-	radius: usize,
-	entity_radius: usize,
+	radius: u64,
+	entity_radius: u64,
 	/// The origin chunk of the last replication.
 	/// Compared against the entity's [`current chunk coordinate`](crate::entity::component::physics::linear::Position::chunk)
 	/// to determine if chunks need to be replicated.
@@ -52,21 +52,21 @@ impl std::fmt::Display for Relevancy {
 }
 
 impl Relevancy {
-	pub fn with_radius(mut self, radius: usize) -> Self {
+	pub fn with_radius(mut self, radius: u64) -> Self {
 		self.radius = radius;
 		self
 	}
 
-	pub fn radius(&self) -> usize {
+	pub fn radius(&self) -> u64 {
 		self.radius
 	}
 
-	pub fn with_entity_radius(mut self, radius: usize) -> Self {
+	pub fn with_entity_radius(mut self, radius: u64) -> Self {
 		self.entity_radius = radius;
 		self
 	}
 
-	pub fn entity_radius(&self) -> usize {
+	pub fn entity_radius(&self) -> u64 {
 		self.entity_radius
 	}
 
@@ -92,7 +92,7 @@ impl Relevancy {
 
 	fn relevant_chunk_list(&self, origin: &Point3<i64>) -> HashSet<Point3<i64>> {
 		let diameter = 2 * self.radius + 1;
-		let mut coordinates = HashSet::with_capacity(diameter.pow(3));
+		let mut coordinates = HashSet::with_capacity(diameter.pow(3) as usize);
 		let diameter = diameter as i64;
 		let centering_offset = Vector3::new(self.radius, self.radius, self.radius).cast::<i64>();
 		for y in 0..diameter {

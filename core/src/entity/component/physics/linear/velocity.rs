@@ -68,14 +68,10 @@ impl network::Replicatable for Velocity {
 
 impl binary::Serializable for Velocity {
 	fn serialize(&self) -> Result<Vec<u8>> {
-		Ok(rmp_serde::to_vec(&self)?)
+		binary::serialize(&self)
 	}
-}
-
-impl std::convert::TryFrom<Vec<u8>> for Velocity {
-	type Error = Error;
-	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		Ok(binary::deserialize::<Self>(&bytes)?)
+	fn deserialize(bytes: Vec<u8>) -> Result<Self> {
+		binary::deserialize::<Self>(&bytes)
 	}
 }
 

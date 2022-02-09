@@ -1,4 +1,5 @@
 use crate::entity::component::Component;
+use engine::utility::Result;
 use std::{any::TypeId, collections::HashMap};
 
 pub struct Registration<T: Component> {
@@ -15,7 +16,13 @@ where
 				id: T::unique_id(),
 				display_name: T::display_name(),
 				extensions: HashMap::new(),
-				fn_has: Box::new(|entity_ref| -> bool { entity_ref.has::<T>() }),
+				fn_in_ref: Box::new(|entity_ref| -> bool { entity_ref.has::<T>() }),
+				fn_in_builder: Box::new(|builder| -> bool { builder.has::<T>() }),
+				fn_remove_from: Box::new(|world, entity| -> Result<()> {
+					// Removed component will be dropped
+					let _ = world.remove_one::<T>(entity)?;
+					Ok(())
+				}),
 			},
 			marker: Default::default(),
 		}
@@ -40,7 +47,9 @@ pub struct Registered {
 	id: &'static str,
 	display_name: &'static str,
 	extensions: HashMap<&'static str, Box<dyn std::any::Any>>,
-	fn_has: Box<dyn Fn(&hecs::EntityRef) -> bool>,
+	fn_in_ref: Box<dyn Fn(&hecs::EntityRef) -> bool>,
+	fn_in_builder: Box<dyn Fn(&hecs::EntityBuilder) -> bool>,
+	fn_remove_from: Box<dyn Fn(&mut hecs::World, hecs::Entity) -> Result<()>>,
 }
 impl Registered {
 	pub fn id(&self) -> &'static str {
@@ -52,7 +61,11 @@ impl Registered {
 	}
 
 	pub fn is_in_entity(&self, entity_ref: &hecs::EntityRef) -> bool {
-		(self.fn_has)(entity_ref)
+		(self.fn_in_ref)(entity_ref)
+	}
+
+	pub fn is_in_builder(&self, builder: &hecs::EntityBuilder) -> bool {
+		(self.fn_in_builder)(builder)
 	}
 
 	pub fn has_ext<T>(&self) -> bool
@@ -70,6 +83,18 @@ impl Registered {
 			.get(T::extension_id())
 			.map(|ext| ext.downcast_ref::<T>())
 			.flatten()
+	}
+
+	pub fn get_ext_ok<T>(&self) -> Result<&T, Error>
+	where
+		T: 'static + ExtensionRegistration,
+	{
+		self.get_ext::<T>()
+			.ok_or(Error::MissingExtension(T::extension_id(), self.id))
+	}
+
+	pub fn remove_from(&self, world: &mut hecs::World, entity: hecs::Entity) -> Result<()> {
+		(self.fn_remove_from)(world, entity)
 	}
 }
 
@@ -125,30 +150,20 @@ impl Registry {
 	pub fn find(&self, type_id: &TypeId) -> Option<&Registered> {
 		self.items.get(&type_id)
 	}
-}
 
-struct NoSuchId(String);
-impl std::error::Error for NoSuchId {}
-impl std::fmt::Debug for NoSuchId {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for NoSuchId {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "NoSuchId({})", self.0)
+	pub fn find_ok(&self, id: &str) -> Result<&Registered, Error> {
+		self.id_to_type
+			.get(id)
+			.map(|type_id| self.find(type_id))
+			.flatten()
+			.ok_or(Error::MissingRegistration(id.to_owned()))
 	}
 }
 
-struct NotRegisteredAsBinarySerializable(String);
-impl std::error::Error for NotRegisteredAsBinarySerializable {}
-impl std::fmt::Debug for NotRegisteredAsBinarySerializable {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for NotRegisteredAsBinarySerializable {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "NotRegisteredAsBinarySerializable({})", self.0)
-	}
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+	#[error("No component registration found for component-type({0}).")]
+	MissingRegistration(String),
+	#[error("No registration extension \"{0}\" found for component-type({1}).")]
+	MissingExtension(&'static str, &'static str),
 }

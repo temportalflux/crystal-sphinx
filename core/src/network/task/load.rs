@@ -131,7 +131,11 @@ fn load_network(
 					entity_world: entity_world.clone(),
 				});
 				registry.register(ClientJoined {});
-				registry.register(replication::entity::Builder {});
+				registry.register(replication::entity::Builder {
+					entity_world: entity_world.clone(),
+				});
+				registry.register(replication::world::relevancy::Builder {});
+				registry.register(replication::world::chunk::Builder {});
 				registry
 			}),
 		};

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
+	prev_chunk: Option<Point3<i64>>,
 	chunk: Point3<i64>,
 	offset: Point3<f32>,
 	has_changed: bool,
@@ -15,6 +16,7 @@ pub struct Position {
 impl Default for Position {
 	fn default() -> Self {
 		Self {
+			prev_chunk: None,
 			chunk: Point3::new(0, 0, 0),
 			offset: Point3::new(3.5, 0.0, 0.5),
 			has_changed: false,
@@ -61,6 +63,14 @@ impl std::fmt::Display for Position {
 }
 
 impl Position {
+	pub fn prev_chunk(&self) -> &Option<Point3<i64>> {
+		&self.prev_chunk
+	}
+
+	pub fn acknowledge_chunk(&mut self) {
+		self.prev_chunk = Some(self.chunk);
+	}
+
 	/// Returns the coordinate of the chunk the entity is in.
 	pub fn chunk(&self) -> &Point3<i64> {
 		&self.chunk
@@ -104,14 +114,10 @@ impl network::Replicatable for Position {
 
 impl binary::Serializable for Position {
 	fn serialize(&self) -> Result<Vec<u8>> {
-		Ok(rmp_serde::to_vec(&self)?)
+		binary::serialize(&self)
 	}
-}
-
-impl std::convert::TryFrom<Vec<u8>> for Position {
-	type Error = Error;
-	fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-		Ok(binary::deserialize::<Self>(&bytes)?)
+	fn deserialize(bytes: Vec<u8>) -> Result<Self> {
+		binary::deserialize::<Self>(&bytes)
 	}
 }
 

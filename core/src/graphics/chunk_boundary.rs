@@ -396,7 +396,7 @@ impl RenderChainElement for Render {
 
 		self.drawable.create_shaders(render_chain)?;
 		self.camera_uniform.write_descriptor_sets(render_chain);
-		
+
 		let control_kind = self.control.read().unwrap().kind;
 		self.recorded_kind = vec![control_kind; render_chain.frame_count()];
 

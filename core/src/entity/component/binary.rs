@@ -1,6 +1,7 @@
 use engine::utility::Result;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+
+use crate::entity::component::Registry;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SerializedEntity {
@@ -14,19 +15,58 @@ pub struct SerializedComponent {
 	pub(crate) data: Vec<u8>,
 }
 
-/// Trait implemented by components to provide functionality for serializing to and deserializing from binary data.
-pub trait Serializable: super::Component
-where
-	Self: TryFrom<Vec<u8>>,
-{
-	fn serialize(&self) -> Result<Vec<u8>>;
+impl SerializedEntity {
+	pub fn into_builder(self, registry: &Registry) -> Result<(hecs::Entity, hecs::EntityBuilder)> {
+		profiling::scope!(
+			"deserialize-entity",
+			&format!("entity={}", self.entity.id())
+		);
+		let mut builder = hecs::EntityBuilder::default();
+		for comp_data in self.components.into_iter() {
+			profiling::scope!(
+				"deserialize-component",
+				&format!("entity={} component={}", self.entity.id(), comp_data.id)
+			);
+			let registered = registry.find_ok(&comp_data.id)?;
+			let binary_registration = registered.get_ext_ok::<Registration>()?;
+			binary_registration.deserialize(comp_data.data, &mut builder)?;
+		}
+		Ok((self.entity, builder))
+	}
 }
 
-pub fn deserialize<'a, T>(bytes: &'a Vec<u8>) -> Result<T, rmp_serde::decode::Error>
+#[derive(thiserror::Error, Debug)]
+enum SerializationError {
+	#[error("Failed to deserialize, no registration found for component-type({0}).")]
+	NoRegistration(String),
+	#[error(
+		"Failed to deserialize, no binary registration extension found for component-type({0})."
+	)]
+	NoBinaryExtension(String),
+}
+
+/// Trait implemented by components to provide functionality for serializing to and deserializing from binary data.
+pub trait Serializable: super::Component {
+	fn serialize(&self) -> Result<Vec<u8>>
+	where
+		Self: Sized;
+	fn deserialize(bytes: Vec<u8>) -> Result<Self>
+	where
+		Self: Sized;
+}
+
+pub fn serialize<T>(comp: &T) -> Result<Vec<u8>>
+where
+	T: serde::Serialize + Sized,
+{
+	Ok(bincode::serialize(&comp)?)
+}
+
+pub fn deserialize<'a, T>(bytes: &'a Vec<u8>) -> Result<T>
 where
 	T: serde::Deserialize<'a>,
 {
-	rmp_serde::from_read_ref::<'a, Vec<u8>, T>(&bytes)
+	Ok(bincode::deserialize(&bytes)?)
 }
 
 pub struct Registration {
@@ -67,7 +107,7 @@ impl Registration {
 				|bytes: Vec<u8>, builder: &mut hecs::EntityBuilder| -> Result<()> {
 					profiling::scope!("deserialize-component", T::unique_id());
 					let comp =
-						T::try_from(bytes).map_err(|_| FailedToDeserialize(T::unique_id()))?;
+						T::deserialize(bytes).map_err(|_| FailedToDeserialize(T::unique_id()))?;
 					builder.add(comp);
 					Ok(())
 				},

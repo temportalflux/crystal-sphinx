@@ -52,7 +52,13 @@ impl Buffer {
 		let max_rendered_instances = rendered_chunk_count * chunk_volume;
 		let instance_buffer_size = max_rendered_instances * std::mem::size_of::<Instance>();
 
-		log::info!(target: LOG, "Initializing with chunk_radius={} total_chunk_count={} buffer_size={}(bytes)", render_radius, rendered_chunk_count, instance_buffer_size);
+		log::info!(
+			target: LOG,
+			"Initializing with chunk_radius={} total_chunk_count={} buffer_size={}(bytes)",
+			render_radius,
+			rendered_chunk_count,
+			instance_buffer_size
+		);
 
 		let local_integrated_buffer = Arc::new(Mutex::new(local::IntegratedBuffer::new(
 			max_rendered_instances,

@@ -1,14 +1,13 @@
-use engine::{
-	network::socknet::{
-		connection::{self, Connection},
-		stream,
-	},
-	utility::Result,
-};
-use std::sync::Arc;
+use std::sync::{RwLock, Weak};
+
+use engine::network::socknet::stream;
+
+use crate::entity;
 
 /// Builder context for entity replication stream
-pub struct Builder {}
+pub struct Builder {
+	pub entity_world: Weak<RwLock<entity::World>>,
+}
 
 /// The stream handler id is `replication::entity`.
 ///

@@ -1,4 +1,4 @@
-use crate::common::network::replication::entity::Builder;
+use crate::common::network::replication::entity::{Builder, Channel};
 use engine::{
 	network::socknet::{
 		connection::{self, Connection},
@@ -6,7 +6,10 @@ use engine::{
 	},
 	utility::Result,
 };
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+	net::SocketAddr,
+	sync::{Arc, Weak},
+};
 
 pub type Context = stream::Context<Builder, Ongoing>;
 
@@ -32,17 +35,39 @@ impl stream::handler::Initiator for Handler {
 }
 
 impl Handler {
-	pub fn log_target(address: &SocketAddr) -> String {
+	fn log_target(address: &SocketAddr) -> String {
 		use stream::Identifier;
 		format!("server/{}[{}]", Builder::unique_id(), address)
 	}
 
-	pub async fn initiate(mut self) -> Result<Self> {
-		use connection::Active;
+	pub fn spawn(connection: Weak<Connection>, channel: Channel) {
+		let arc = Connection::upgrade(&connection).unwrap();
+		arc.spawn(async move {
+			use connection::Active;
+			use stream::handler::Initiator;
+			let mut stream = Handler::open(&connection)?.await?;
+			let log = Self::log_target(&stream.connection.remote_address());
+			stream.initiate(&log).await?;
+			stream.send_until_closed(&log, channel).await?;
+			Ok(())
+		});
+	}
+
+	async fn initiate(&mut self, log: &str) -> Result<()> {
 		use stream::{kind::Write, Identifier};
-		let log = Self::log_target(&self.connection.remote_address());
-		log::debug!(target: &log, "Establishing entity replication stream");
+		log::debug!(target: &log, "Establishing stream");
 		self.send.write(&Builder::unique_id().to_owned()).await?;
-		Ok(self)
+		Ok(())
+	}
+
+	async fn send_until_closed(&mut self, log: &str, channel: Channel) -> Result<()> {
+		use stream::kind::Write;
+		log::debug!(target: &log, "send_until_closed");
+		while let Ok(update) = channel.recv().await {
+			log::debug!(target: &log, "Sending update {:?}", update);
+			self.send.write(&update).await?;
+		}
+		log::debug!(target: &log, "</>send_until_closed");
+		Ok(())
 	}
 }

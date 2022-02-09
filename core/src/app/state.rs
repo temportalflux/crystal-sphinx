@@ -127,9 +127,12 @@ impl Machine {
 		log::info!(target: "app-state", "Enqueuing next state {:?}", next_state);
 		self.next_transition = Some((next_state, data));
 	}
-	
+
 	fn perform_transition(&mut self, transition: (State, TransitionData)) {
-		profiling::scope!("perform_transition", &format!("{:?} -> {:?}", self.state, transition.0));
+		profiling::scope!(
+			"perform_transition",
+			&format!("{:?} -> {:?}", self.state, transition.0)
+		);
 		let (next_state, data) = transition;
 
 		let prev_state = self.state;

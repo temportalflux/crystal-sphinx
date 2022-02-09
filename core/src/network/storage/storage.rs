@@ -41,7 +41,7 @@ impl Storage {
 						storage.endpoint = None;
 						storage.connection_list = None;
 					}
-					
+
 					let async_app_state = callback_app_state.clone();
 					engine::task::spawn("disconnecting".to_owned(), async move {
 						profiling::scope!("finalize-disconnect");
@@ -54,7 +54,6 @@ impl Storage {
 						}
 						Ok(())
 					});
-
 				},
 			);
 		}

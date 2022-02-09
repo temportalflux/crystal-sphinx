@@ -1,5 +1,5 @@
-mod replicator;
-pub use replicator::*;
+pub mod replicator;
+pub use replicator::Replicator;
 mod update_camera;
 pub use update_camera::*;
 mod physics;
