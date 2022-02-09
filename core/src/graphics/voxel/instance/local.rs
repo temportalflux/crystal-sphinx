@@ -100,13 +100,6 @@ impl IntegratedBuffer {
 				block_ids.len()
 			)
 		);
-		log::debug!(
-			"insert_chunk chunk=<{}, {}, {}> updates={}",
-			chunk.x,
-			chunk.y,
-			chunk.z,
-			block_ids.len()
-		);
 
 		let mut points = HashSet::with_capacity(block_ids.len());
 		for (point, block_id) in block_ids.into_iter() {

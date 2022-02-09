@@ -68,7 +68,7 @@ impl Replicator {
 				// This system should only be active/present while
 				// in-game on the (integrated or dedicated) server.
 				if !mode::get().contains(mode::Kind::Server) {
-					return None;
+					return Ok(None);
 				}
 
 				log::info!(target: LOG, "Initializing");
@@ -77,7 +77,7 @@ impl Replicator {
 					Some(arc_storage) => arc_storage,
 					None => {
 						log::error!(target: LOG, "Failed to find storage");
-						return None;
+						return Ok(None);
 					}
 				};
 				let (server, connection_recv) = {
@@ -105,7 +105,7 @@ impl Replicator {
 					engine.add_weak_system(Arc::downgrade(&arc_self));
 				}
 
-				return Some(arc_self);
+				return Ok(Some(arc_self));
 			});
 	}
 }
@@ -277,7 +277,12 @@ impl EntityUpdates {
 				continue;
 			}
 
-			log::debug!("{}: {:?} -> {:?}", handle_addr, prev_relevance, next_relevance);
+			log::debug!(
+				"{}: {:?} -> {:?}",
+				handle_addr,
+				prev_relevance,
+				next_relevance
+			);
 
 			let mut pending_chunks = next_relevance.difference(&prev_relevance);
 			for coordinate in handle.take_pending_chunks().into_iter() {
@@ -541,97 +546,6 @@ impl Replicator {
 }
 
 impl Replicator {
-	fn replicate_chunks_to(
-		&self,
-		entity: hecs::Entity,
-		owner: &component::OwnedByConnection,
-		current_chunk: Point3<i64>,
-		relevancy: &mut component::chunk::Relevancy,
-	) -> Vec<PacketBuilder> {
-		use crate::network::packet::ReplicateWorld;
-		use engine::network::{enums::*, packet::Packet};
-
-		profiling::scope!(
-			"replicate_chunks_to",
-			&format!("entity={} address={}", entity.id(), owner.address())
-		);
-
-		let (new_chunks, old_chunks) = relevancy.get_chunk_diff(&current_chunk);
-		// Server side, update the component directly
-		relevancy.update_replicated_chunks(current_chunk, &old_chunks, &new_chunks);
-
-		let old_chunks = {
-			profiling::scope!("sort-old-chunks");
-			let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
-			old_chunks.sort_by(|a, b| {
-				let a_dist = (a - current_chunk).cast::<f32>().magnitude_squared();
-				let b_dist = (b - current_chunk).cast::<f32>().magnitude_squared();
-				b_dist.partial_cmp(&a_dist).unwrap()
-			});
-			old_chunks
-		};
-
-		// Get all the coordinates that should be replicated once they are available/loaded.
-		// This might be some number of updates after the user moves to a new chunk,
-		// so there may be a list of pending chunks for some amount of time.
-		let chunks_to_replicate = relevancy.take_pending_chunks(8);
-		let mut updates = Vec::with_capacity(chunks_to_replicate.len());
-		if let Ok(chunk_cache) = self.chunk_cache.upgrade().unwrap().read() {
-			for coordinate in chunks_to_replicate.into_iter() {
-				profiling::scope!(
-					"create-chunk-packet",
-					&format!("<{}, {}, {}>", coordinate.x, coordinate.y, coordinate.z)
-				);
-				// If the chunk is in the cache, then the server has it loaded (to some degree).
-				// If not, it needs to go back on the component for the next update cycle.
-				match chunk_cache.find(&coordinate) {
-					Some(weak_chunk) => {
-						let arc_chunk = weak_chunk.upgrade().unwrap();
-						let server_chunk = arc_chunk.read().unwrap();
-						// Conver the chunk into replication data and add it to the list of things to send.
-						let mut packets = ReplicateWorld::create_chunk_packets(&server_chunk.chunk);
-						updates.append(&mut packets);
-						relevancy.mark_as_replicated(coordinate);
-					}
-					None => {
-						relevancy.insert_pending(coordinate);
-					}
-				}
-			}
-		}
-
-		let mut packets = Vec::with_capacity(2);
-		/*
-		{
-			profiling::scope!("send-packets");
-			packets.push(
-				Packet::builder()
-					.with_address(*owner.address())
-					.unwrap()
-					.with_guarantee(Reliable + Ordered)
-					// Notify client what chunks are no longer relevant (can be dropped),
-					// and what chunks will be incoming over the network shortly.
-					.with_payloads(&ReplicateWorld::fragment_relevancy(entity, old_chunks)),
-			);
-			packets.push(
-				Packet::builder()
-					.with_address(*owner.address())
-					.unwrap()
-					.with_guarantee(Reliable + Ordered)
-					// Send each chunk update in its own Reliably-Ordered packet,
-					// which is garunteed to be received by clients after the initial update.
-					.with_payloads(&updates[..]),
-			);
-		}
-		*/
-		packets
-	}
-
-	fn is_chunk_within_radius(origin: &Point3<i64>, coord: &Point3<i64>, radius: usize) -> bool {
-		let origin_to_coord = coord.coords - origin.coords;
-		origin_to_coord.dot(&origin_to_coord) <= (radius as i64).pow(2)
-	}
-
 	fn serialize_entity(
 		&self,
 		registry: &component::Registry,

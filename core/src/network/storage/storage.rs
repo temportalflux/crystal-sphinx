@@ -186,4 +186,7 @@ pub enum Error {
 	FailedToReadClient,
 	#[error("failed to write to client data")]
 	FailedToWriteClient,
+
+	#[error("connection list is invalid")]
+	InvalidConnectionList,
 }

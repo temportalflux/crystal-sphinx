@@ -43,7 +43,9 @@ impl stream::handler::Receiver for Chunk {
 				"client/{}[{}]<{}, {}, {}>",
 				Builder::unique_id(),
 				self.connection.remote_address(),
-				coord.x, coord.y, coord.z
+				coord.x,
+				coord.y,
+				coord.z
 			);
 
 			let block_count = self.recv.read_size().await?;
@@ -54,12 +56,14 @@ impl stream::handler::Receiver for Chunk {
 				let block_id = self.recv.read::<block::LookupId>().await?;
 				contents.push((offset, block_id));
 			}
-			
+
 			let end_time = Instant::now();
 			let repl_duration = end_time.duration_since(start_time);
 
 			if repl_duration.as_millis() > 2000 {
-				log::warn!(target: &log, "Took {:.2}s ({}ms) to replicate.",
+				log::warn!(
+					target: &log,
+					"Took {:.2}s ({}ms) to replicate.",
 					repl_duration.as_secs_f32(),
 					repl_duration.as_millis()
 				);
@@ -72,7 +76,9 @@ impl stream::handler::Receiver for Chunk {
 			// but its more likely the client moved out of range while all of the date was being received.
 			if let Ok(relevance) = self.context.local_relevance.read() {
 				if !relevance.is_relevant(&coord) {
-					log::warn!(target: &log, "Chunk is being discarded because it is no longer relevant to {:?}.",
+					log::warn!(
+						target: &log,
+						"Chunk is being discarded because it is no longer relevant to {:?}.",
 						relevance
 					);
 					return Ok(());

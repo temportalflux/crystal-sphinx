@@ -55,7 +55,7 @@ impl OwnedByConnection {
 				// This system should only be active/present while
 				// in-game on the (integrated or dedicated) server.
 				if !mode::get().contains(mode::Kind::Server) {
-					return None;
+					return Ok(None);
 				}
 
 				log::info!(target: LOG, "Initializing");
@@ -72,7 +72,7 @@ impl OwnedByConnection {
 					}
 					None => {
 						log::error!(target: LOG, "Failed to find storage");
-						return None;
+						return Ok(None);
 					}
 				};
 
@@ -82,7 +82,7 @@ impl OwnedByConnection {
 					engine.add_weak_system(Arc::downgrade(&arc_self));
 				}
 
-				return Some(arc_self);
+				return Ok(Some(arc_self));
 			});
 	}
 }

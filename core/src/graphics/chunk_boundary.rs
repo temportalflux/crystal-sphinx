@@ -247,13 +247,15 @@ impl Render {
 				log::trace!(target: ID, "Received Enter(InGame) transition");
 				let arc_render_chain = callback_render_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
-				match Self::create(arc_render_chain, arc_camera, callback_action.clone()) {
-					Ok(arclocked) => Some(arclocked),
-					Err(err) => {
-						log::error!(target: ID, "{}", err);
-						return None;
-					}
-				}
+				Ok(
+					match Self::create(arc_render_chain, arc_camera, callback_action.clone()) {
+						Ok(arclocked) => Some(arclocked),
+						Err(err) => {
+							log::error!(target: ID, "{}", err);
+							None
+						}
+					},
+				)
 			});
 	}
 

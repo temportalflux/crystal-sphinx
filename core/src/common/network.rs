@@ -14,4 +14,6 @@ pub use handshake::Handshake;
 mod client_joined;
 pub use client_joined::*;
 
+pub mod move_player;
+
 pub mod replication;

@@ -1,4 +1,4 @@
-use crate::entity::component::{binary, debug, network, Component, Registration};
+use crate::{entity::component::{binary, debug, network, Component, Registration}, common::world::chunk};
 use engine::{
 	math::nalgebra::{Point3, Vector3},
 	utility::{Error, Result},
@@ -107,7 +107,14 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 }
 
 impl network::Replicatable for Position {
-	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
+	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
+		if is_locally_owned {
+			let offset = (replicated.chunk - self.chunk).component_mul(&chunk::SIZE_I.cast::<i64>());
+			let offset = (replicated.offset - self.offset) + offset.cast::<f32>();
+			if offset.x < 0.25 && offset.y < 0.25 && offset.z < 0.25 {
+				return;
+			}
+		}
 		*self = *replicated;
 	}
 }

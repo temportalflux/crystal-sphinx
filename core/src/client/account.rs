@@ -34,12 +34,14 @@ impl Manager {
 		unsafe { INSTANCE.get_or_default() }
 	}
 
-	pub fn write() -> std::sync::LockResult<std::sync::RwLockWriteGuard<'static, Self>> {
-		Self::get().write()
+	pub fn write() -> Result<std::sync::RwLockWriteGuard<'static, Self>> {
+		Ok(Self::get()
+			.write()
+			.map_err(|_| Error::FailedToWriteManager)?)
 	}
 
-	pub fn read() -> std::sync::LockResult<std::sync::RwLockReadGuard<'static, Self>> {
-		Self::get().read()
+	pub fn read() -> Result<std::sync::RwLockReadGuard<'static, Self>> {
+		Ok(Self::get().read().map_err(|_| Error::FailedToReadManager)?)
 	}
 }
 
@@ -122,6 +124,13 @@ impl Manager {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+	#[error("client account manager is invalid")]
+	InvalidManager,
+	#[error("failed to read from client account manager data")]
+	FailedToReadManager,
+	#[error("failed to write to client account manager data")]
+	FailedToWriteManager,
+
 	#[error("Client has no account logged in")]
 	NoAccountLoggedIn,
 	#[error("No account exists with the id({0})")]

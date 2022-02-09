@@ -146,13 +146,11 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 			user_id
 		};
-		engine.add_system(
-			entity::system::PlayerController::new(
-				&entity_world,
-				account_id,
-				input_user.as_ref().unwrap(),
-			)
-			.arclocked(),
+		entity::system::PlayerController::add_state_listener(
+			&app_state,
+			Arc::downgrade(&network_storage),
+			Arc::downgrade(&entity_world),
+			input_user.as_ref().unwrap().clone(),
 		);
 
 		engine::window::Window::builder()

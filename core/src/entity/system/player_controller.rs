@@ -1,15 +1,25 @@
 use crate::{
-	account,
-	common::network::mode,
+	app::state::Machine,
+	common::{
+		account,
+		network::{mode, move_player},
+	},
 	entity::{self, component, ArcLockEntityWorld},
-	network::packet::MovePlayer,
+	network::{
+		storage::{client::Client, Storage},
+	},
 };
+use chrono::Utc;
 use engine::{
 	input,
 	math::nalgebra::{Unit, UnitQuaternion, Vector3},
-	network, world, EngineSystem,
+	network,
+	socknet::connection::Connection,
+	world, Engine, EngineSystem,
 };
 use std::sync::{Arc, RwLock, Weak};
+
+static LOG: &'static str = "subsystem:player_controller";
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c component::OwnedByAccount,
@@ -72,22 +82,78 @@ impl LookAction {
 pub struct PlayerController {
 	world: Weak<RwLock<entity::World>>,
 	account_id: account::Id,
+	server_connection: Option<Weak<Connection>>,
 	look_actions: Vec<LookAction>,
 	move_speed: f32,
 	move_actions: Vec<MoveAction>,
 }
 
 impl PlayerController {
+	pub fn add_state_listener(
+		app_state: &Arc<RwLock<Machine>>,
+		storage: Weak<RwLock<Storage>>,
+		world: Weak<RwLock<entity::World>>,
+		arc_user: input::ArcLockUser,
+	) {
+		use crate::app::state::{
+			storage::{Event::*, Storage},
+			State::*,
+			Transition::*,
+			*,
+		};
+
+		let callback_storage = storage.clone();
+		let callback_world = world.clone();
+		Storage::<Arc<RwLock<Self>>>::default()
+			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
+			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
+			.create_callbacks(&app_state, move || {
+				use crate::common::network::mode;
+				profiling::scope!("init-subsystem", LOG);
+
+				// This system should only be active/present while
+				// in-game on a (integrated or dedicated) client.
+				if !mode::get().contains(mode::Kind::Client) {
+					return Ok(None);
+				}
+
+				log::info!(target: LOG, "Initializing");
+
+				let server_connection = Client::get_server_connection(&callback_storage)?;
+
+				let account_id = crate::client::account::Manager::read()?
+					.active_account()?
+					.id();
+
+				let arc_self = Arc::new(RwLock::new(Self::new(
+					callback_world.clone(),
+					account_id,
+					&arc_user,
+					server_connection,
+				)));
+
+				if let Ok(mut engine) = Engine::get().write() {
+					engine.add_weak_system(Arc::downgrade(&arc_self));
+				}
+
+				return Ok(Some(arc_self));
+			});
+	}
+}
+
+impl PlayerController {
 	pub fn new(
-		world: &ArcLockEntityWorld,
+		world: Weak<RwLock<hecs::World>>,
 		account_id: account::Id,
 		arc_user: &input::ArcLockUser,
+		server_connection: Option<Weak<Connection>>,
 	) -> Self {
 		let get_action = |id| input::User::get_action_in(&arc_user, id).unwrap();
 
 		Self {
-			world: Arc::downgrade(&world),
+			world,
 			account_id,
+			server_connection,
 			look_actions: vec![
 				LookAction {
 					action: get_action(crate::input::AXIS_LOOK_VERTICAL),
@@ -132,7 +198,7 @@ impl EngineSystem for PlayerController {
 			return;
 		}
 
-		profiling::scope!("subsystem:player_controller");
+		profiling::scope!(LOG);
 
 		let look_values = self
 			.look_actions
@@ -212,22 +278,20 @@ impl EngineSystem for PlayerController {
 					has_significantly_changed = true;
 				}
 
-				if has_significantly_changed {
-					/* TODO: Reimplement with new networking
-					use network::{enums::*, packet::Packet, Network};
-					assert!(replicated.get_id_on_server().is_some());
-					let server_entity = *replicated.get_id_on_server().unwrap();
-					let _ = Network::send_packets(
-						Packet::builder()
-							.with_mode(ToServer)
-							.with_guarantee(Unreliable + Sequenced)
-							.with_payload(&MovePlayer {
-								server_entity,
-								velocity: **velocity,
-								orientation: **orientation,
-							}),
-					);
-					*/
+				if let Some(connection) = self.server_connection.as_ref() {
+					if has_significantly_changed {
+						let server_entity = *replicated.get_id_on_server().unwrap();
+						let result = move_player::Datum {
+							timestamp: Utc::now(),
+							server_entity,
+							velocity: **velocity,
+							orientation: **orientation,
+						}
+						.send(connection.clone());
+						if let Err(err) = result {
+							log::error!(target: LOG, "{:?}", err);
+						}
+					}
 				}
 			}
 		}

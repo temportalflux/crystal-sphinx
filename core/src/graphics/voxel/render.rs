@@ -80,29 +80,31 @@ impl RenderVoxel {
 							}
 							None => {
 								log::error!(target: ID, "Failed to find client storage");
-								return None;
+								return Ok(None);
 							}
 						}
 					}
 					None => {
 						log::error!(target: ID, "Failed to find storage");
-						return None;
+						return Ok(None);
 					}
 				};
 
-				match Self::create(
-					render_chain,
-					arc_camera,
-					&callback_model_cache,
-					chunk_cache,
-					pending_gpu_signals.clone(),
-				) {
-					Ok(arclocked) => Some(arclocked),
-					Err(err) => {
-						log::error!(target: ID, "{}", err);
-						return None;
-					}
-				}
+				Ok(
+					match Self::create(
+						render_chain,
+						arc_camera,
+						&callback_model_cache,
+						chunk_cache,
+						pending_gpu_signals.clone(),
+					) {
+						Ok(arclocked) => Some(arclocked),
+						Err(err) => {
+							log::error!(target: ID, "{}", err);
+							None
+						}
+					},
+				)
 			});
 	}
 

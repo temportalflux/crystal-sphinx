@@ -1,4 +1,3 @@
-pub mod packet;
 pub mod storage;
 pub mod task;
 
@@ -12,7 +11,6 @@ fn create_builder(
 	entity_world: &ArcLockEntityWorld,
 ) -> Builder {
 	let mut net_builder = Builder::default().with_port(25565);
-	packet::register_types(&mut net_builder, &app_state, &storage, &entity_world);
 	net_builder
 }
 

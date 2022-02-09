@@ -61,7 +61,13 @@ impl std::ops::DerefMut for Velocity {
 }
 
 impl network::Replicatable for Velocity {
-	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
+	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
+		if is_locally_owned {
+			let diff = self.0 - replicated.0;
+			if diff.magnitude_squared() < (0.1_f32).powi(3) {
+				return;
+			}
+		}
 		*self = *replicated;
 	}
 }

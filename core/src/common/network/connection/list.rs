@@ -79,6 +79,10 @@ impl List {
 		&self.connections
 	}
 
+	pub fn first(&self) -> Option<&Weak<Connection>> {
+		self.connections.iter().next().map(|(_, conn)| conn)
+	}
+
 	pub fn add_recv(&mut self) -> BusReader<super::Event> {
 		self.event_dispatcher.lock().unwrap().add_rx()
 	}

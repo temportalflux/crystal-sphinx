@@ -135,6 +135,9 @@ fn load_network(
 					entity_world: entity_world.clone(),
 				});
 				replication::world::register(&mut registry, Arc::downgrade(&storage));
+				registry.register(move_player::Builder {
+					entity_world: entity_world.clone(),
+				});
 				registry
 			}),
 		};

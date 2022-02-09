@@ -1,4 +1,5 @@
 use super::{ArcLockMachine, OperationKey};
+use engine::utility::Result;
 use std::sync::{Arc, Mutex};
 
 pub enum Event {
@@ -30,7 +31,7 @@ where
 
 	pub fn create_callbacks<F>(self, app_state: &ArcLockMachine, create_callback: F)
 	where
-		F: Fn() -> Option<T> + 'static + Send + Sync,
+		F: (Fn() -> Result<Option<T>>) + 'static + Send + Sync,
 	{
 		let storage: Arc<Mutex<Option<T>>> = Default::default();
 		let creator = Arc::new(create_callback);
@@ -41,10 +42,18 @@ where
 			match event {
 				Event::Create => {
 					let callback_creator = creator.clone();
-					app_state.add_callback(operation_key, move |_operation| {
-						let mut storage = callback_storage.lock().unwrap();
-						*storage = callback_creator();
-					});
+					app_state.add_callback(
+						operation_key,
+						move |_operation| match callback_creator() {
+							Ok(item) => {
+								let mut storage = callback_storage.lock().unwrap();
+								*storage = item;
+							}
+							Err(err) => {
+								log::error!(target: "storage", "{:?}", err);
+							}
+						},
+					);
 				}
 				Event::Destroy => {
 					app_state.add_callback(operation_key, move |_operation| {

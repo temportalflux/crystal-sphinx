@@ -1,6 +1,11 @@
-use crate::{client::account, client::world::chunk::cache, common::account::key};
-use engine::{network::endpoint, utility::Result};
-use std::sync::{Arc, RwLock};
+use crate::{
+	client::account,
+	client::world::chunk::cache,
+	common::account::key,
+	network::storage::{self, Storage},
+};
+use engine::{network::endpoint, socknet::connection::Connection, utility::Result};
+use std::sync::{Arc, RwLock, Weak};
 
 pub type ArcLockClient = Arc<RwLock<Client>>;
 /// Container class for all client data which is present when a user is connected to a game server.
@@ -35,6 +40,19 @@ impl Client {
 			}
 		}
 		Ok((certificate, private_key))
+	}
+
+	pub fn get_server_connection(
+		storage: &Weak<RwLock<Storage>>,
+	) -> Result<Option<Weak<Connection>>> {
+		use storage::Error::{FailedToReadStorage, InvalidConnectionList, InvalidStorage};
+		let arc_storage = storage.upgrade().ok_or(InvalidStorage)?;
+		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
+		let arc_connection_list = storage.connection_list();
+		let connection_list = arc_connection_list
+			.read()
+			.map_err(|_| InvalidConnectionList)?;
+		Ok(connection_list.first().cloned())
 	}
 }
 

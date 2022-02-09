@@ -60,8 +60,10 @@ impl Orientation {
 }
 
 impl super::network::Replicatable for Orientation {
-	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
-		*self = *replicated;
+	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
+		if !is_locally_owned {
+			*self = *replicated;
+		}
 	}
 }
 
