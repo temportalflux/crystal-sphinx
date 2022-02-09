@@ -1,13 +1,20 @@
-use crate::common::utility::MultiSet;
+use crate::{common::utility::MultiSet, server::world::chunk::Chunk};
 use engine::math::nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::{HashMap, HashSet},
 	net::SocketAddr,
+	sync::{RwLock, Weak},
 };
 
 #[derive(PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct Area(Point3<i64>, u64);
+
+impl std::fmt::Debug for Area {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "<{}, {}, {}>r{}", self.0.x, self.0.y, self.0.z, self.1)
+	}
+}
 
 impl Area {
 	pub fn new(point: Point3<i64>, radius: u64) -> Self {
@@ -30,7 +37,10 @@ impl Area {
 	}
 
 	pub fn is_relevant(&self, chunk: &Point3<i64>) -> bool {
-		return (chunk - self.0).cast::<f32>().magnitude_squared() < (self.1.pow(2) as f32);
+		let offset = chunk - self.0;
+		return offset.x.abs() as u64 <= self.1
+			&& offset.y.abs() as u64 <= self.1
+			&& offset.z.abs() as u64 <= self.1;
 	}
 }
 
@@ -42,6 +52,12 @@ pub struct PairedRelevance {
 
 #[derive(PartialEq, Eq, Serialize, Deserialize, Clone, Default)]
 pub struct Relevance(Vec<Area>);
+
+impl std::fmt::Debug for Relevance {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		write!(f, "Relevance({:?})", self.0)
+	}
+}
 
 impl Relevance {
 	pub fn push(&mut self, area: Area) {
@@ -72,6 +88,16 @@ impl Relevance {
 		// to calculate the area difference between two sets of cuboid areas.
 		let self_chunks = self.get_relevant_chunks();
 		let other_chunks = other.get_relevant_chunks();
-		self_chunks.difference(& other_chunks).cloned().collect()
+		self_chunks.difference(&other_chunks).cloned().collect()
 	}
+}
+
+pub enum Update {
+	Entity(Relevance),
+	World(WorldUpdate),
+}
+
+pub enum WorldUpdate {
+	Relevance(Relevance),
+	Chunks(Vec<Weak<RwLock<Chunk>>>),
 }

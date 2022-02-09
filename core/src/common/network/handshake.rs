@@ -5,7 +5,7 @@ use crate::{
 		network::{connection, mode, Broadcast, CloseCode, SendClientJoined},
 	},
 	entity,
-	network::storage::{server::ArcLockServer, Storage},
+	network::storage::{self, server::ArcLockServer, Storage},
 };
 use engine::{
 	network::socknet::{self, connection::Connection, stream},
@@ -63,23 +63,22 @@ impl Handshake {
 	}
 
 	fn storage(&self) -> Result<Arc<RwLock<Storage>>> {
-		Ok(self
-			.context
-			.storage
-			.upgrade()
-			.ok_or(Error::InvalidStorage)?)
+		use storage::Error::InvalidStorage;
+		Ok(self.context.storage.upgrade().ok_or(InvalidStorage)?)
 	}
 
 	fn server(&self) -> Result<ArcLockServer> {
+		use storage::Error::{FailedToReadStorage, InvalidServer};
 		let arc = self.storage()?;
-		let storage = arc.read().map_err(|_| Error::FailedToReadStorage)?;
-		let server = storage.server().as_ref().ok_or(Error::InvalidServer)?;
+		let storage = arc.read().map_err(|_| FailedToReadStorage)?;
+		let server = storage.server().as_ref().ok_or(InvalidServer)?;
 		Ok(server.clone())
 	}
 
 	fn connection_list(&self) -> Result<Arc<RwLock<connection::List>>> {
+		use storage::Error::FailedToReadStorage;
 		let arc = self.storage()?;
-		let storage = arc.read().map_err(|_| Error::FailedToReadStorage)?;
+		let storage = arc.read().map_err(|_| FailedToReadStorage)?;
 		Ok(storage.connection_list().clone())
 	}
 
@@ -228,6 +227,7 @@ impl stream::handler::Receiver for Handshake {
 impl Handshake {
 	async fn process_server(&mut self, log: &String) -> Result<()> {
 		use account::key::{Key, PublicKey};
+		use storage::Error::{FailedToReadServer, FailedToWriteServer};
 		use stream::kind::{Read, Recv, Send, Write};
 		use utility::Context;
 
@@ -248,7 +248,7 @@ impl Handshake {
 			let server = self.server().context("fetching server data")?;
 			let server = server
 				.read()
-				.map_err(|_| Error::FailedToReadServer)
+				.map_err(|_| FailedToReadServer)
 				.context("finding user")?;
 			match server.find_user(&account_id) {
 				Some(arc_user) => (arc_user.clone(), false),
@@ -339,7 +339,7 @@ impl Handshake {
 			let server = self.server().context("fetching server data")?;
 			let mut server = server
 				.write()
-				.map_err(|_| Error::FailedToWriteServer)
+				.map_err(|_| FailedToWriteServer)
 				.context("adding user")?;
 			server.add_user(account_id.clone(), arc_user);
 		}
@@ -396,18 +396,6 @@ enum Error {
 	KeyRejected(&'static str),
 	#[error("Failed to sign handshake token")]
 	FailedToSignToken,
-
-	#[error("storage is invalid")]
-	InvalidStorage,
-	#[error("failed to read from storage data")]
-	FailedToReadStorage,
-
-	#[error("server storage is invalid")]
-	InvalidServer,
-	#[error("failed to read from server data")]
-	FailedToReadServer,
-	#[error("failed to write to server data")]
-	FailedToWriteServer,
 
 	#[error("failed to read user for id({0})")]
 	FailedToReadUser(String),

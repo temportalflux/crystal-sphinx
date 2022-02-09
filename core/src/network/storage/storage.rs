@@ -165,3 +165,25 @@ impl Storage {
 		}
 	}
 }
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+	#[error("storage is invalid")]
+	InvalidStorage,
+	#[error("failed to read from storage data")]
+	FailedToReadStorage,
+
+	#[error("server storage is invalid")]
+	InvalidServer,
+	#[error("failed to read from server data")]
+	FailedToReadServer,
+	#[error("failed to write to server data")]
+	FailedToWriteServer,
+
+	#[error("client storage is invalid")]
+	InvalidClient,
+	#[error("failed to read from client data")]
+	FailedToReadClient,
+	#[error("failed to write to client data")]
+	FailedToWriteClient,
+}

@@ -134,8 +134,7 @@ fn load_network(
 				registry.register(replication::entity::Builder {
 					entity_world: entity_world.clone(),
 				});
-				registry.register(replication::world::relevancy::Builder {});
-				registry.register(replication::world::chunk::Builder {});
+				replication::world::register(&mut registry, Arc::downgrade(&storage));
 				registry
 			}),
 		};

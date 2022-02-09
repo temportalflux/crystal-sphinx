@@ -8,7 +8,7 @@ use crate::{
 		ArcLockEntityWorld,
 	},
 	network::storage::Storage,
-	server::world::chunk,
+	server::world::chunk::{self, Chunk},
 };
 use bus::BusReader;
 use engine::{
@@ -91,7 +91,7 @@ impl Replicator {
 					(server, connection_recv)
 				};
 
-				let chunk_cache = server.read().unwrap().chunk_cache();
+				let chunk_cache = Arc::downgrade(&server.read().unwrap().chunk_cache());
 				let world = callback_world.clone();
 				let arc_self = Arc::new(RwLock::new(Self {
 					chunk_cache,
@@ -131,6 +131,11 @@ impl EngineSystem for Replicator {
 			None => return,
 		};
 
+		let chunk_cache = match self.chunk_cache.upgrade() {
+			Some(arc) => arc,
+			None => return,
+		};
+
 		// Look for any new network connections so their replication streams can be set up.
 		let _new_connections = self.poll_connections();
 
@@ -140,7 +145,7 @@ impl EngineSystem for Replicator {
 		// - destroyed
 		let updates = EntityUpdates::new(&self.entities_relevant);
 		let updates = updates.query(&arc_world);
-		let updates = updates.collect_chunks(&self.connection_handles);
+		let updates = updates.collect_chunks(&chunk_cache, &mut self.connection_handles);
 
 		// Entity updates are turned into operations on a given set of connections.
 		// This can result in multiple of the same operation for different connections
@@ -148,10 +153,9 @@ impl EngineSystem for Replicator {
 		let operations =
 			updates.as_operations(&mut self.entities_relevant, &self.connection_handles);
 
-		for (address, (relevance, new_chunks)) in updates.into_items().into_iter() {
+		for (address, updates) in updates.into_items().into_iter() {
 			let mut handle = self.get_handle_mut(&address);
-			handle.set_entity_relevance(relevance.entity);
-			handle.set_chunk_relevance(relevance.chunk, new_chunks);
+			handle.send_relevance_updates(updates);
 		}
 
 		// Sends the operations to each connection's handle/input stream
@@ -244,7 +248,7 @@ struct EntityUpdates {
 	relevance: RelevanceByConnection,
 	updates: MultiMap<Option<SocketAddr>, UpdatedEntity>,
 	destroyed: HashSet<hecs::Entity>,
-	new_chunks: HashMap<SocketAddr, HashSet<Point3<i64>>>,
+	new_chunks: MultiMap<SocketAddr, Weak<RwLock<Chunk>>>,
 }
 
 impl EntityUpdates {
@@ -253,12 +257,17 @@ impl EntityUpdates {
 			relevance: RelevanceByConnection::default(),
 			updates: MultiMap::new(),
 			destroyed: relevant_entities.keys().cloned().collect::<HashSet<_>>(),
-			new_chunks: HashMap::new(),
+			new_chunks: MultiMap::new(),
 		}
 	}
 
-	fn collect_chunks(mut self, connection_handles: &HashMap<SocketAddr, Handle>) -> Self {
-		for (handle_addr, handle) in connection_handles.iter() {
+	fn collect_chunks(
+		mut self,
+		arc_chunk_cache: &chunk::cache::ArcLock,
+		connection_handles: &mut HashMap<SocketAddr, Handle>,
+	) -> Self {
+		let chunk_cache = arc_chunk_cache.read().unwrap();
+		for (handle_addr, handle) in connection_handles.iter_mut() {
 			let prev_relevance = handle.chunk_relevance();
 			let next_relevance = match self.relevance.0.get(handle_addr) {
 				Some(relevance) => &relevance.chunk,
@@ -267,9 +276,27 @@ impl EntityUpdates {
 			if *prev_relevance == *next_relevance {
 				continue;
 			}
-			let new_chunks = next_relevance.difference(&prev_relevance);
-			if !new_chunks.is_empty() {
-				self.new_chunks.insert(handle_addr.clone(), new_chunks);
+
+			log::debug!("{}: {:?} -> {:?}", handle_addr, prev_relevance, next_relevance);
+
+			let mut pending_chunks = next_relevance.difference(&prev_relevance);
+			for coordinate in handle.take_pending_chunks().into_iter() {
+				if next_relevance.is_relevant(&coordinate) {
+					pending_chunks.insert(coordinate);
+				}
+			}
+			for coordinate in pending_chunks.into_iter() {
+				// If the chunk is in the cache, then the server has it loaded (to some degree).
+				// If not, it needs to go back on the component for the next update cycle.
+				match chunk_cache.find(&coordinate) {
+					Some(weak_chunk) => {
+						self.new_chunks
+							.insert(handle_addr.clone(), weak_chunk.clone());
+					}
+					None => {
+						handle.insert_pending_chunk(coordinate);
+					}
+				}
 			}
 		}
 		self
@@ -384,19 +411,18 @@ impl EntityUpdates {
 		}
 	}
 
-	fn into_items(
-		mut self,
-	) -> HashMap<SocketAddr, (relevancy::PairedRelevance, Option<HashSet<Point3<i64>>>)>
-	{
+	fn into_items(mut self) -> HashMap<SocketAddr, Vec<relevancy::Update>> {
+		use relevancy::{Update::*, WorldUpdate};
 		let relevance = self.relevance.into_inner();
 		let mut items = HashMap::with_capacity(relevance.len());
 		for (address, relevance) in relevance.into_iter() {
-			items.insert(address,
-				(
-					relevance,
-					self.new_chunks.remove(&address),
-				)
-			);
+			let mut updates = Vec::new();
+			updates.push(Entity(relevance.entity));
+			updates.push(World(WorldUpdate::Relevance(relevance.chunk)));
+			if let Some(new_chunks) = self.new_chunks.remove(&address) {
+				updates.push(World(WorldUpdate::Chunks(new_chunks)));
+			}
+			items.insert(address, updates);
 		}
 		items
 	}

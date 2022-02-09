@@ -200,9 +200,9 @@ impl Server {
 		self.database = Some(arc_database);
 	}
 
-	pub fn chunk_cache(&self) -> chunk::cache::WeakLock {
+	pub fn chunk_cache(&self) -> chunk::cache::ArcLock {
 		let database = self.database.as_ref().unwrap().read().unwrap();
-		Arc::downgrade(database.chunk_cache())
+		database.chunk_cache().clone()
 	}
 }
 

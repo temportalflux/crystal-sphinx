@@ -1,4 +1,5 @@
 use super::Builder;
+use crate::server::world::chunk::Chunk as ServerChunk;
 use engine::{
 	math::nalgebra::Point3,
 	network::socknet::{
@@ -7,7 +8,10 @@ use engine::{
 	},
 	utility::Result,
 };
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+	net::SocketAddr,
+	sync::{Arc, RwLock, Weak},
+};
 
 pub type Context = stream::Context<Builder, Ongoing>;
 
@@ -43,15 +47,27 @@ impl Chunk {
 		use connection::Active;
 		use stream::{kind::Write, Identifier};
 		let log = Self::log_target("server", &self.connection.remote_address());
-		log::debug!(target: &log, "Establishing stream");
 		self.send.write(&Builder::unique_id().to_owned()).await?;
 		Ok(())
 	}
 
-	pub async fn write_chunk(&mut self, coord: Point3<i64>) -> Result<()> {
+	pub async fn write_chunk(&mut self, arc_server_chunk: Arc<RwLock<ServerChunk>>) -> Result<()> {
 		use stream::kind::Write;
-		self.send.write(&coord).await?;
-		// TODO: Use the server world database to write data about the chunk to the stream
+		let chunk = {
+			let server_chunk = arc_server_chunk.read().unwrap();
+			server_chunk.chunk.clone()
+		};
+
+		self.send.write(&chunk.coordinate).await?;
+
+		self.send.write_size(chunk.block_ids.len()).await?;
+
+		for (offset, block_id) in chunk.block_ids.into_iter() {
+			let offset = offset.cast::<u8>();
+			self.send.write(&offset).await?;
+			self.send.write(&block_id).await?;
+		}
+
 		Ok(())
 	}
 }

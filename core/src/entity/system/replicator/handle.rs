@@ -20,11 +20,12 @@ use std::{
 ///
 /// Its lifetime is owned by the replicator system.
 pub struct Handle {
-	send_world_rel: async_channel::Sender<(relevancy::Relevance, Option<HashSet<Point3<i64>>>)>,
+	send_world_rel: async_channel::Sender<relevancy::WorldUpdate>,
 	send_entities: async_channel::Sender<replication::entity::Update>,
 	chunk_relevance: relevancy::Relevance,
 	entity_relevance: relevancy::Relevance,
 	relevancy_log: String,
+	pending_chunks: HashSet<Point3<i64>>,
 }
 
 impl Handle {
@@ -49,38 +50,53 @@ impl Handle {
 			chunk_relevance: relevancy::Relevance::default(),
 			entity_relevance: relevancy::Relevance::default(),
 			relevancy_log,
+			pending_chunks: HashSet::new(),
 		}
 	}
 
-	pub fn set_chunk_relevance(&mut self, relevance: relevancy::Relevance, new_chunks: Option<HashSet<Point3<i64>>>) {
-		if relevance != self.chunk_relevance {
-			use async_channel::TrySendError;
-
-			self.chunk_relevance = relevance;
-
-			if let Err(err) = self.send_world_rel.try_send((
-				self.chunk_relevance.clone(),
-				new_chunks,
-			)) {
-				match err {
-					TrySendError::Full(_) => {
-						log::error!(target: &self.relevancy_log, "Failed to send relevancy delta, unbounded async channel is full. This should never happen.");
+	pub fn send_relevance_updates(&mut self, updates: Vec<relevancy::Update>) {
+		for update in updates.into_iter() {
+			match update {
+				relevancy::Update::World(update) => {
+					if let relevancy::WorldUpdate::Relevance(relevance) = &update {
+						if *relevance == self.chunk_relevance {
+							continue;
+						}
+						self.chunk_relevance = relevance.clone();
 					}
-					TrySendError::Closed(_) => {
-						log::error!(target: &self.relevancy_log, "Failed to send relevancy delta, channel is closed. This should never happen because the channel can only be closed if the stream handle is dropped.");
-					}
+					self.send_world_update(update);
+				}
+				relevancy::Update::Entity(relevance) => {
+					self.entity_relevance = relevance;
 				}
 			}
 		}
+	}
 
+	pub fn send_world_update(&mut self, update: relevancy::WorldUpdate) {
+		use async_channel::TrySendError;
+		if let Err(err) = self.send_world_rel.try_send(update) {
+			match err {
+				TrySendError::Full(_) => {
+					log::error!(target: &self.relevancy_log, "Failed to send relevancy delta, unbounded async channel is full. This should never happen.");
+				}
+				TrySendError::Closed(_) => {
+					log::error!(target: &self.relevancy_log, "Failed to send relevancy delta, channel is closed. This should never happen because the channel can only be closed if the stream handle is dropped.");
+				}
+			}
+		}
+	}
+
+	pub fn take_pending_chunks(&mut self) -> HashSet<Point3<i64>> {
+		self.pending_chunks.drain().collect()
+	}
+
+	pub fn insert_pending_chunk(&mut self, coordinate: Point3<i64>) {
+		self.pending_chunks.insert(coordinate);
 	}
 
 	pub fn chunk_relevance(&self) -> &relevancy::Relevance {
 		&self.chunk_relevance
-	}
-
-	pub fn set_entity_relevance(&mut self, relevance: relevancy::Relevance) {
-		self.entity_relevance = relevance;
 	}
 
 	pub fn entity_relevance(&self) -> &relevancy::Relevance {
