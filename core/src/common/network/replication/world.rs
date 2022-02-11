@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock, Weak};
 
 use engine::network::stream::Registry;
 
-use crate::{entity::system::replicator::relevancy::Relevance, network::storage::Storage};
+use crate::{common::network::Storage, entity::system::replicator::relevancy::Relevance};
 
 pub mod chunk;
 pub mod relevancy;

@@ -1,5 +1,5 @@
 use super::Command;
-use crate::{app, network::task::Instruction};
+use crate::{app, common::network::task::Instruction};
 use engine::network::{mode, LocalData};
 use std::sync::{Arc, RwLock};
 

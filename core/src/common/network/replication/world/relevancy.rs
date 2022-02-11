@@ -1,5 +1,5 @@
 use crate::{
-	entity::system::replicator::relevancy, network::storage::Storage, server::world::chunk::Chunk,
+	common::network::Storage, entity::system::replicator::relevancy, server::world::chunk::Chunk,
 };
 use engine::{
 	network::socknet::{
@@ -47,7 +47,7 @@ impl stream::recv::Builder for Builder {
 
 impl Builder {
 	fn client_chunk_cache(&self) -> Result<crate::client::world::chunk::cache::ArcLock> {
-		use crate::network::storage::Error::{
+		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
 		};
 		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;

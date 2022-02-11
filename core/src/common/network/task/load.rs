@@ -1,9 +1,9 @@
 use super::Instruction;
 use crate::{
 	app::{self, state::ArcLockMachine},
-	common::network::{connection, mode},
+	common::network::{connection, mode, Storage},
 	entity::{self, ArcLockEntityWorld},
-	network::storage::{client::ArcLockClient, server::Server, ArcLockStorage},
+	server::network::{Storage as ServerStorage},
 };
 use engine::{
 	network::{self, endpoint::Endpoint, Config, LocalData},
@@ -14,7 +14,7 @@ use std::sync::{Arc, RwLock, Weak};
 #[profiling::function]
 pub fn load_dedicated_server(
 	app_state: ArcLockMachine,
-	storage: ArcLockStorage,
+	storage: Arc<RwLock<Storage>>,
 	entity_world: Weak<RwLock<entity::World>>,
 ) -> Result<()> {
 	load_network(
@@ -37,7 +37,7 @@ pub fn load_dedicated_server(
 
 pub fn add_load_network_listener(
 	app_state: &ArcLockMachine,
-	storage: &ArcLockStorage,
+	storage: &Arc<RwLock<Storage>>,
 	entity_world: &ArcLockEntityWorld,
 ) {
 	use app::state::{State::*, Transition::*, *};
@@ -97,7 +97,7 @@ pub fn add_load_network_listener(
 #[profiling::function]
 fn load_network(
 	app_state: &ArcLockMachine,
-	storage: &ArcLockStorage,
+	storage: &Arc<RwLock<Storage>>,
 	entity_world: &Weak<RwLock<entity::World>>,
 	instruction: &Instruction,
 ) -> Result<Arc<Endpoint>> {
@@ -105,12 +105,11 @@ fn load_network(
 
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
-		let server = Server::load(&world_name).context("loading server")?;
+		let server = ServerStorage::load(&world_name).context("loading server")?;
 		storage.write().unwrap().set_server(server);
 	}
 	if instruction.mode.contains(mode::Kind::Client) {
-		let client = ArcLockClient::default();
-		storage.write().unwrap().set_client(client);
+		storage.write().unwrap().set_client(Default::default());
 	}
 
 	let socknet_port = instruction.port.unwrap_or(25565);

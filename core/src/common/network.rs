@@ -16,4 +16,9 @@ pub use client_joined::*;
 
 pub mod move_player;
 
+mod storage;
+pub use storage::*;
+
 pub mod replication;
+
+pub mod task;

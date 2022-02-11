@@ -44,7 +44,6 @@ pub mod debug;
 pub mod entity;
 pub mod graphics;
 pub mod input;
-pub mod network;
 pub mod plugin;
 pub mod ui;
 
@@ -97,8 +96,8 @@ pub fn run(config: plugin::Config) -> Result<()> {
 	let entity_world = entity::ArcLockEntityWorld::default();
 	entity::add_state_listener(&app_state, Arc::downgrade(&entity_world));
 
-	let network_storage = network::storage::Storage::new(&app_state);
-	network::task::add_unloading_state_listener(&app_state);
+	let network_storage = common::network::Storage::new(&app_state);
+	common::network::task::add_unloading_state_listener(&app_state);
 	entity::system::OwnedByConnection::add_state_listener(
 		&app_state,
 		Arc::downgrade(&network_storage),
@@ -119,7 +118,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		let engine = engine.into_arclock();
 		engine::Engine::set(engine.clone());
 
-		if let Err(error) = network::task::load_dedicated_server(
+		if let Err(error) = common::network::task::load_dedicated_server(
 			app_state.clone(),
 			network_storage.clone(),
 			Arc::downgrade(&entity_world),
@@ -131,7 +130,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		engine
 	} else {
 		input_user = Some(input::init());
-		network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
+		common::network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
 
 		{
 			let mut manager = client::account::Manager::write().unwrap();

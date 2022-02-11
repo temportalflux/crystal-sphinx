@@ -1,9 +1,7 @@
-use super::{
-	client::{self, ArcLockClient},
-	server::{self, ArcLockServer, Server},
-};
 use crate::{
-	app::state::ArcLockMachine, common::network::connection, common::network::mode,
+	app::state::ArcLockMachine,
+	common::network::connection,
+	common::network::mode,
 	entity::ArcLockEntityWorld,
 };
 use engine::{
@@ -13,6 +11,9 @@ use engine::{
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockStorage = Arc<RwLock<Storage>>;
+type ArcLockClient = Arc<RwLock<crate::client::network::Storage>>;
+type ArcLockServer = Arc<RwLock<crate::server::network::Storage>>;
+
 #[derive(Default)]
 pub struct Storage {
 	client: Option<ArcLockClient>,
@@ -84,7 +85,7 @@ impl Storage {
 		Arc::new(RwLock::new(self))
 	}
 
-	pub fn set_server(&mut self, server: Server) {
+	pub fn set_server(&mut self, server: crate::server::network::Storage) {
 		self.server = Some(Arc::new(RwLock::new(server)));
 	}
 
@@ -113,9 +114,10 @@ impl Storage {
 
 		// Integrated & Dedicated servers both use the ServerConfig route
 		if self.server.is_some() {
+			use crate::server::network::AllowAnyClient;
 			let crypto_config = rustls::ServerConfig::builder()
 				.with_safe_defaults()
-				.with_client_cert_verifier(server::AllowAnyClient::new())
+				.with_client_cert_verifier(AllowAnyClient::new())
 				.with_single_cert(vec![certificate.clone()], private_key.clone())?;
 			let quinn_config = quinn::ServerConfig::with_crypto(Arc::new(crypto_config));
 			Ok(Config::Server(endpoint::ServerConfig {
@@ -124,9 +126,10 @@ impl Storage {
 				private_key,
 			}))
 		} else {
+			use crate::client::network::SkipServerVerification;
 			let crypto_config = rustls::ClientConfig::builder()
 				.with_safe_defaults()
-				.with_custom_certificate_verifier(client::SkipServerVerification::new())
+				.with_custom_certificate_verifier(SkipServerVerification::new())
 				.with_single_cert(vec![certificate.clone()], private_key.clone())?;
 
 			let mut transport_config = quinn::TransportConfig::default();

@@ -1,14 +1,12 @@
 use crate::common::network::replication::entity::{Builder, Channel};
 use engine::{
 	network::socknet::{
-		connection::{Connection},
+		connection::Connection,
 		stream::{self, kind::send::Ongoing},
 	},
 	utility::Result,
 };
-use std::{
-	sync::{Arc, Weak},
-};
+use std::sync::{Arc, Weak};
 
 pub type Context = stream::Context<Builder, Ongoing>;
 

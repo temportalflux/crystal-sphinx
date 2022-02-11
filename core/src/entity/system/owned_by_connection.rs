@@ -1,8 +1,8 @@
 use crate::{
 	app::state,
 	common::network::connection,
+	common::network::Storage,
 	entity::{self},
-	network::storage::Storage,
 };
 use bus::BusReader;
 use engine::{Engine, EngineSystem};

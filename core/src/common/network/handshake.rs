@@ -2,10 +2,10 @@ use crate::{
 	app,
 	common::{
 		account,
-		network::{connection, mode, Broadcast, CloseCode, SendClientJoined},
+		network::{connection, mode, Broadcast, CloseCode, SendClientJoined, Storage},
 	},
 	entity,
-	network::storage::{self, server::ArcLockServer, Storage},
+	server::network::{Storage as ServerStorage},
 };
 use engine::{
 	network::socknet::{self, connection::Connection, stream},
@@ -63,12 +63,12 @@ impl Handshake {
 	}
 
 	fn storage(&self) -> Result<Arc<RwLock<Storage>>> {
-		use storage::Error::InvalidStorage;
+		use crate::common::network::Error::InvalidStorage;
 		Ok(self.context.storage.upgrade().ok_or(InvalidStorage)?)
 	}
 
-	fn server(&self) -> Result<ArcLockServer> {
-		use storage::Error::{FailedToReadStorage, InvalidServer};
+	fn server(&self) -> Result<Arc<RwLock<ServerStorage>>> {
+		use crate::common::network::Error::{FailedToReadStorage, InvalidServer};
 		let arc = self.storage()?;
 		let storage = arc.read().map_err(|_| FailedToReadStorage)?;
 		let server = storage.server().as_ref().ok_or(InvalidServer)?;
@@ -76,7 +76,7 @@ impl Handshake {
 	}
 
 	fn connection_list(&self) -> Result<Arc<RwLock<connection::List>>> {
-		use storage::Error::FailedToReadStorage;
+		use crate::common::network::Error::FailedToReadStorage;
 		let arc = self.storage()?;
 		let storage = arc.read().map_err(|_| FailedToReadStorage)?;
 		Ok(storage.connection_list().clone())
@@ -226,8 +226,8 @@ impl stream::handler::Receiver for Handshake {
 
 impl Handshake {
 	async fn process_server(&mut self, log: &String) -> Result<()> {
+		use crate::common::network::Error::{FailedToReadServer, FailedToWriteServer};
 		use account::key::{Key, PublicKey};
-		use storage::Error::{FailedToReadServer, FailedToWriteServer};
 		use stream::kind::{Read, Recv, Send, Write};
 		use utility::Context;
 
@@ -253,14 +253,14 @@ impl Handshake {
 			match server.find_user(&account_id) {
 				Some(arc_user) => (arc_user.clone(), false),
 				None => {
-					use crate::server::user::User;
+					use crate::server::user;
 					use account::Account;
 					let account = Account::new_public(
 						&server.get_players_dir_path(),
 						account_id.clone(),
 						public_key.clone(),
 					);
-					let arc_user = Arc::new(RwLock::new(User::new(account)));
+					let arc_user = Arc::new(RwLock::new(user::Active::new(account)));
 					(arc_user, true)
 				}
 			}

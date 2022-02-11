@@ -1,11 +1,12 @@
 use crate::{
 	app::state::Machine,
+	client::network::Storage as ClientStorage,
+	common::network::Storage as CommonStorage,
 	common::{
 		account,
 		network::{mode, move_player},
 	},
 	entity::{self, component},
-	network::storage::{client::Client, Storage},
 };
 use chrono::Utc;
 use engine::{
@@ -88,7 +89,7 @@ pub struct PlayerController {
 impl PlayerController {
 	pub fn add_state_listener(
 		app_state: &Arc<RwLock<Machine>>,
-		storage: Weak<RwLock<Storage>>,
+		storage: Weak<RwLock<CommonStorage>>,
 		world: Weak<RwLock<entity::World>>,
 		arc_user: input::ArcLockUser,
 	) {
@@ -115,7 +116,7 @@ impl PlayerController {
 
 				log::info!(target: LOG, "Initializing");
 
-				let server_connection = Client::get_server_connection(&callback_storage)?;
+				let server_connection = ClientStorage::get_server_connection(&callback_storage)?;
 
 				let account_id = crate::client::account::Manager::read()?
 					.active_account()?

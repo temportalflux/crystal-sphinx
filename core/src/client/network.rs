@@ -1,26 +1,20 @@
-use crate::{
-	client::account,
-	client::world::chunk::cache,
-	common::account::key,
-	network::storage::{self, Storage},
-};
+use crate::{client::account, client::world::chunk::cache, common, common::account::key};
 use engine::{socknet::connection::Connection, utility::Result};
 use std::sync::{Arc, RwLock, Weak};
 
-pub type ArcLockClient = Arc<RwLock<Client>>;
 /// Container class for all client data which is present when a user is connected to a game server.
-pub struct Client {
+pub struct Storage {
 	chunk_cache: cache::ArcLock,
 }
 
-impl Default for Client {
+impl Default for Storage {
 	fn default() -> Self {
 		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
 		Self { chunk_cache }
 	}
 }
 
-impl Client {
+impl Storage {
 	pub fn chunk_cache(&self) -> &cache::ArcLock {
 		&self.chunk_cache
 	}
@@ -43,9 +37,9 @@ impl Client {
 	}
 
 	pub fn get_server_connection(
-		storage: &Weak<RwLock<Storage>>,
+		storage: &Weak<RwLock<common::network::Storage>>,
 	) -> Result<Option<Weak<Connection>>> {
-		use storage::Error::{FailedToReadStorage, InvalidConnectionList, InvalidStorage};
+		use common::network::Error::{FailedToReadStorage, InvalidConnectionList, InvalidStorage};
 		let arc_storage = storage.upgrade().ok_or(InvalidStorage)?;
 		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
 		let arc_connection_list = storage.connection_list();

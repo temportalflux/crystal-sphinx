@@ -2,7 +2,7 @@ use crate::{
 	account,
 	common::account::key,
 	entity::{self, ArcLockEntityWorld},
-	server::user::User,
+	server::user,
 	server::world::{chunk, Database},
 };
 use engine::{
@@ -17,26 +17,23 @@ use std::{
 
 static LOG: &'static str = "server";
 
-pub mod user;
-
-pub type ArcLockServer = Arc<RwLock<Server>>;
-pub struct Server {
+pub struct Storage {
 	root_dir: PathBuf,
 
 	// OLD
 	auth_key: account::Key,
-	saved_users: HashMap<account::Id, Arc<RwLock<user::saved::User>>>,
+	saved_users: HashMap<account::Id, Arc<RwLock<user::Saved>>>,
 
 	// NEW
 	certificate: key::Certificate,
 	private_key: key::PrivateKey,
-	users: HashMap<account::Id, Arc<RwLock<User>>>,
+	users: HashMap<account::Id, Arc<RwLock<user::Active>>>,
 
 	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
 }
 
-impl Server {
+impl Storage {
 	#[profiling::function]
 	pub fn load(save_name: &str) -> Result<Self> {
 		use crate::common::utility::DataFile;
@@ -106,13 +103,13 @@ impl Server {
 		self.root_dir.file_name().unwrap().to_str().unwrap()
 	}
 
-	fn load_users(path: &Path) -> Result<HashMap<account::Id, Arc<RwLock<User>>>> {
+	fn load_users(path: &Path) -> Result<HashMap<account::Id, Arc<RwLock<user::Active>>>> {
 		std::fs::create_dir_all(path)?;
 		let mut users = HashMap::new();
 		for entry in std::fs::read_dir(path)? {
 			let user_path = entry?.path();
 			if user_path.is_dir() {
-				match User::load(&user_path) {
+				match user::Active::load(&user_path) {
 					Ok(user) => {
 						log::info!(target: LOG, "Loaded user {}", user.account().id());
 						users.insert(user.account().id().clone(), Arc::new(RwLock::new(user)));
@@ -131,7 +128,7 @@ impl Server {
 		Ok(users)
 	}
 
-	pub fn add_saved_user(&mut self, user: user::saved::User) {
+	pub fn add_saved_user(&mut self, user: user::Saved) {
 		let id = user.id().clone();
 		let arc_user = Arc::new(RwLock::new(user));
 		let thread_user = arc_user.clone();
@@ -144,11 +141,11 @@ impl Server {
 		self.saved_users.insert(id, arc_user);
 	}
 
-	pub fn find_saved_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::saved::User>>> {
+	pub fn find_saved_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::Saved>>> {
 		self.saved_users.get(id)
 	}
 
-	pub fn add_user(&mut self, id: account::Id, user: Arc<RwLock<User>>) {
+	pub fn add_user(&mut self, id: account::Id, user: Arc<RwLock<user::Active>>) {
 		self.users.insert(id, user.clone());
 		engine::task::spawn(LOG.to_string(), async move {
 			user.read().unwrap().save()?;
@@ -156,7 +153,7 @@ impl Server {
 		});
 	}
 
-	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<User>>> {
+	pub fn find_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::Active>>> {
 		self.users.get(id)
 	}
 
@@ -202,30 +199,5 @@ impl Server {
 	pub fn chunk_cache(&self) -> chunk::cache::ArcLock {
 		let database = self.database.as_ref().unwrap().read().unwrap();
 		database.chunk_cache().clone()
-	}
-}
-
-// Implementation of `ClientCertVerifier` that verifies everything as trustworthy.
-pub struct AllowAnyClient;
-
-impl AllowAnyClient {
-	pub fn new() -> Arc<Self> {
-		Arc::new(Self)
-	}
-}
-
-impl rustls::server::ClientCertVerifier for AllowAnyClient {
-	fn client_auth_root_subjects(&self) -> Option<rustls::DistinguishedNames> {
-		Some(vec![])
-	}
-
-	fn verify_client_cert(
-		&self,
-		_end_entity: &rustls::Certificate,
-		_intermediates: &[rustls::Certificate],
-		_now: std::time::SystemTime,
-	) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
-		log::info!(target: "server", "Ignoring verification of client certificate");
-		Ok(rustls::server::ClientCertVerified::assertion())
 	}
 }

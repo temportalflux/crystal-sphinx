@@ -2,12 +2,12 @@ use crate::{
 	app::state::{self, ArcLockMachine},
 	block,
 	client::world::chunk::cache,
+	common::network::Storage,
 	graphics::voxel::{
 		camera,
 		instance::{self, Instance},
 		model,
 	},
-	network::storage::Storage,
 	CrystalSphinx,
 };
 use engine::{

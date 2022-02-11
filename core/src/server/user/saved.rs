@@ -2,22 +2,13 @@ use crate::account;
 use engine::utility::Result;
 use std::path::{Path, PathBuf};
 
-pub struct User {
+pub struct Saved {
 	save_location: PathBuf,
 	meta: account::Meta,
 	key: account::Key,
 }
 
-impl User {
-	pub fn new(pending: &super::pending::User, mut save_location: PathBuf) -> Self {
-		save_location.push(pending.meta().id.to_string());
-		Self {
-			save_location,
-			meta: pending.meta().clone(),
-			key: pending.public_key().clone(),
-		}
-	}
-
+impl Saved {
 	#[profiling::function]
 	pub fn load(dir: &Path) -> Result<Self> {
 		let meta = account::Meta::load(&account::Meta::make_path(dir))?;

@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock, Weak};
 
 use engine::{network::socknet::stream, utility::Result};
 
-use crate::{entity::system::replicator::relevancy::Relevance, network::storage::Storage};
+use crate::{common::network::Storage, entity::system::replicator::relevancy::Relevance};
 
 pub mod client;
 pub mod server;
@@ -29,7 +29,7 @@ impl stream::recv::Builder for Builder {
 
 impl Builder {
 	pub fn client_chunk_cache(&self) -> Result<crate::client::world::chunk::cache::ArcLock> {
-		use crate::network::storage::Error::{
+		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
 		};
 		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;

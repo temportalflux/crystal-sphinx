@@ -1,13 +1,13 @@
 use crate::{
 	app::state,
 	common::network::connection,
+	common::network::Storage,
 	common::utility::MultiSet,
 	entity::{
 		self,
 		component::{self, binary, network},
 		ArcLockEntityWorld,
 	},
-	network::storage::Storage,
 	server::world::chunk::{self, Chunk},
 };
 use bus::BusReader;

@@ -1,8 +1,8 @@
 use crate::{
 	app::state::ArcLockMachine,
 	block::{self, Block},
+	common::network::Storage,
 	graphics::voxel::{atlas, camera, model, RenderVoxel},
-	network::storage::Storage,
 };
 use engine::{
 	asset,

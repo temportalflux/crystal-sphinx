@@ -11,7 +11,7 @@ pub enum WorldOption {
 
 impl WorldOption {
 	fn to_transition_data(&self) -> app::state::TransitionData {
-		use crate::network::task::Instruction;
+		use crate::common::network::task::Instruction;
 		let mode = mode::Set::all();
 		let port = LocalData::get_named_arg("host_port");
 		Some(Box::new(match self {

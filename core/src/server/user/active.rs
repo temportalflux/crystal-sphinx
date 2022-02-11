@@ -2,11 +2,11 @@ use crate::{common::account::Account, common::utility::DataFile};
 use engine::utility::Result;
 use std::path::Path;
 
-pub struct User {
+pub struct Active {
 	account: Account,
 }
 
-impl User {
+impl Active {
 	pub fn new(account: Account) -> Self {
 		Self { account }
 	}
