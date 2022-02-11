@@ -1,10 +1,7 @@
 use std::sync::Arc;
-
-use crate::common::network::move_player::Datum;
-
-use super::Builder;
+use crate::common::network::move_player::{Datum, Builder};
 use engine::socknet::{
-	connection::Connection,
+	connection::{Connection, Active},
 	stream::{
 		self,
 		kind::recv::{self, Datagram},
@@ -34,16 +31,25 @@ impl stream::handler::Receiver for Handler {
 	type Builder = Builder;
 	fn receive(mut self) {
 		self.connection.clone().spawn(async move {
-			use stream::kind::Read;
 			use crate::entity::component::{physics::linear, Orientation};
+			use stream::kind::Read;
 			let data = self.recv.read::<Datum>().await?;
+
+			// Analyze the timestamp and only accept the data if its newer than the last received move update.
+			if let Ok(mut sequencer) = self.context.sequencer.write() {
+				let address = self.connection.remote_address();
+				if let Some(prev_timestamp) = sequencer.get(&address) {
+					if data.timestamp <= *prev_timestamp {
+						return Ok(());
+					}
+				}
+				sequencer.insert(address, data.timestamp);
+			}
 
 			let arc_world = match self.context.entity_world.upgrade() {
 				Some(arc) => arc,
 				None => return Ok(()),
 			};
-
-			// TODO: Analyze the timestamp and only accept the data if its newer than the last received move update.
 
 			let mut world = arc_world.write().unwrap();
 			if let Ok(entity_ref) = world.entity(data.server_entity) {

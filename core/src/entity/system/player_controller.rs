@@ -5,9 +5,7 @@ use crate::{
 		network::{mode, move_player},
 	},
 	entity::{self, component, ArcLockEntityWorld},
-	network::{
-		storage::{client::Client, Storage},
-	},
+	network::storage::{client::Client, Storage},
 };
 use chrono::Utc;
 use engine::{

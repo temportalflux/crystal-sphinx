@@ -1,5 +1,6 @@
-use std::sync::{RwLock, Weak};
+use std::{sync::{RwLock, Arc, Weak}, collections::HashMap, net::SocketAddr};
 
+use chrono::{DateTime, Utc};
 use engine::socknet::stream::{
 	self,
 	kind::send::{self, Datagram},
@@ -9,6 +10,7 @@ use crate::entity;
 
 pub struct Builder {
 	pub entity_world: Weak<RwLock<entity::World>>,
+	pub sequencer: Arc<RwLock<HashMap<SocketAddr, DateTime<Utc>>>>,
 }
 
 impl stream::Identifier for Builder {
