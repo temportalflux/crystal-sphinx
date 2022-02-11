@@ -6,9 +6,10 @@ use crate::{
 		model,
 	},
 };
+use anyhow::Result;
 use engine::{
 	graphics::{command, RenderChain},
-	utility::{self, Result},
+	utility::{self},
 };
 use std::sync::{Arc, Mutex, Weak};
 

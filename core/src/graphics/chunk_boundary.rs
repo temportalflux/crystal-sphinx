@@ -4,6 +4,7 @@ use crate::{
 	graphics::voxel::camera,
 	CrystalSphinx,
 };
+use anyhow::Result;
 use engine::{
 	asset,
 	graphics::{
@@ -15,7 +16,6 @@ use engine::{
 	},
 	input,
 	math::nalgebra::{Point3, Vector2, Vector4},
-	utility::Result,
 	Application, Engine, EngineSystem,
 };
 use enumset::{EnumSet, EnumSetType};

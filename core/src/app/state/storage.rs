@@ -1,5 +1,5 @@
 use super::{ArcLockMachine, OperationKey};
-use engine::utility::Result;
+use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
 pub enum Event {

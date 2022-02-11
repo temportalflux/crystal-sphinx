@@ -2,7 +2,8 @@ use crate::server::world::{
 	chunk::{cache, thread, ticket, Level, Ticket},
 	Settings,
 };
-use engine::{math::nalgebra::Point3, utility::Result};
+use anyhow::Result;
+use engine::math::nalgebra::Point3;
 use std::{
 	path::PathBuf,
 	sync::{Arc, RwLock, Weak},

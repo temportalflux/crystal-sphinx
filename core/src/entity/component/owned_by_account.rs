@@ -1,5 +1,5 @@
 use crate::account;
-use engine::utility::Result;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Indicates that an entity is controlled by a given account/user.

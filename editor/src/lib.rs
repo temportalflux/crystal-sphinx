@@ -1,6 +1,7 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::{utility::Result, Application};
+use engine::Application;
 
+use anyhow::Result;
 pub mod block;
 
 pub fn register_asset_types(manager: &mut editor::asset::Manager) {

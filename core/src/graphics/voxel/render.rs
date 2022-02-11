@@ -10,6 +10,7 @@ use crate::{
 	},
 	CrystalSphinx,
 };
+use anyhow::Result;
 use engine::{
 	asset,
 	graphics::{
@@ -17,7 +18,6 @@ use engine::{
 		Uniform,
 	},
 	math::nalgebra::Vector2,
-	utility::Result,
 	Application,
 };
 use std::sync::{Arc, RwLock, Weak};

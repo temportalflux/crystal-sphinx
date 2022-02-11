@@ -30,7 +30,8 @@
 //! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
-use engine::{utility::Result, Application};
+use anyhow::Result;
+use engine::Application;
 
 pub mod client;
 pub mod common;

@@ -1,6 +1,6 @@
 use super::Builder;
 use crate::server::world::chunk::Chunk as ServerChunk;
-use engine::utility::Result;
+use anyhow::Result;
 use socknet::{
 	connection::Connection,
 	stream::{self, kind::send::Ongoing},

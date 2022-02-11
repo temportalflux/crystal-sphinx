@@ -1,3 +1,4 @@
+use anyhow::Result;
 use engine::{
 	asset,
 	graphics::{
@@ -6,7 +7,6 @@ use engine::{
 		GpuOperationBuilder, RenderChain, Texture,
 	},
 	math::nalgebra::{Point2, Vector2},
-	utility::Result,
 };
 use std::{collections::HashMap, sync::Arc};
 

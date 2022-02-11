@@ -1,8 +1,6 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
-use engine::{
-	math::nalgebra::{UnitQuaternion, Vector3},
-	utility::Result,
-};
+use engine::math::nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use socknet::{connection::Connection, stream};
 use std::sync::Weak;

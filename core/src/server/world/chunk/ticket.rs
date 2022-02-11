@@ -2,10 +2,8 @@ use crate::server::world::{
 	chunk::{Level, ParameterizedLevel},
 	Database,
 };
-use engine::{
-	math::nalgebra::{Point3, Vector3},
-	utility::Result,
-};
+use anyhow::Result;
+use engine::math::nalgebra::{Point3, Vector3};
 use std::sync::Arc;
 
 /// The channel through which chunk [tickets are sent](Ticket::submit).

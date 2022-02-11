@@ -3,10 +3,8 @@ use crate::server::world::chunk::{
 	ticket::{self, Ticket},
 	Chunk, Level,
 };
-use engine::{
-	math::nalgebra::Point3,
-	utility::{spawn_thread, Result},
-};
+use anyhow::Result;
+use engine::{math::nalgebra::Point3, utility::spawn_thread};
 use std::{
 	collections::HashMap,
 	path::PathBuf,

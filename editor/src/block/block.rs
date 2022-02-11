@@ -1,9 +1,7 @@
+use anyhow::Result;
 use crystal_sphinx::block::Block;
 use editor::asset::TypeEditorMetadata;
-use engine::{
-	asset::{AnyBox, AssetResult},
-	utility::Result,
-};
+use engine::asset::{AnyBox, AssetResult};
 use std::path::Path;
 
 pub struct BlockEditorMetadata;

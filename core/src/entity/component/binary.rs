@@ -1,4 +1,4 @@
-use engine::utility::Result;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::entity::component::Registry;

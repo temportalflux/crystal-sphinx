@@ -1,5 +1,5 @@
 use crate::entity::component::Component;
-use engine::utility::Result;
+use anyhow::Result;
 use std::{any::TypeId, collections::HashMap};
 
 pub struct Registration<T: Component> {

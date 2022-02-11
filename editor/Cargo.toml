@@ -16,3 +16,4 @@ editor = { path = "../temportal-engine/editor", package = "temportal-engine-edit
 log = "0.4.14"
 rmp = "0.8"
 rmp-serde = "0.15"
+anyhow = "1.0"

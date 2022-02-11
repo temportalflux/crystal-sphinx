@@ -1,4 +1,4 @@
-use engine::utility::Result;
+use anyhow::Result;
 use socknet::stream;
 use std::sync::{Arc, RwLock, Weak};
 

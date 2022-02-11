@@ -1,4 +1,5 @@
-use engine::{math::nalgebra::UnitQuaternion, utility::Result};
+use anyhow::Result;
+use engine::math::nalgebra::UnitQuaternion;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

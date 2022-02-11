@@ -3,7 +3,8 @@ use crate::entity::{
 	component::{self, debug},
 	ArcLockEntityWorld,
 };
-use engine::{ui::egui::Element, utility::Result};
+use anyhow::Result;
+use engine::ui::egui::Element;
 use enumset::{EnumSet, EnumSetType};
 use std::{
 	collections::HashSet,

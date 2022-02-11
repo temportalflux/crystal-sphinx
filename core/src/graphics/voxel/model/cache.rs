@@ -2,12 +2,10 @@ use crate::{
 	block,
 	graphics::voxel::model::{Model, Vertex},
 };
-use engine::{
-	graphics::{
-		buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
-		GpuOperationBuilder, RenderChain,
-	},
-	utility::Result,
+use anyhow::Result;
+use engine::graphics::{
+	buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
+	GpuOperationBuilder, RenderChain,
 };
 use std::{collections::HashMap, sync::Arc};
 

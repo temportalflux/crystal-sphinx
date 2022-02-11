@@ -1,5 +1,6 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
-use engine::{math::nalgebra::Vector3, utility::Result};
+use anyhow::Result;
+use engine::math::nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

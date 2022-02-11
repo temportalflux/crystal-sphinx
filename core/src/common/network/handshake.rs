@@ -7,7 +7,7 @@ use crate::{
 	entity,
 	server::network::Storage as ServerStorage,
 };
-use engine::utility::{self, Result};
+use anyhow::Result;
 use socknet::{self, connection::Connection, stream};
 use std::sync::{Arc, RwLock, Weak};
 
@@ -111,11 +111,11 @@ impl Handshake {
 	}
 
 	async fn process_client(&mut self, log: &str) -> Result<()> {
+		use anyhow::Context;
 		use stream::{
 			kind::{Read, Write},
 			Identifier,
 		};
-		use utility::Context;
 		log::info!(target: &log, "Initiating handshake");
 
 		let display_name = {
@@ -203,8 +203,8 @@ impl stream::handler::Receiver for Handshake {
 	fn receive(mut self) {
 		let log = self.log("server");
 		engine::task::spawn(log.clone(), async move {
+			use anyhow::Context;
 			use stream::kind::{Recv, Send};
-			use utility::Context;
 			if let Err(error) = self
 				.process_server(&log)
 				.await
@@ -226,8 +226,8 @@ impl Handshake {
 	async fn process_server(&mut self, log: &String) -> Result<()> {
 		use crate::common::network::Error::{FailedToReadServer, FailedToWriteServer};
 		use account::key::{Key, PublicKey};
+		use anyhow::Context;
 		use stream::kind::{Read, Recv, Send, Write};
-		use utility::Context;
 
 		let account_id = self.connection.fingerprint()?;
 		log::info!(

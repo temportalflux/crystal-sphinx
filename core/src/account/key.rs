@@ -1,5 +1,5 @@
 use crate::common::utility::DataFile;
-use engine::utility::Result;
+use anyhow::Result;
 use std::path::Path;
 
 pub fn new() -> Result<(Certificate, PrivateKey)> {

@@ -1,5 +1,5 @@
 use crate::common::network::replication::entity::{Builder, Channel};
-use engine::utility::Result;
+use anyhow::Result;
 use socknet::{
 	connection::Connection,
 	stream::{self, kind::send::Ongoing},

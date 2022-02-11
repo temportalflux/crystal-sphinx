@@ -1,9 +1,7 @@
 use crate::graphics::voxel::instance::{category::Category, local::IntegratedBuffer, Instance};
-use engine::{
-	graphics::{
-		buffer::Buffer, command, flags, utility::NamedObject, GpuOperationBuilder, RenderChain,
-	},
-	utility::Result,
+use anyhow::Result;
+use engine::graphics::{
+	buffer::Buffer, command, flags, utility::NamedObject, GpuOperationBuilder, RenderChain,
 };
 use std::sync::Arc;
 

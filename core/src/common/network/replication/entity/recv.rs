@@ -5,7 +5,7 @@ use crate::{
 		component::{self, binary::SerializedEntity},
 	},
 };
-use engine::utility::Result;
+use anyhow::Result;
 use socknet::{
 	connection::{self, Connection},
 	stream::{self, kind::recv::Ongoing},
