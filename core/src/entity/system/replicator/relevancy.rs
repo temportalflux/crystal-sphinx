@@ -90,6 +90,24 @@ impl Relevance {
 		let other_chunks = other.get_relevant_chunks();
 		self_chunks.difference(&other_chunks).cloned().collect()
 	}
+
+	/// Returns the minimum significant distance squared by
+	/// comparing the provided point against the origin of each area in the group.
+	pub fn min_sig_dist_sq(&self, point: &Point3<i64>) -> f32 {
+		self.0
+			.iter()
+			.map(|area| (point - area.0).cast::<f32>().magnitude_squared())
+			.fold(f32::INFINITY, |a1, a2| a1.min(a2))
+	}
+
+	pub fn sort_vec_by_sig_dist(&self, points: &mut Vec<Point3<i64>>) {
+		points.sort_by(|a, b| {
+			let a_dist = self.min_sig_dist_sq(&a);
+			let b_dist = self.min_sig_dist_sq(&b);
+			a_dist.partial_cmp(&b_dist).unwrap()
+		});
+	}
+
 }
 
 pub enum Update {

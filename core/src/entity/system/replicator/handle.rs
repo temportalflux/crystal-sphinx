@@ -33,6 +33,7 @@ impl Handle {
 		let relevancy_log = format!("relevancy[{}]", address);
 		let (send_world_rel, recv_world_rel) = async_channel::unbounded();
 		let (send_entities, recv_entities) = async_channel::unbounded();
+		let (send_chunks, recv_chunks) = async_channel::unbounded();
 
 		{
 			use replication::entity::send::Handler;
@@ -41,7 +42,12 @@ impl Handle {
 
 		{
 			use replication::world::relevancy::Handler;
-			Handler::spawn(connection.clone(), recv_world_rel);
+			Handler::spawn(connection.clone(), recv_world_rel, send_chunks);
+		}
+
+		for i in 0..10 {
+			use replication::world::chunk::server;
+			server::Chunk::spawn(connection.clone(), i, recv_chunks.clone());
 		}
 
 		Self {

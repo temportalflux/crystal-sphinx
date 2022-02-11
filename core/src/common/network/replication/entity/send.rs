@@ -62,12 +62,9 @@ impl Handler {
 
 	async fn send_until_closed(&mut self, log: &str, channel: Channel) -> Result<()> {
 		use stream::kind::Write;
-		log::debug!(target: &log, "send_until_closed");
 		while let Ok(update) = channel.recv().await {
-			log::debug!(target: &log, "Sending update {:?}", update);
 			self.send.write(&update).await?;
 		}
-		log::debug!(target: &log, "</>send_until_closed");
 		Ok(())
 	}
 }

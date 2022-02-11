@@ -21,7 +21,7 @@ pub struct Cache {
 
 	added: MultiMap<Point3<i64>, Point3<usize>>,
 	added_order: Vec<Point3<i64>>,
-	removed: HashSet<Point3<i64>>,
+	removed: Vec<Point3<i64>>,
 }
 
 impl Cache {
@@ -30,7 +30,7 @@ impl Cache {
 			loaded_chunks: HashMap::new(),
 			added: MultiMap::new(),
 			added_order: Vec::new(),
-			removed: HashSet::new(),
+			removed: Vec::new(),
 		}
 	}
 
@@ -68,7 +68,7 @@ impl Cache {
 
 	pub fn remove(&mut self, coordinate: &Point3<i64>) {
 		let _ = self.loaded_chunks.remove(coordinate);
-		self.removed.insert(*coordinate);
+		self.removed.push(*coordinate);
 	}
 
 	pub fn has_pending(&self) -> bool {
@@ -77,7 +77,7 @@ impl Cache {
 
 	pub fn take_pending(&mut self) -> Vec<Operation> {
 		let mut operations = Vec::with_capacity(self.added.len() + self.removed.len());
-		for coord in self.removed.drain() {
+		for coord in self.removed.drain(..) {
 			operations.push(Operation::Remove(coord));
 		}
 		for coord in self.added_order.drain(..) {

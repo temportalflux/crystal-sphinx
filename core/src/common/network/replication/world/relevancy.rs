@@ -73,7 +73,8 @@ impl Builder {
 }
 
 pub type Context = stream::Context<Builder, Bidirectional>;
-pub type Channel = async_channel::Receiver<relevancy::WorldUpdate>;
+pub type RecvUpdate = async_channel::Receiver<relevancy::WorldUpdate>;
+pub type SendChunks = async_channel::Sender<Weak<RwLock<Chunk>>>;
 
 pub struct Handler {
 	#[allow(dead_code)]
@@ -106,7 +107,7 @@ impl stream::handler::Initiator for Handler {
 }
 
 impl Handler {
-	pub fn spawn(connection: Weak<Connection>, channel: Channel) {
+	pub fn spawn(connection: Weak<Connection>, channel: RecvUpdate, send_chunks: SendChunks) {
 		let arc = Connection::upgrade(&connection).unwrap();
 		arc.spawn(async move {
 			use connection::Active;
@@ -115,7 +116,7 @@ impl Handler {
 			let log = Self::log_target("server", &stream.connection.remote_address());
 			log::debug!(target: &log, "Establishing stream");
 			stream.initiate().await?;
-			stream.send_until_closed(&log, channel).await?;
+			stream.send_until_closed(&log, channel, send_chunks).await?;
 			log::debug!(target: &log, "Closing stream");
 			Ok(())
 		});
@@ -127,20 +128,24 @@ impl Handler {
 		Ok(())
 	}
 
-	async fn send_until_closed(&mut self, log: &str, channel: Channel) -> Result<()> {
-		log::debug!(target: &log, "send_until_closed");
+	async fn send_until_closed(
+		&mut self,
+		log: &str,
+		channel: RecvUpdate,
+		send_chunks: SendChunks,
+	) -> Result<()> {
 		while let Ok(update) = channel.recv().await {
 			match update {
 				relevancy::WorldUpdate::Relevance(relevance) => {
-					log::debug!(target: &log, "Preparing to send relevance");
 					self.send_relevance(relevance).await?;
 				}
-				relevancy::WorldUpdate::Chunks(chunks) => {
-					self.open_repl_streams(chunks).await?;
+				relevancy::WorldUpdate::Chunks(mut chunks) => {
+					for chunk in chunks.into_iter() {
+						send_chunks.send(chunk).await?;
+					}
 				}
 			}
 		}
-		log::debug!(target: &log, "</>send_until_closed");
 		Ok(())
 	}
 
@@ -153,29 +158,6 @@ impl Handler {
 		// Wait for acknowledgement byte from client
 		let _ = self.recv.read_size().await?;
 
-		Ok(())
-	}
-
-	async fn open_repl_streams(&self, chunks: Vec<Weak<RwLock<Chunk>>>) -> Result<()> {
-		// Spin up individual streams for each chunk now that the client is expecting them
-		let weak_connection = Arc::downgrade(&self.connection);
-		for weak_server_chunk in chunks.into_iter() {
-			let arc_server_chunk = match weak_server_chunk.upgrade() {
-				Some(arc) => arc,
-				// If the chunk has been unloaded, then we dont need to replicated it.
-				None => return Ok(()),
-			};
-
-			let connection = weak_connection.clone();
-			self.connection.spawn(async move {
-				use super::chunk::server::Chunk;
-				use stream::handler::Initiator;
-				let mut stream = Chunk::open(&connection)?.await?;
-				stream.initiate().await?;
-				stream.write_chunk(arc_server_chunk).await?;
-				Ok(())
-			});
-		}
 		Ok(())
 	}
 }
@@ -191,8 +173,6 @@ impl stream::handler::Receiver for Handler {
 
 			// Read any incoming relevancy until the client is disconnected.
 			while let Ok(relevance) = self.recv.read::<relevancy::Relevance>().await {
-				log::debug!(target: &log, "Received {:?}", relevance);
-
 				// Get the set of chunks which are only in the old relevance,
 				// and write the new relevance to the shared list.
 				let old_chunks = {
@@ -202,7 +182,7 @@ impl stream::handler::Receiver for Handler {
 					// Compare old relevance with new relevance to determine what chunks are no longer relevant
 					let old_chunks = local_relevance.difference(&relevance);
 					// Save new relevance (before sending acknowledgement) so that the incoming chunk packets are actually processed
-					*local_relevance = relevance;
+					*local_relevance = relevance.clone();
 					old_chunks
 				};
 
@@ -210,12 +190,15 @@ impl stream::handler::Receiver for Handler {
 				// ready to receive the individual streams for chunk data.
 				self.send.write_size(0).await?;
 
+				let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
+				relevance.sort_vec_by_sig_dist(&mut old_chunks);
+
 				// We can expect that sometime after the acknowledgement is sent,
 				// the server will open streams for any/all new chunks to be replicated.
 				// So its possible that those streams are now active while we are also
 				// removing old chunks from the cache.
 				if let Ok(mut cache) = self.context.client_chunk_cache()?.write() {
-					for coord in old_chunks.into_iter() {
+					for coord in old_chunks.into_iter().rev() {
 						cache.remove(&coord);
 					}
 				}

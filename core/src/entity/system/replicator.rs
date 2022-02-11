@@ -290,6 +290,8 @@ impl EntityUpdates {
 					pending_chunks.insert(coordinate);
 				}
 			}
+			let mut pending_chunks = pending_chunks.into_iter().collect::<Vec<_>>();
+			next_relevance.sort_vec_by_sig_dist(&mut pending_chunks);
 			for coordinate in pending_chunks.into_iter() {
 				// If the chunk is in the cache, then the server has it loaded (to some degree).
 				// If not, it needs to go back on the component for the next update cycle.

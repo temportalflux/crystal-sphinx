@@ -74,7 +74,6 @@ impl stream::handler::Receiver for Handler {
 
 impl Handler {
 	fn process_update(&mut self, log: &str, update: Update) -> Result<()> {
-		log::info!(target: &log, "Received update: {:?}", update);
 		match update {
 			Update::Relevant(serialized) => {
 				self.spawn_entity(serialized)?;

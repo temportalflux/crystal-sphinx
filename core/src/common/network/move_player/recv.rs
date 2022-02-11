@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use crate::common::network::move_player::{Datum, Builder};
+use crate::common::network::move_player::{Builder, Datum};
 use engine::socknet::{
-	connection::{Connection, Active},
+	connection::{Active, Connection},
 	stream::{
 		self,
 		kind::recv::{self, Datagram},
 	},
 };
+use std::sync::Arc;
 
 type Context = stream::Context<Builder, recv::Datagram>;
 

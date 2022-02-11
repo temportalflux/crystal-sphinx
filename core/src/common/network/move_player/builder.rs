@@ -1,4 +1,8 @@
-use std::{sync::{RwLock, Arc, Weak}, collections::HashMap, net::SocketAddr};
+use std::{
+	collections::HashMap,
+	net::SocketAddr,
+	sync::{Arc, RwLock, Weak},
+};
 
 use chrono::{DateTime, Utc};
 use engine::socknet::stream::{
