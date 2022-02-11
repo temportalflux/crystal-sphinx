@@ -45,7 +45,6 @@ impl Storage {
 					let async_app_state = callback_app_state.clone();
 					engine::task::spawn("disconnecting".to_owned(), async move {
 						profiling::scope!("finalize-disconnect");
-						use crate::app::state::State::MainMenu;
 						let app_state = async_app_state.upgrade().unwrap();
 						// This will be blocked for some ms until after the transition is complete,
 						// because this callback is being performed via a mutable app_state.

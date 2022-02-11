@@ -6,7 +6,6 @@ use crate::{
 	server::world::{chunk, Database},
 };
 use engine::{
-	network::endpoint,
 	utility::{Context, Result},
 	Engine, EngineSystem,
 };

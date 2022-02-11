@@ -4,14 +4,13 @@ use crate::{
 		account,
 		network::{mode, move_player},
 	},
-	entity::{self, component, ArcLockEntityWorld},
+	entity::{self, component},
 	network::storage::{client::Client, Storage},
 };
 use chrono::Utc;
 use engine::{
 	input,
 	math::nalgebra::{Unit, UnitQuaternion, Vector3},
-	network,
 	socknet::connection::Connection,
 	world, Engine, EngineSystem,
 };
@@ -106,7 +105,6 @@ impl PlayerController {
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
-				use crate::common::network::mode;
 				profiling::scope!("init-subsystem", LOG);
 
 				// This system should only be active/present while

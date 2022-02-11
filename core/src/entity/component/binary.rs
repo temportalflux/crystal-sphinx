@@ -35,16 +35,6 @@ impl SerializedEntity {
 	}
 }
 
-#[derive(thiserror::Error, Debug)]
-enum SerializationError {
-	#[error("Failed to deserialize, no registration found for component-type({0}).")]
-	NoRegistration(String),
-	#[error(
-		"Failed to deserialize, no binary registration extension found for component-type({0})."
-	)]
-	NoBinaryExtension(String),
-}
-
 /// Trait implemented by components to provide functionality for serializing to and deserializing from binary data.
 pub trait Serializable: super::Component {
 	fn serialize(&self) -> Result<Vec<u8>>

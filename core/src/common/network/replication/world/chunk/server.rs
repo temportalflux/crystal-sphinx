@@ -1,17 +1,13 @@
 use super::Builder;
 use crate::server::world::chunk::Chunk as ServerChunk;
 use engine::{
-	math::nalgebra::Point3,
 	network::socknet::{
-		connection::{self, Connection},
+		connection::Connection,
 		stream::{self, kind::send::Ongoing},
 	},
 	utility::Result,
 };
-use std::{
-	net::SocketAddr,
-	sync::{Arc, RwLock, Weak},
-};
+use std::sync::{Arc, RwLock, Weak};
 
 pub type Context = stream::Context<Builder, Ongoing>;
 pub type RecvChunks = async_channel::Receiver<Weak<RwLock<ServerChunk>>>;
@@ -39,15 +35,9 @@ impl stream::handler::Initiator for Chunk {
 }
 
 impl Chunk {
-	fn log_target(kind: &str, address: &SocketAddr, index: usize) -> String {
-		use stream::Identifier;
-		format!("{}/{}[{}][{}]", kind, Builder::unique_id(), address, index)
-	}
-
 	pub fn spawn(connection: Weak<Connection>, index: usize, recv_chunks: RecvChunks) {
 		let arc = Connection::upgrade(&connection).unwrap();
 		arc.spawn(async move {
-			use connection::Active;
 			use stream::handler::Initiator;
 			let mut stream = Self::open(&connection)?.await?;
 			stream.initiate().await?;
@@ -63,8 +53,7 @@ impl Chunk {
 	}
 
 	async fn send_until_closed(&mut self, index: usize, recv_chunks: RecvChunks) -> Result<()> {
-		use connection::Active;
-		use stream::{kind::Write, Identifier};
+		use stream::kind::Write;
 		self.send.write_size(index).await?;
 		while let Ok(weak_server_chunk) = recv_chunks.recv().await {
 			let arc_server_chunk = match weak_server_chunk.upgrade() {

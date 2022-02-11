@@ -1,6 +1,5 @@
-use crate::entity::component::{chunk::Relevancy, physics::linear::Position};
-use engine::math::nalgebra::{Point3, Vector3};
-use std::collections::HashSet;
+use crate::entity::component::physics::linear::Position;
+use engine::math::nalgebra::Point3;
 
 pub struct UpdatedEntity {
 	pub entity: hecs::Entity,

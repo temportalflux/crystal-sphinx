@@ -3,7 +3,6 @@ use engine::socknet::{
 	connection::{self, event, Active, Connection},
 	utility::JoinHandleList,
 };
-use multimap::MultiMap;
 use std::{
 	collections::HashMap,
 	net::SocketAddr,
@@ -29,7 +28,7 @@ impl List {
 		let async_list = list.clone();
 		let target = "connection-list".to_owned();
 		handles.spawn(target.clone(), async move {
-			use connection::{event::Event::*, Active};
+			use connection::event::Event::*;
 			while let Ok(event) = receiver.recv().await {
 				match event {
 					Created(connection) => {

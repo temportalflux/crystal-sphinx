@@ -3,7 +3,7 @@ use engine::socknet::{
 	connection::{Active, Connection},
 	stream::{
 		self,
-		kind::recv::{self, Datagram},
+		kind::recv::{self},
 	},
 };
 use std::sync::Arc;
@@ -51,7 +51,7 @@ impl stream::handler::Receiver for Handler {
 				None => return Ok(()),
 			};
 
-			let mut world = arc_world.write().unwrap();
+			let world = arc_world.write().unwrap();
 			if let Ok(entity_ref) = world.entity(data.server_entity) {
 				if let Some(mut velocity) = entity_ref.get_mut::<linear::Velocity>() {
 					**velocity = data.velocity;

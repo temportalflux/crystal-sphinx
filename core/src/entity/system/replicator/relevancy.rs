@@ -1,9 +1,8 @@
-use crate::{common::utility::MultiSet, server::world::chunk::Chunk};
+use crate::server::world::chunk::Chunk;
 use engine::math::nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
 use std::{
-	collections::{HashMap, HashSet},
-	net::SocketAddr,
+	collections::HashSet,
 	sync::{RwLock, Weak},
 };
 
@@ -107,7 +106,6 @@ impl Relevance {
 			a_dist.partial_cmp(&b_dist).unwrap()
 		});
 	}
-
 }
 
 pub enum Update {

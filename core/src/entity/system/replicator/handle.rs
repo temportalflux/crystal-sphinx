@@ -1,15 +1,10 @@
 use super::{relevancy, EntityOperation};
 use crate::{common::network::replication, entity::component::binary};
-use engine::{
-	math::nalgebra::Point3,
-	network::socknet::{connection::Connection, stream, utility::JoinHandleList},
-	task::JoinHandle,
-	utility::Result,
-};
+use engine::{math::nalgebra::Point3, network::socknet::connection::Connection};
 use std::{
 	collections::{HashMap, HashSet},
 	net::SocketAddr,
-	sync::{Arc, Weak},
+	sync::Weak,
 };
 
 /// Stateful information about what is relevant to a specific client.

@@ -133,7 +133,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		input_user = Some(input::init());
 		network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
 
-		let account_id = {
+		{
 			let mut manager = client::account::Manager::write().unwrap();
 			manager.scan_accounts()?;
 
@@ -143,8 +143,6 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 			let user_id = manager.ensure_account(&user_name)?;
 			manager.login_as(&user_id)?;
-
-			user_id
 		};
 		entity::system::PlayerController::add_state_listener(
 			&app_state,

@@ -2,7 +2,6 @@ use crate::{
 	entity::system::replicator::relevancy, network::storage::Storage, server::world::chunk::Chunk,
 };
 use engine::{
-	math::nalgebra::Point3,
 	network::socknet::{
 		connection::{self, Connection},
 		stream::{
@@ -12,9 +11,7 @@ use engine::{
 	},
 	utility::Result,
 };
-use serde::{Deserialize, Serialize};
 use std::{
-	collections::HashSet,
 	net::SocketAddr,
 	sync::{Arc, RwLock, Weak},
 };
@@ -49,17 +46,6 @@ impl stream::recv::Builder for Builder {
 }
 
 impl Builder {
-	fn server_chunk_cache(&self) -> Result<crate::server::world::chunk::cache::ArcLock> {
-		use crate::network::storage::Error::{
-			FailedToReadServer, FailedToReadStorage, InvalidServer, InvalidStorage,
-		};
-		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;
-		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
-		let arc = storage.server().as_ref().ok_or(InvalidServer)?;
-		let server = arc.read().map_err(|_| FailedToReadServer)?;
-		Ok(server.chunk_cache())
-	}
-
 	fn client_chunk_cache(&self) -> Result<crate::client::world::chunk::cache::ArcLock> {
 		use crate::network::storage::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
@@ -116,7 +102,7 @@ impl Handler {
 			let log = Self::log_target("server", &stream.connection.remote_address());
 			log::debug!(target: &log, "Establishing stream");
 			stream.initiate().await?;
-			stream.send_until_closed(&log, channel, send_chunks).await?;
+			stream.send_until_closed(channel, send_chunks).await?;
 			log::debug!(target: &log, "Closing stream");
 			Ok(())
 		});
@@ -130,7 +116,6 @@ impl Handler {
 
 	async fn send_until_closed(
 		&mut self,
-		log: &str,
 		channel: RecvUpdate,
 		send_chunks: SendChunks,
 	) -> Result<()> {
@@ -139,7 +124,7 @@ impl Handler {
 				relevancy::WorldUpdate::Relevance(relevance) => {
 					self.send_relevance(relevance).await?;
 				}
-				relevancy::WorldUpdate::Chunks(mut chunks) => {
+				relevancy::WorldUpdate::Chunks(chunks) => {
 					for chunk in chunks.into_iter() {
 						send_chunks.send(chunk).await?;
 					}

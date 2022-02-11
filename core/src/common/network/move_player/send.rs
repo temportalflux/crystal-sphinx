@@ -6,7 +6,7 @@ use engine::{
 		connection::Connection,
 		stream::{
 			self,
-			kind::send::{self, Datagram},
+			kind::send::{self},
 		},
 	},
 	utility::Result,
@@ -19,6 +19,7 @@ type Context = stream::Context<Builder, send::Datagram>;
 pub struct Sender {
 	#[allow(dead_code)]
 	context: Arc<Builder>,
+	#[allow(dead_code)]
 	connection: Arc<Connection>,
 	send: send::Datagram,
 }

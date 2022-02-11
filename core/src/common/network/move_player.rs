@@ -5,7 +5,7 @@ use engine::{
 	utility::Result,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 
 mod builder;
 pub use builder::*;

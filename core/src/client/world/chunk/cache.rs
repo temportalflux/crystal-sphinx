@@ -2,7 +2,7 @@ use crate::{block, common::world::chunk::Chunk};
 use engine::math::nalgebra::Point3;
 use multimap::MultiMap;
 use std::{
-	collections::{HashMap, HashSet},
+	collections::HashMap,
 	sync::{Arc, RwLock, Weak},
 };
 

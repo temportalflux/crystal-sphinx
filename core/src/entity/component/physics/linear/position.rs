@@ -4,7 +4,7 @@ use crate::{
 };
 use engine::{
 	math::nalgebra::{Point3, Vector3},
-	utility::{Error, Result},
+	utility::Result,
 };
 use serde::{Deserialize, Serialize};
 

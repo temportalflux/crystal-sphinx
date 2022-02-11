@@ -86,7 +86,7 @@ impl Handler {
 						return Ok(());
 					}
 				};
-				self.update_entity(&log, client_entity, serialized)?;
+				self.update_entity(client_entity, serialized)?;
 			}
 			Update::Irrelevant(server_entity) | Update::Destroyed(server_entity) => {
 				self.despawn_entity(server_entity)?;
@@ -147,7 +147,6 @@ impl Handler {
 	/// and destroy any components marked as replicated that are present locally but not replicated.
 	fn update_entity(
 		&self,
-		log: &str,
 		client_entity: hecs::Entity,
 		serialized: SerializedEntity,
 	) -> Result<()> {
@@ -158,7 +157,7 @@ impl Handler {
 		);
 		profiling::scope!("update_entity", &_profiling_tag);
 		let registry = component::Registry::read();
-		let (server_entity, builder) = serialized.into_builder(&registry)?;
+		let (_server_entity, builder) = serialized.into_builder(&registry)?;
 
 		let arc_world = self.entity_world()?;
 		let mut world = arc_world.write().unwrap();

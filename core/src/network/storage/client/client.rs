@@ -4,7 +4,7 @@ use crate::{
 	common::account::key,
 	network::storage::{self, Storage},
 };
-use engine::{network::endpoint, socknet::connection::Connection, utility::Result};
+use engine::{socknet::connection::Connection, utility::Result};
 use std::sync::{Arc, RwLock, Weak};
 
 pub type ArcLockClient = Arc<RwLock<Client>>;

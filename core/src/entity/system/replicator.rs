@@ -12,10 +12,8 @@ use crate::{
 };
 use bus::BusReader;
 use engine::{
-	math::nalgebra::Point3,
-	network::{packet::PacketBuilder, socknet::connection::Connection},
-	utility::Result,
-	Engine, EngineSystem,
+	math::nalgebra::Point3, network::socknet::connection::Connection, utility::Result, Engine,
+	EngineSystem,
 };
 use multimap::MultiMap;
 use std::{
@@ -154,7 +152,7 @@ impl EngineSystem for Replicator {
 			updates.as_operations(&mut self.entities_relevant, &self.connection_handles);
 
 		for (address, updates) in updates.into_items().into_iter() {
-			let mut handle = self.get_handle_mut(&address);
+			let handle = self.get_handle_mut(&address);
 			handle.send_relevance_updates(updates);
 		}
 

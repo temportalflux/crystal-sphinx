@@ -6,8 +6,6 @@ use std::net::SocketAddr;
 pub struct OwnedByConnection {
 	/// The connection address this entity is owned/controlled by
 	address: SocketAddr,
-	/// True when the entity has been replicated to its owner/connection
-	has_been_replicated: bool,
 }
 
 impl super::Component for OwnedByConnection {
@@ -41,22 +39,11 @@ impl std::fmt::Display for OwnedByConnection {
 
 impl OwnedByConnection {
 	pub fn new(address: SocketAddr) -> Self {
-		Self {
-			address,
-			has_been_replicated: false,
-		}
+		Self { address }
 	}
 
 	pub fn address(&self) -> &SocketAddr {
 		&self.address
-	}
-
-	pub(crate) fn has_been_replicated(&self) -> bool {
-		self.has_been_replicated
-	}
-
-	pub(crate) fn mark_as_replicated(&mut self) {
-		self.has_been_replicated = true;
 	}
 }
 
