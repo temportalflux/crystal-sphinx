@@ -5,8 +5,6 @@ use crate::common::{
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-pub type Id = String;
-
 #[derive(Debug, Clone)]
 pub struct Account {
 	root: PathBuf,

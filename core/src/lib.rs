@@ -37,7 +37,6 @@ pub mod client;
 pub mod common;
 pub mod server;
 
-pub mod account;
 pub mod app;
 pub mod block;
 pub mod commands;

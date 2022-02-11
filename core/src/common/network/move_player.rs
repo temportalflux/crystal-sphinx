@@ -10,7 +10,6 @@ pub use builder::*;
 mod send;
 use send::*;
 mod recv;
-use recv::*;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Datum {

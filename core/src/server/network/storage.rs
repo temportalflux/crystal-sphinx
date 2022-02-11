@@ -1,6 +1,5 @@
 use crate::{
-	account,
-	common::account::key,
+	common::account::{self, key},
 	entity::{self, ArcLockEntityWorld},
 	server::user,
 	server::world::{chunk, Database},
@@ -18,11 +17,6 @@ static LOG: &'static str = "server";
 pub struct Storage {
 	root_dir: PathBuf,
 
-	// OLD
-	auth_key: account::Key,
-	saved_users: HashMap<account::Id, Arc<RwLock<user::Saved>>>,
-
-	// NEW
 	certificate: key::Certificate,
 	private_key: key::PrivateKey,
 	users: HashMap<account::Id, Arc<RwLock<user::Active>>>,
@@ -50,11 +44,6 @@ impl Storage {
 		Ok(Self {
 			root_dir: savegame_path.to_owned(),
 
-			// OLD
-			auth_key: account::Key::load(&Self::auth_key_path(savegame_path.to_owned()))
-				.context("loading old server auth key")?,
-			saved_users: HashMap::new(),
-			// NEW
 			certificate,
 			private_key,
 			users: Self::load_users(&Self::players_dir_path(savegame_path.to_owned()))
@@ -70,22 +59,11 @@ impl Storage {
 		log::info!(target: LOG, "Creating data");
 		std::fs::create_dir_all(root)?;
 
-		account::Key::new().save(&Self::auth_key_path(root.to_owned()))?;
-
 		let (_, certificate, private_key) = key::create_pem()?;
 		std::fs::write(&key::Certificate::make_path(&root), certificate)?;
 		std::fs::write(&key::PrivateKey::make_path(&root), private_key)?;
 
 		Ok(())
-	}
-
-	fn auth_key_path(mut savegame_path: PathBuf) -> PathBuf {
-		savegame_path.push("private_key.txt");
-		savegame_path
-	}
-
-	pub fn auth_key(&self) -> &account::Key {
-		&self.auth_key
 	}
 
 	fn players_dir_path(mut savegame_path: PathBuf) -> PathBuf {
@@ -124,23 +102,6 @@ impl Storage {
 			}
 		}
 		Ok(users)
-	}
-
-	pub fn add_saved_user(&mut self, user: user::Saved) {
-		let id = user.id().clone();
-		let arc_user = Arc::new(RwLock::new(user));
-		let thread_user = arc_user.clone();
-		std::thread::spawn(move || {
-			profiling::register_thread!("save-user");
-			if let Ok(user) = thread_user.read() {
-				let _ = user.save();
-			}
-		});
-		self.saved_users.insert(id, arc_user);
-	}
-
-	pub fn find_saved_user(&self, id: &account::Id) -> Option<&Arc<RwLock<user::Saved>>> {
-		self.saved_users.get(id)
 	}
 
 	pub fn add_user(&mut self, id: account::Id, user: Arc<RwLock<user::Active>>) {

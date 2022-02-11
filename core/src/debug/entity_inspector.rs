@@ -1,8 +1,8 @@
-use crate::entity::{
+use crate::{entity::{
 	self,
 	component::{self, debug},
 	ArcLockEntityWorld,
-};
+}, common::account};
 use anyhow::Result;
 use engine::ui::egui::Element;
 use enumset::{EnumSet, EnumSetType};
@@ -71,7 +71,7 @@ impl EntityInspector {
 }
 
 impl EntityInspector {
-	fn local_account_id() -> Result<crate::account::Id> {
+	fn local_account_id() -> Result<account::Id> {
 		crate::client::account::Manager::read()
 			.unwrap()
 			.active_account()
