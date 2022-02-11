@@ -130,7 +130,11 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		engine
 	} else {
 		input_user = Some(input::init());
-		common::network::task::add_load_network_listener(&app_state, &network_storage, &entity_world);
+		common::network::task::add_load_network_listener(
+			&app_state,
+			&network_storage,
+			&entity_world,
+		);
 
 		{
 			let mut manager = client::account::Manager::write().unwrap();

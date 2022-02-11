@@ -1,6 +1,6 @@
 use super::Command;
-use crate::app;
-use engine::network::{mode, LocalData};
+use crate::common::network::mode;
+use crate::{app, common::utility::get_named_arg};
 use std::sync::{Arc, RwLock};
 
 #[derive(PartialEq, Clone)]
@@ -13,7 +13,7 @@ impl WorldOption {
 	fn to_transition_data(&self) -> app::state::TransitionData {
 		use crate::common::network::task::Instruction;
 		let mode = mode::Set::all();
-		let port = LocalData::get_named_arg("host_port");
+		let port = get_named_arg("host_port");
 		Some(Box::new(match self {
 			Self::New => Instruction {
 				mode,

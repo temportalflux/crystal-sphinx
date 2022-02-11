@@ -1,12 +1,10 @@
 use crate::block;
 
 use super::Builder;
-use engine::{
-	math::nalgebra::Point3,
-	network::socknet::{
-		connection::{self, Connection},
-		stream::{self, kind::recv::Ongoing},
-	},
+use engine::math::nalgebra::Point3;
+use socknet::{
+	connection::{self, Connection},
+	stream::{self, kind::recv::Ongoing},
 };
 use std::{sync::Arc, time::Instant};
 

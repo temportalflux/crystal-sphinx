@@ -1,5 +1,5 @@
 use crate::common::network::connection;
-use engine::socknet::{self, connection::Connection, stream, utility::PinFutureResult};
+use socknet::{self, connection::Connection, stream, utility::PinFutureResult};
 use std::{
 	collections::HashSet,
 	net::SocketAddr,

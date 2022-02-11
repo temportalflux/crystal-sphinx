@@ -1,10 +1,8 @@
 use crate::common::account;
-use engine::{
-	network::socknet::{
-		connection::{self, Connection},
-		stream,
-	},
-	utility::Result,
+use engine::utility::Result;
+use socknet::{
+	connection::{self, Connection},
+	stream,
 };
 use std::sync::Arc;
 

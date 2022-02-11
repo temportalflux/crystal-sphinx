@@ -1,6 +1,6 @@
 use std::sync::{RwLock, Weak};
 
-use engine::network::socknet::stream;
+use socknet::stream;
 
 use crate::entity;
 
@@ -12,7 +12,7 @@ pub struct Builder {
 /// The stream handler id is `replication::entity`.
 ///
 /// ```rust
-/// use engine::network::socknet::stream::Identifier;
+/// use socknet::stream::Identifier;
 /// assert_eq!(Builder::unique::id(), "replication::entity");
 /// ```
 impl stream::Identifier for Builder {

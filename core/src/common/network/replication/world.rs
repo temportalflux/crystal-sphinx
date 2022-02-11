@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock, Weak};
 
-use engine::network::stream::Registry;
+use socknet::stream::Registry;
 
 use crate::{common::network::Storage, entity::system::replicator::relevancy::Relevance};
 

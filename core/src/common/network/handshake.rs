@@ -5,12 +5,10 @@ use crate::{
 		network::{connection, mode, Broadcast, CloseCode, SendClientJoined, Storage},
 	},
 	entity,
-	server::network::{Storage as ServerStorage},
+	server::network::Storage as ServerStorage,
 };
-use engine::{
-	network::socknet::{self, connection::Connection, stream},
-	utility::{self, Result},
-};
+use engine::utility::{self, Result};
+use socknet::{self, connection::Connection, stream};
 use std::sync::{Arc, RwLock, Weak};
 
 pub type Context = stream::Context<Builder, stream::kind::Bidirectional>;

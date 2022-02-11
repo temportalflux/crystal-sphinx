@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
 use engine::{
 	math::nalgebra::{UnitQuaternion, Vector3},
-	socknet::{connection::Connection, stream},
 	utility::Result,
 };
 use serde::{Deserialize, Serialize};
+use socknet::{connection::Connection, stream};
 use std::sync::Weak;
 
 mod builder;

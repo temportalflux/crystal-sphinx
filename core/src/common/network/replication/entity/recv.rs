@@ -5,12 +5,10 @@ use crate::{
 		component::{self, binary::SerializedEntity},
 	},
 };
-use engine::{
-	network::socknet::{
-		connection::{self, Connection},
-		stream::{self, kind::recv::Ongoing},
-	},
-	utility::Result,
+use engine::utility::Result;
+use socknet::{
+	connection::{self, Connection},
+	stream::{self, kind::recv::Ongoing},
 };
 use std::{
 	collections::HashMap,

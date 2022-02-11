@@ -1,11 +1,9 @@
 use super::Builder;
 use crate::server::world::chunk::Chunk as ServerChunk;
-use engine::{
-	network::socknet::{
-		connection::Connection,
-		stream::{self, kind::send::Ongoing},
-	},
-	utility::Result,
+use engine::utility::Result;
+use socknet::{
+	connection::Connection,
+	stream::{self, kind::send::Ongoing},
 };
 use std::sync::{Arc, RwLock, Weak};
 

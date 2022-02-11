@@ -1,5 +1,5 @@
 use crate::common::network::move_player::{Builder, Datum};
-use engine::socknet::{
+use socknet::{
 	connection::{Active, Connection},
 	stream::{
 		self,

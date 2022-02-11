@@ -1,6 +1,7 @@
 use super::Command;
+use crate::common::network::mode;
+use crate::common::utility::get_named_arg;
 use crate::{app, common::network::task::Instruction};
-use engine::network::{mode, LocalData};
 use std::sync::{Arc, RwLock};
 
 pub struct Connect {
@@ -31,7 +32,7 @@ impl Command for Connect {
 					app::state::State::Connecting,
 					Some(Box::new(Instruction {
 						mode: mode::Kind::Client.into(),
-						port: LocalData::get_named_arg("client_port"),
+						port: get_named_arg("client_port"),
 						world_name: None,
 						server_url: Some(self.url.clone()),
 					})),

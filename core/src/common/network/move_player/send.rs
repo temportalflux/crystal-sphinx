@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
 use crate::common::network::move_player::Datum;
-use engine::{
-	socknet::{
-		connection::Connection,
-		stream::{
-			self,
-			kind::send::{self},
-		},
+use engine::utility::Result;
+use socknet::{
+	connection::Connection,
+	stream::{
+		self,
+		kind::send::{self},
 	},
-	utility::Result,
 };
 
 use super::Builder;

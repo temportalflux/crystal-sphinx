@@ -11,11 +11,9 @@ use crate::{
 	server::world::chunk::{self, Chunk},
 };
 use bus::BusReader;
-use engine::{
-	math::nalgebra::Point3, network::socknet::connection::Connection, utility::Result, Engine,
-	EngineSystem,
-};
+use engine::{math::nalgebra::Point3, utility::Result, Engine, EngineSystem};
 use multimap::MultiMap;
+use socknet::connection::Connection;
 use std::{
 	collections::{HashMap, HashSet},
 	net::SocketAddr,

@@ -1,4 +1,4 @@
-use engine::network::socknet::connection::Connection;
+use socknet::connection::Connection;
 use std::{net::SocketAddr, sync::Weak};
 
 #[derive(Clone)]

@@ -1,5 +1,6 @@
 use crate::{client::account, client::world::chunk::cache, common, common::account::key};
-use engine::{socknet::connection::Connection, utility::Result};
+use engine::utility::Result;
+use socknet::connection::Connection;
 use std::sync::{Arc, RwLock, Weak};
 
 /// Container class for all client data which is present when a user is connected to a game server.

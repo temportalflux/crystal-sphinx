@@ -1,10 +1,8 @@
 use crate::common::network::replication::entity::{Builder, Channel};
-use engine::{
-	network::socknet::{
-		connection::Connection,
-		stream::{self, kind::send::Ongoing},
-	},
-	utility::Result,
+use engine::utility::Result;
+use socknet::{
+	connection::Connection,
+	stream::{self, kind::send::Ongoing},
 };
 use std::sync::{Arc, Weak};
 

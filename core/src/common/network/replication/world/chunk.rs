@@ -1,6 +1,6 @@
+use engine::utility::Result;
+use socknet::stream;
 use std::sync::{Arc, RwLock, Weak};
-
-use engine::{network::socknet::stream, utility::Result};
 
 use crate::{common::network::Storage, entity::system::replicator::relevancy::Relevance};
 

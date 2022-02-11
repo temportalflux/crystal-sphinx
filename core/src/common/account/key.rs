@@ -67,7 +67,7 @@ impl Certificate {
 	}
 
 	pub fn fingerprint(&self) -> String {
-		use engine::network::socknet::utility::fingerprint;
+		use socknet::utility::fingerprint;
 		fingerprint(&self.clone().into())
 	}
 }
@@ -123,12 +123,12 @@ impl DataFile for PublicKey {
 
 impl PublicKey {
 	pub fn from_bytes(bytes: Vec<u8>) -> Self {
-		use engine::network::socknet::utility::encode_string;
+		use socknet::utility::encode_string;
 		Self(encode_string(&bytes))
 	}
 
 	pub fn as_bytes(&self) -> Result<Vec<u8>> {
-		use engine::network::socknet::utility::decode_bytes;
+		use socknet::utility::decode_bytes;
 		decode_bytes(&self.0)
 	}
 }

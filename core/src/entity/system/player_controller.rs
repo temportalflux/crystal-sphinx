@@ -12,9 +12,9 @@ use chrono::Utc;
 use engine::{
 	input,
 	math::nalgebra::{Unit, UnitQuaternion, Vector3},
-	socknet::connection::Connection,
 	world, Engine, EngineSystem,
 };
+use socknet::connection::Connection;
 use std::sync::{Arc, RwLock, Weak};
 
 static LOG: &'static str = "subsystem:player_controller";

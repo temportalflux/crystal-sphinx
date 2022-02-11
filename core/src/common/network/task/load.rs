@@ -1,14 +1,15 @@
 use super::Instruction;
 use crate::{
 	app::{self, state::ArcLockMachine},
-	common::network::{connection, mode, Storage},
+	common::{
+		network::{connection, mode, Storage},
+		utility::get_named_arg,
+	},
 	entity::{self, ArcLockEntityWorld},
-	server::network::{Storage as ServerStorage},
+	server::network::Storage as ServerStorage,
 };
-use engine::{
-	network::{self, endpoint::Endpoint, Config, LocalData},
-	utility::{Context, Result},
-};
+use engine::utility::{Context, Result};
+use socknet::{endpoint::Endpoint, Config};
 use std::sync::{Arc, RwLock, Weak};
 
 #[profiling::function]
@@ -23,7 +24,7 @@ pub fn load_dedicated_server(
 		&entity_world,
 		&Instruction {
 			mode: mode::Kind::Server.into(),
-			port: LocalData::get_named_arg("host_port"),
+			port: get_named_arg("host_port"),
 			world_name: Some("tmp".to_owned()),
 			server_url: None,
 		},
@@ -78,7 +79,7 @@ pub fn add_load_network_listener(
 					// running both for Integrated Client-Server/Client-on-top-of-Server.
 					if instruction.mode.contains(mode::Kind::Client) {
 						use crate::common::network::Handshake;
-						use engine::network::stream::handler::Initiator;
+						use socknet::stream::handler::Initiator;
 						let url = match instruction.mode == mode::Kind::Client {
 							true => instruction.server_url.unwrap().parse()?,
 							false => endpoint.address(),
@@ -122,7 +123,7 @@ fn load_network(
 			address,
 			stream_registry: Arc::new({
 				use crate::common::network::*;
-				use network::stream::Registry;
+				use socknet::stream::Registry;
 				let mut registry = Registry::default();
 				registry.register(handshake::Builder {
 					storage: Arc::downgrade(&storage),

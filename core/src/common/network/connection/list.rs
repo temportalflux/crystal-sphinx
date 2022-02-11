@@ -1,5 +1,5 @@
 use bus::{Bus, BusReader};
-use engine::socknet::{
+use socknet::{
 	connection::{self, event, Active, Connection},
 	utility::JoinHandleList,
 };

@@ -1,6 +1,7 @@
 use super::{relevancy, EntityOperation};
 use crate::{common::network::replication, entity::component::binary};
-use engine::{math::nalgebra::Point3, network::socknet::connection::Connection};
+use engine::math::nalgebra::Point3;
+use socknet::connection::Connection;
 use std::{
 	collections::{HashMap, HashSet},
 	net::SocketAddr,

@@ -1,13 +1,9 @@
 use crate::{
-	app::state::ArcLockMachine,
-	common::network::connection,
-	common::network::mode,
+	app::state::ArcLockMachine, common::network::connection, common::network::mode,
 	entity::ArcLockEntityWorld,
 };
-use engine::{
-	network::endpoint::{Config, Endpoint},
-	utility::Result,
-};
+use engine::utility::Result;
+use socknet::endpoint::{Config, Endpoint};
 use std::sync::{Arc, RwLock};
 
 pub type ArcLockStorage = Arc<RwLock<Storage>>;
@@ -102,7 +98,7 @@ impl Storage {
 	}
 
 	pub fn create_config(&self) -> Result<Config> {
-		use engine::network::socknet::endpoint;
+		use socknet::endpoint;
 
 		// If this is a client (regardless of also being a server or not),
 		// use the clients certifications.

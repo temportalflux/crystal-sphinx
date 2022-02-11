@@ -1,4 +1,4 @@
-use engine::network::mode;
+use crate::common::network::mode;
 
 #[derive(Clone)]
 pub struct Instruction {

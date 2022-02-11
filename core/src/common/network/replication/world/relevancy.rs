@@ -1,15 +1,13 @@
 use crate::{
 	common::network::Storage, entity::system::replicator::relevancy, server::world::chunk::Chunk,
 };
-use engine::{
-	network::socknet::{
-		connection::{self, Connection},
-		stream::{
-			self,
-			kind::{recv, send, Bidirectional},
-		},
+use engine::utility::Result;
+use socknet::{
+	connection::{self, Connection},
+	stream::{
+		self,
+		kind::{recv, send, Bidirectional},
 	},
-	utility::Result,
 };
 use std::{
 	net::SocketAddr,
@@ -25,7 +23,7 @@ pub struct Builder {
 /// The stream handler id is `replication::world`.
 ///
 /// ```rust
-/// use engine::network::socknet::stream::Identifier;
+/// use socknet::stream::Identifier;
 /// assert_eq!(Builder::unique::id(), "replication::world");
 /// ```
 impl stream::Identifier for Builder {
