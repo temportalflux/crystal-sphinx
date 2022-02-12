@@ -1,4 +1,6 @@
-use crate::{common::network::Storage, entity::system::replicator::relevancy};
+use crate::{
+	client::world::chunk, common::network::Storage, entity::system::replicator::relevancy,
+};
 use anyhow::Result;
 use socknet::stream;
 use socknet::{
@@ -20,7 +22,7 @@ impl stream::recv::AppContext for AppContext {
 }
 
 impl AppContext {
-	fn client_chunk_cache(&self) -> Result<crate::client::world::chunk::cache::ArcLock> {
+	fn client_chunk_sender(&self) -> Result<chunk::OperationSender> {
 		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
 		};
@@ -28,7 +30,7 @@ impl AppContext {
 		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
 		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
 		let client = arc.read().map_err(|_| FailedToReadClient)?;
-		Ok(client.chunk_cache().clone())
+		Ok(client.chunk_sender().clone())
 	}
 }
 
@@ -88,9 +90,9 @@ impl stream::handler::Receiver for Handler {
 				// the server will open streams for any/all new chunks to be replicated.
 				// So its possible that those streams are now active while we are also
 				// removing old chunks from the cache.
-				if let Ok(mut cache) = self.context.client_chunk_cache()?.write() {
+				if let Ok(sender) = self.context.client_chunk_sender() {
 					for coord in old_chunks.into_iter().rev() {
-						cache.remove(&coord);
+						sender.try_send(chunk::Operation::Remove(coord))?;
 					}
 				}
 			}

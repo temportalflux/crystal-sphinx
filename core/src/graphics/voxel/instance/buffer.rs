@@ -1,5 +1,5 @@
 use crate::{
-	client::world::chunk::cache,
+	client::world::chunk::{Operation, OperationReceiver as ChunkOperationReceiver},
 	common::world::chunk,
 	graphics::voxel::{
 		instance::{local, submitted, Instance},
@@ -27,7 +27,7 @@ impl Buffer {
 	pub fn new(
 		render_chain: &RenderChain,
 		model_cache: Weak<model::Cache>,
-		chunk_cache: cache::WeakLock,
+		chunk_receiver: ChunkOperationReceiver,
 	) -> Result<Self> {
 		// TODO: Get this value from settings
 		let render_radius = 6;
@@ -69,7 +69,7 @@ impl Buffer {
 			submitted::Description::new(&render_chain, instance_buffer_size)?;
 
 		let _thread_handle =
-			Self::start_thread(chunk_cache, Arc::downgrade(&local_integrated_buffer));
+			Self::start_thread(chunk_receiver, Arc::downgrade(&local_integrated_buffer));
 
 		Ok(Self {
 			_thread_handle,
@@ -79,7 +79,7 @@ impl Buffer {
 	}
 
 	fn start_thread(
-		chunk_cache: cache::WeakLock,
+		chunk_receiver: ChunkOperationReceiver,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> Arc<()> {
 		let handle = Arc::new(());
@@ -89,27 +89,11 @@ impl Buffer {
 			use std::time::Duration;
 			static LOG: &'static str = "_";
 			log::info!(target: LOG, "Starting thread");
-			let mut operations = Vec::new();
 			while weak_handle.strong_count() > 0 {
 				let unable_to_lock_delay_ms = 1;
 				let no_chunks_to_proccess_delay_ms = 1000;
 				let operation_batch_size = 10;
 				let delay_between_batches = 10;
-
-				// Fetch any chunks that might have come into the cache since the last check
-				if let Some(arc_cache) = chunk_cache.upgrade() {
-					profiling::scope!("poll");
-					let chunks_pending = match arc_cache.try_read() {
-						Ok(chunk_cache) => chunk_cache.has_pending(),
-						_ => false,
-					};
-					if chunks_pending {
-						profiling::scope!("take");
-						if let Ok(mut chunk_cache) = arc_cache.try_write() {
-							operations.append(&mut chunk_cache.take_pending());
-						}
-					}
-				}
 
 				let arc_description = match description.upgrade() {
 					Some(arc) => arc,
@@ -120,22 +104,22 @@ impl Buffer {
 				};
 
 				let delay_ms;
-				if !operations.is_empty() {
+				if !chunk_receiver.is_empty() {
 					profiling::scope!("process");
 					if let Ok(mut description) = arc_description.try_lock() {
 						delay_ms = delay_between_batches;
 						let mut operation_count = 0;
-						loop {
-							match operations.remove(0) {
-								cache::Operation::Remove(coord) => {
+						while let Ok(operation) = chunk_receiver.try_recv() {
+							match operation {
+								Operation::Remove(coord) => {
 									description.remove_chunk(&coord);
 								}
-								cache::Operation::Insert(coordinate, updates) => {
+								Operation::Insert(coordinate, updates) => {
 									description.insert_chunk(coordinate, updates);
 								}
 							}
 							operation_count += 1;
-							if operations.is_empty() || operation_count >= operation_batch_size {
+							if operation_count >= operation_batch_size {
 								break;
 							}
 						}

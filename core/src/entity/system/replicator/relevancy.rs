@@ -108,11 +108,15 @@ impl Relevance {
 	}
 }
 
+pub type UpdateSender = async_channel::Sender<Update>;
+pub type UpdateReceiver = async_channel::Receiver<Update>;
 pub enum Update {
 	Entity(Relevance),
 	World(WorldUpdate),
 }
 
+pub type WorldUpdateSender = async_channel::Sender<WorldUpdate>;
+pub type WorldUpdateReceiver = async_channel::Receiver<WorldUpdate>;
 pub enum WorldUpdate {
 	Relevance(Relevance),
 	Chunks(Vec<Weak<RwLock<Chunk>>>),

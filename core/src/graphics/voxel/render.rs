@@ -1,7 +1,7 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
 	block,
-	client::world::chunk::cache,
+	client::world::chunk,
 	common::network::Storage,
 	graphics::voxel::{
 		camera,
@@ -70,13 +70,13 @@ impl RenderVoxel {
 				let render_chain = callback_render_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
 
-				let chunk_cache = match callback_storage.upgrade() {
+				let chunk_receiver = match callback_storage.upgrade() {
 					Some(arc_storage) => {
 						let storage = arc_storage.read().unwrap();
 						match storage.client() {
 							Some(arc_client) => {
 								let client = arc_client.read().unwrap();
-								client.chunk_cache().clone()
+								client.chunk_receiver().clone()
 							}
 							None => {
 								log::error!(target: ID, "Failed to find client storage");
@@ -95,7 +95,7 @@ impl RenderVoxel {
 						render_chain,
 						arc_camera,
 						&callback_model_cache,
-						chunk_cache,
+						chunk_receiver,
 						pending_gpu_signals.clone(),
 					) {
 						Ok(arclocked) => Some(arclocked),
@@ -112,7 +112,7 @@ impl RenderVoxel {
 		render_chain: Arc<RwLock<RenderChain>>,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: &Arc<model::Cache>,
-		chunk_cache: cache::ArcLock,
+		chunk_receiver: chunk::OperationReceiver,
 		gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<ArcLockRenderVoxel> {
 		log::info!(target: ID, "Initializing");
@@ -122,7 +122,7 @@ impl RenderVoxel {
 				&render_chain,
 				camera,
 				model_cache.clone(),
-				chunk_cache,
+				chunk_receiver,
 				gpu_signals,
 			)?
 			.arclocked()
@@ -144,7 +144,7 @@ impl RenderVoxel {
 		render_chain: &RenderChain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
-		chunk_cache: cache::ArcLock,
+		chunk_receiver: chunk::OperationReceiver,
 		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
@@ -154,11 +154,8 @@ impl RenderVoxel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/fragment"))?;
 
-		let instance_buffer = instance::Buffer::new(
-			&render_chain,
-			Arc::downgrade(&model_cache),
-			Arc::downgrade(&chunk_cache),
-		)?;
+		let instance_buffer =
+			instance::Buffer::new(&render_chain, Arc::downgrade(&model_cache), chunk_receiver)?;
 
 		let camera_uniform =
 			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;

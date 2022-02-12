@@ -1,23 +1,31 @@
-use crate::{client::account, client::world::chunk::cache, common, common::account::key};
+use crate::{client::account, client::world::chunk, common, common::account::key};
 use anyhow::Result;
 use socknet::connection::Connection;
 use std::sync::{Arc, RwLock, Weak};
 
 /// Container class for all client data which is present when a user is connected to a game server.
 pub struct Storage {
-	chunk_cache: cache::ArcLock,
+	chunk_sender: chunk::OperationSender,
+	chunk_receiver: chunk::OperationReceiver,
 }
 
 impl Default for Storage {
 	fn default() -> Self {
-		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
-		Self { chunk_cache }
+		let (chunk_sender, chunk_receiver) = crossbeam_channel::unbounded();
+		Self {
+			chunk_sender,
+			chunk_receiver,
+		}
 	}
 }
 
 impl Storage {
-	pub fn chunk_cache(&self) -> &cache::ArcLock {
-		&self.chunk_cache
+	pub fn chunk_sender(&self) -> &chunk::OperationSender {
+		&self.chunk_sender
+	}
+
+	pub fn chunk_receiver(&self) -> &chunk::OperationReceiver {
+		&self.chunk_receiver
 	}
 
 	pub fn get_keys(&self) -> Result<(rustls::Certificate, rustls::PrivateKey)> {

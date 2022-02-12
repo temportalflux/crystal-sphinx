@@ -24,7 +24,7 @@ impl stream::recv::AppContext for AppContext {
 }
 
 impl AppContext {
-	pub fn client_chunk_cache(&self) -> anyhow::Result<chunk::cache::ArcLock> {
+	pub fn client_chunk_sender(&self) -> anyhow::Result<chunk::OperationSender> {
 		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
 		};
@@ -32,7 +32,7 @@ impl AppContext {
 		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
 		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
 		let client = arc.read().map_err(|_| FailedToReadClient)?;
-		Ok(client.chunk_cache().clone())
+		Ok(client.chunk_sender().clone())
 	}
 }
 
@@ -108,9 +108,9 @@ impl stream::handler::Receiver for Handler {
 					}
 				}
 
-				if let Ok(mut cache) = self.context.client_chunk_cache()?.write() {
-					cache.insert_updates(&coord, &contents);
-				}
+				self.context
+					.client_chunk_sender()?
+					.try_send(chunk::Operation::Insert(coord, contents))?;
 			}
 
 			Ok(())

@@ -35,6 +35,7 @@ use instigator::*;
 pub struct Replicator {
 	world: Weak<RwLock<entity::World>>,
 	chunk_cache: chunk::cache::WeakLock,
+	local_client_chunk_sender: Option<crate::client::world::chunk::OperationSender>,
 	connection_recv: BusReader<connection::Event>,
 	connection_handles: HashMap<SocketAddr, Handle>,
 	entities_relevant: MultiSet<hecs::Entity, SocketAddr>,
@@ -77,26 +78,50 @@ impl Replicator {
 						return Ok(None);
 					}
 				};
-				let (server, connection_recv) = {
+				let (
+					server,
+					connection_recv,
+					connections,
+					local_client_chunk_sender
+				) = {
 					let storage = arc_storage.read().unwrap();
 					let server = storage.server().as_ref().unwrap().clone();
-					let connection_recv = {
+					let (connection_recv, connections) = {
 						let arc_connection_list = storage.connection_list().clone();
 						let mut connection_list = arc_connection_list.write().unwrap();
-						connection_list.add_recv()
+						(connection_list.add_recv(), connection_list.all().clone())
 					};
-					(server, connection_recv)
+					let local_client_chunk_sender = match storage.client().as_ref() {
+						Some(arc_client) => {
+							let client = arc_client.read().unwrap();
+							Some(client.chunk_sender().clone())
+						}
+						None => None,
+					};
+					(
+						server,
+						connection_recv,
+						connections,
+						local_client_chunk_sender,
+					)
 				};
 
 				let chunk_cache = Arc::downgrade(&server.read().unwrap().chunk_cache());
 				let world = callback_world.clone();
-				let arc_self = Arc::new(RwLock::new(Self {
+				let mut replicator = Self {
+					local_client_chunk_sender,
 					chunk_cache,
 					world,
 					connection_recv,
 					connection_handles: HashMap::new(),
 					entities_relevant: MultiSet::default(),
-				}));
+				};
+				for (address, connection) in connections.into_iter() {
+					if let Err(err) = replicator.add_connection(address, &connection) {
+						log::error!(target: LOG, "{:?}", err);
+					}
+				}
+				let arc_self = Arc::new(RwLock::new(replicator));
 
 				if let Ok(mut engine) = Engine::get().write() {
 					engine.add_weak_system(Arc::downgrade(&arc_self));
@@ -151,8 +176,9 @@ impl EngineSystem for Replicator {
 			updates.as_operations(&mut self.entities_relevant, &self.connection_handles);
 
 		for (address, updates) in updates.into_items().into_iter() {
-			let handle = self.get_handle_mut(&address);
-			handle.send_relevance_updates(updates);
+			if let Some(handle) = self.connection_handles.get_mut(&address) {
+				handle.send_relevance_updates(updates);
+			}
 		}
 
 		// Sends the operations to each connection's handle/input stream
@@ -440,20 +466,14 @@ impl Replicator {
 		let mut new_connections = HashSet::new();
 		'poll: loop {
 			match self.connection_recv.try_recv() {
-				Ok(Event::Created(address, connection, is_local)) => {
-					// We do not create a replication stream for "local" connections,
-					// where the defn of local in this context is the same application,
-					// aka an Integrated Server / Client-on-top-of-Server situation.
-					// Since a CotoS has a shared world between client and server,
-					// there is no point in wasting cycles pretending to replicate data.
-					if !is_local {
-						match self.add_connection(address.clone(), &connection) {
-							Ok(_) => {
-								new_connections.insert(address);
-							}
-							Err(err) => {
-								log::error!(target: &LOG, "{:?}", err);
-							}
+				Ok(Event::Created(address, connection, _is_local)) => {
+					log::debug!("found {}", address);
+					match self.add_connection(address.clone(), &connection) {
+						Ok(_) => {
+							new_connections.insert(address);
+						}
+						Err(err) => {
+							log::error!(target: &LOG, "{:?}", err);
 						}
 					}
 				}
@@ -477,7 +497,16 @@ impl Replicator {
 		address: SocketAddr,
 		connection: &Weak<Connection>,
 	) -> anyhow::Result<()> {
-		let handle = Handle::new(address.clone(), &connection)?;
+		use socknet::connection::Active;
+		let is_local = Connection::upgrade(&connection)?.is_local();
+		let handle = match is_local {
+			true => {
+				let chunk_sender = self.local_client_chunk_sender.as_ref().unwrap();
+				Handle::new_local(&address, chunk_sender.clone())?
+			}
+			false => Handle::new_remote(&address, &connection)?,
+		};
+
 		self.connection_handles.insert(address, handle);
 		Ok(())
 	}
@@ -488,10 +517,6 @@ impl Replicator {
 		// The stream will be dropped then, or when the connection is closed (whichever is sooner).
 		self.connection_handles.remove(&address);
 		self.entities_relevant.remove_value(&address);
-	}
-
-	fn get_handle_mut(&mut self, address: &SocketAddr) -> &mut Handle {
-		self.connection_handles.get_mut(&address).unwrap()
 	}
 
 	#[profiling::function]
