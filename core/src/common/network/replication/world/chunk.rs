@@ -1,41 +1,25 @@
-use anyhow::Result;
-use socknet::stream;
-use std::sync::{Arc, RwLock, Weak};
+use socknet::{connection::Connection, stream};
+use std::sync::Weak;
 
-use crate::{common::network::Storage, entity::system::replicator::relevancy::Relevance};
+use crate::common::network::replication::world::RecvChunks;
+
+mod identifier;
+pub use identifier::*;
 
 pub mod client;
 pub mod server;
 
-pub struct Builder {
-	pub local_relevance: Arc<RwLock<Relevance>>,
-	pub storage: Weak<RwLock<Storage>>,
-}
-
-impl stream::Identifier for Builder {
-	fn unique_id() -> &'static str {
-		"replication::world::chunk"
-	}
-}
-
-impl stream::send::Builder for Builder {
-	type Opener = stream::uni::Opener;
-}
-
-impl stream::recv::Builder for Builder {
-	type Extractor = stream::uni::Extractor;
-	type Receiver = client::Chunk;
-}
-
-impl Builder {
-	pub fn client_chunk_cache(&self) -> Result<crate::client::world::chunk::cache::ArcLock> {
-		use crate::common::network::Error::{
-			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
-		};
-		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;
-		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
-		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
-		let client = arc.read().map_err(|_| FailedToReadClient)?;
-		Ok(client.chunk_cache().clone())
-	}
+pub fn spawn(
+	connection: Weak<Connection>,
+	index: usize,
+	recv_chunks: RecvChunks,
+) -> anyhow::Result<()> {
+	let arc = Connection::upgrade(&connection)?;
+	arc.spawn(async move {
+		use stream::handler::Initiator;
+		let mut stream = server::Sender::open(&connection)?.await?;
+		stream.send_until_closed(index, recv_chunks).await?;
+		Ok(())
+	});
+	Ok(())
 }

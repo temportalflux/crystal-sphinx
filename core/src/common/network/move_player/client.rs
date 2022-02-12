@@ -10,20 +10,23 @@ use socknet::{
 	},
 };
 
-use super::Builder;
+#[derive(Default)]
+pub struct AppContext;
 
-type Context = stream::Context<Builder, send::Datagram>;
+impl stream::send::AppContext for AppContext {
+	type Opener = stream::datagram::Opener;
+}
 
 pub struct Sender {
 	#[allow(dead_code)]
-	context: Arc<Builder>,
+	context: Arc<AppContext>,
 	#[allow(dead_code)]
 	connection: Arc<Connection>,
 	send: send::Datagram,
 }
 
-impl From<Context> for Sender {
-	fn from(context: Context) -> Self {
+impl From<stream::send::Context<AppContext>> for Sender {
+	fn from(context: stream::send::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -33,16 +36,10 @@ impl From<Context> for Sender {
 }
 
 impl stream::handler::Initiator for Sender {
-	type Builder = Builder;
+	type Identifier = super::Identifier;
 }
 
 impl Sender {
-	pub async fn initiate(&mut self) -> Result<()> {
-		use stream::{kind::Write, Identifier};
-		self.send.write(&Builder::unique_id().to_owned()).await?;
-		Ok(())
-	}
-
 	pub async fn send_datum(&mut self, datum: Datum) -> Result<()> {
 		use stream::kind::{Send, Write};
 		self.send.write(&datum).await?;

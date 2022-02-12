@@ -15,12 +15,19 @@ pub struct Broadcast<T> {
 
 impl<T> Broadcast<T>
 where
-	T: stream::handler::Initiator
-		+ From<stream::send::Context<T::Builder>>
+
+		T: Sized + stream::handler::Initiator
+		+ From<stream::send::Context<<T::Identifier as stream::Identifier>::SendBuilder>>
 		+ 'static
 		+ Sized
 		+ Send,
-	T::Builder: stream::send::Builder + Send + Sync + 'static,
+	T::Identifier: stream::Identifier + Send + Sync + 'static,
+	<T::Identifier as stream::Identifier>::SendBuilder:
+		stream::send::AppContext + Send + Sync + 'static,
+	<<T::Identifier as stream::Identifier>::SendBuilder as stream::send::AppContext>::Opener:
+		stream::Opener,
+		<<<T::Identifier as stream::Identifier>::SendBuilder as stream::send::AppContext>::Opener as stream::Opener>::Output: stream::kind::send::Write + Send,
+
 {
 	pub fn new(connection_list: Arc<RwLock<connection::List>>) -> Self {
 		Self {
@@ -62,11 +69,13 @@ where
 
 	pub fn open(self) {
 		assert!(self.on_established.is_some());
-		use stream::Identifier;
-		let log = format!("broadcast({})", T::Builder::unique_id());
 		for connection in self.make_target_list() {
+			let arc = match Connection::upgrade(&connection) {
+				Ok(arc) => arc,
+				Err(_) => continue,
+			};
 			let when_established = self.on_established.as_ref().unwrap().clone();
-			engine::task::spawn(log.clone(), async move {
+			arc.spawn(async move {
 				let handler = T::open(&connection)?.await?;
 				(when_established)(handler).await?;
 				Ok(())

@@ -1,5 +1,5 @@
 use crate::{
-	common::network::replication::entity::{Builder, Update},
+	common::network::replication::entity::update::Update,
 	entity::{
 		self, archetype,
 		component::{self, binary::SerializedEntity},
@@ -7,27 +7,44 @@ use crate::{
 };
 use anyhow::Result;
 use socknet::{
-	connection::{self, Connection},
+	connection::Connection,
 	stream::{self, kind::recv::Ongoing},
 };
 use std::{
 	collections::HashMap,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
-pub type Context = stream::Context<Builder, Ongoing>;
+pub struct AppContext {
+	pub entity_world: Weak<RwLock<hecs::World>>,
+}
+
+/// Receiving the handler results in an incoming unidirectional stream
+impl stream::recv::AppContext for AppContext {
+	type Extractor = stream::uni::Extractor;
+	type Receiver = Handler;
+}
+
+impl AppContext {
+	fn entity_world(&self) -> Result<Arc<RwLock<hecs::World>>> {
+		Ok(self
+			.entity_world
+			.upgrade()
+			.ok_or(Error::InvalidEntityWorld)?)
+	}
+}
 
 pub struct Handler {
 	#[allow(dead_code)]
-	context: Arc<Builder>,
+	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	recv: Ongoing,
 	/// The Server->Client map of entity ids
 	entity_map_s2c: HashMap</*server*/ hecs::Entity, /*client*/ hecs::Entity>,
 }
 
-impl From<Context> for Handler {
-	fn from(context: Context) -> Self {
+impl From<stream::recv::Context<AppContext>> for Handler {
+	fn from(context: stream::recv::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -37,29 +54,13 @@ impl From<Context> for Handler {
 	}
 }
 
-impl Handler {
-	fn entity_world(&self) -> Result<Arc<RwLock<entity::World>>> {
-		Ok(self
-			.context
-			.entity_world
-			.upgrade()
-			.ok_or(Error::InvalidEntityWorld)?)
-	}
-}
-
 impl stream::handler::Receiver for Handler {
-	type Builder = Builder;
+	type Identifier = super::Identifier;
 	fn receive(mut self) {
-		use connection::Active;
 		use stream::Identifier;
-		let log = format!(
-			"client/{}[{}]",
-			Builder::unique_id(),
-			self.connection.remote_address()
-		);
+		let log = super::Identifier::log_category("client", &self.connection);
 		engine::task::spawn(log.clone(), async move {
 			use stream::kind::Read;
-			log::info!(target: &log, "Stream opened");
 			while let Ok(update) = self.recv.read::<Update>().await {
 				if let Err(err) = self.process_update(&log, update) {
 					log::error!(target: &log, "{:?}", err);
@@ -71,6 +72,10 @@ impl stream::handler::Receiver for Handler {
 }
 
 impl Handler {
+	fn entity_world(&self) -> Result<Arc<RwLock<entity::World>>> {
+		self.context.entity_world()
+	}
+
 	fn process_update(&mut self, log: &str, update: Update) -> Result<()> {
 		match update {
 			Update::Relevant(serialized) => {

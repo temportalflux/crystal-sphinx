@@ -447,8 +447,14 @@ impl Replicator {
 					// Since a CotoS has a shared world between client and server,
 					// there is no point in wasting cycles pretending to replicate data.
 					if !is_local {
-						self.add_connection(address.clone(), &connection);
-						new_connections.insert(address);
+						match self.add_connection(address.clone(), &connection) {
+							Ok(_) => {
+								new_connections.insert(address);
+							}
+							Err(err) => {
+								log::error!(target: &LOG, "{:?}", err);
+							}
+						}
 					}
 				}
 				Ok(Event::Dropped(address)) => {
@@ -466,9 +472,14 @@ impl Replicator {
 		new_connections
 	}
 
-	fn add_connection(&mut self, address: SocketAddr, connection: &Weak<Connection>) {
-		let handle = Handle::new(address.clone(), &connection);
+	fn add_connection(
+		&mut self,
+		address: SocketAddr,
+		connection: &Weak<Connection>,
+	) -> anyhow::Result<()> {
+		let handle = Handle::new(address.clone(), &connection)?;
 		self.connection_handles.insert(address, handle);
+		Ok(())
 	}
 
 	fn remove_connection(&mut self, address: &SocketAddr) {

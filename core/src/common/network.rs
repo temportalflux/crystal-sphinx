@@ -8,11 +8,9 @@ pub use close_code::*;
 
 pub mod connection;
 
-pub(crate) mod handshake;
-pub use handshake::Handshake;
+pub mod handshake;
 
-mod client_joined;
-pub use client_joined::*;
+pub mod client_joined;
 
 pub mod move_player;
 

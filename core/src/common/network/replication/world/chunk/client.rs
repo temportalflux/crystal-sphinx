@@ -1,24 +1,50 @@
-use crate::block;
+use crate::{
+	block, client::world::chunk, common::network::Storage,
+	entity::system::replicator::relevancy::Relevance,
+};
 
-use super::Builder;
 use engine::math::nalgebra::Point3;
 use socknet::{
-	connection::{self, Connection},
+	connection::Connection,
 	stream::{self, kind::recv::Ongoing},
 };
-use std::{sync::Arc, time::Instant};
+use std::{
+	sync::{Arc, RwLock, Weak},
+	time::Instant,
+};
 
-pub type Context = stream::Context<Builder, Ongoing>;
+pub struct AppContext {
+	pub local_relevance: Arc<RwLock<Relevance>>,
+	pub storage: Weak<RwLock<Storage>>,
+}
 
-pub struct Chunk {
+impl stream::recv::AppContext for AppContext {
+	type Extractor = stream::uni::Extractor;
+	type Receiver = Handler;
+}
+
+impl AppContext {
+	pub fn client_chunk_cache(&self) -> anyhow::Result<chunk::cache::ArcLock> {
+		use crate::common::network::Error::{
+			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
+		};
+		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;
+		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
+		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
+		let client = arc.read().map_err(|_| FailedToReadClient)?;
+		Ok(client.chunk_cache().clone())
+	}
+}
+
+pub struct Handler {
 	#[allow(dead_code)]
-	context: Arc<Builder>,
+	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	recv: Ongoing,
 }
 
-impl From<Context> for Chunk {
-	fn from(context: Context) -> Self {
+impl From<stream::recv::Context<AppContext>> for Handler {
+	fn from(context: stream::recv::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -27,20 +53,18 @@ impl From<Context> for Chunk {
 	}
 }
 
-impl stream::handler::Receiver for Chunk {
-	type Builder = Builder;
+impl stream::handler::Receiver for Handler {
+	type Identifier = super::Identifier;
 	fn receive(mut self) {
 		self.connection.clone().spawn(async move {
-			use connection::Active;
 			use stream::{kind::Read, Identifier};
 			let index = self.recv.read_size().await?;
 			while let Ok(coord) = self.recv.read::<Point3<i64>>().await {
 				let start_time = Instant::now();
 
 				let log = format!(
-					"client/{}[{}][{}]<{}, {}, {}>",
-					Builder::unique_id(),
-					self.connection.remote_address(),
+					"{}[{}]<{}, {}, {}>",
+					super::Identifier::log_category("client", &self.connection),
 					index,
 					coord.x,
 					coord.y,

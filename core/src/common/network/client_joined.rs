@@ -6,30 +6,41 @@ use socknet::{
 };
 use std::sync::Arc;
 
-pub struct ClientJoined {}
-impl stream::Identifier for ClientJoined {
+#[derive(Default)]
+pub struct Identifier(Arc<AppContext>);
+impl stream::Identifier for Identifier {
+	type SendBuilder = AppContext;
+	type RecvBuilder = AppContext;
 	fn unique_id() -> &'static str {
 		"client_joined"
 	}
-}
-impl stream::send::Builder for ClientJoined {
-	type Opener = stream::uni::Opener;
-}
-impl stream::recv::Builder for ClientJoined {
-	type Extractor = stream::uni::Extractor;
-	type Receiver = RecvClientJoined;
+	fn send_builder(&self) -> &Arc<Self::SendBuilder> {
+		&self.0
+	}
+	fn recv_builder(&self) -> &Arc<Self::RecvBuilder> {
+		&self.0
+	}
 }
 
-pub type SendContext = stream::Context<ClientJoined, stream::kind::send::Ongoing>;
-pub struct SendClientJoined {
+#[derive(Default)]
+pub struct AppContext;
+impl stream::send::AppContext for AppContext {
+	type Opener = stream::uni::Opener;
+}
+impl stream::recv::AppContext for AppContext {
+	type Extractor = stream::uni::Extractor;
+	type Receiver = Receiver;
+}
+
+pub struct Sender {
 	#[allow(dead_code)]
-	context: Arc<ClientJoined>,
+	context: Arc<AppContext>,
 	#[allow(dead_code)]
 	connection: Arc<Connection>,
 	send: stream::kind::send::Ongoing,
 }
-impl From<SendContext> for SendClientJoined {
-	fn from(context: SendContext) -> Self {
+impl From<stream::send::Context<AppContext>> for Sender {
+	fn from(context: stream::send::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -37,29 +48,26 @@ impl From<SendContext> for SendClientJoined {
 		}
 	}
 }
-impl stream::handler::Initiator for SendClientJoined {
-	type Builder = ClientJoined;
+impl stream::handler::Initiator for Sender {
+	type Identifier = Identifier;
 }
-impl SendClientJoined {
-	pub async fn initiate(mut self, account_id: account::Id) -> Result<()> {
-		use stream::{kind::Write, Identifier};
-		self.send
-			.write(&ClientJoined::unique_id().to_owned())
-			.await?;
+impl Sender {
+	pub async fn send(mut self, account_id: account::Id) -> Result<()> {
+		use stream::kind::{Send, Write};
 		self.send.write(&account_id).await?;
+		self.send.finish().await?;
 		Ok(())
 	}
 }
 
-pub type RecvContext = stream::Context<ClientJoined, stream::kind::recv::Ongoing>;
-pub struct RecvClientJoined {
+pub struct Receiver {
 	#[allow(dead_code)]
-	context: Arc<ClientJoined>,
+	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	recv: stream::kind::recv::Ongoing,
 }
-impl From<RecvContext> for RecvClientJoined {
-	fn from(context: RecvContext) -> Self {
+impl From<stream::recv::Context<AppContext>> for Receiver {
+	fn from(context: stream::recv::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -67,17 +75,16 @@ impl From<RecvContext> for RecvClientJoined {
 		}
 	}
 }
-impl stream::handler::Receiver for RecvClientJoined {
-	type Builder = ClientJoined;
+impl stream::handler::Receiver for Receiver {
+	type Identifier = Identifier;
 	fn receive(mut self) {
 		use connection::Active;
-		use stream::Identifier;
 		let log = format!(
 			"{}[{}]",
-			ClientJoined::unique_id(),
+			<Identifier as stream::Identifier>::unique_id(),
 			self.connection.remote_address()
 		);
-		engine::task::spawn(log.clone(), async move {
+		self.connection.clone().spawn(async move {
 			use stream::kind::Read;
 			let account_id = self.recv.read::<account::Id>().await?;
 			log::info!(target: &log, "ClientJoined({})", account_id);

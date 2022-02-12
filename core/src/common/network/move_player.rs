@@ -5,11 +5,10 @@ use serde::{Deserialize, Serialize};
 use socknet::{connection::Connection, stream};
 use std::sync::Weak;
 
-mod builder;
-pub use builder::*;
-mod send;
-use send::*;
-mod recv;
+mod identifier;
+pub use identifier::*;
+pub mod client;
+pub mod server;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Datum {
@@ -23,8 +22,7 @@ impl Datum {
 	pub fn send(self, connection: Weak<Connection>) -> Result<()> {
 		Connection::upgrade(&connection)?.spawn(async move {
 			use stream::handler::Initiator;
-			let mut stream = Sender::open(&connection)?.await?;
-			stream.initiate().await?;
+			let mut stream = client::Sender::open(&connection)?.await?;
 			stream.send_datum(self).await?;
 			Ok(())
 		});

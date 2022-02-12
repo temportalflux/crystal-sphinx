@@ -1,33 +1,21 @@
-use crate::entity::component::binary::SerializedEntity;
-use serde::{Deserialize, Serialize};
+mod identifier;
+use std::sync::Weak;
 
-mod builder;
-pub use builder::*;
+pub use identifier::*;
+use socknet::connection::Connection;
 
-pub mod recv;
-pub mod send;
+pub mod update;
 
-pub type Channel = async_channel::Receiver<Update>;
+pub mod client;
+pub mod server;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub enum Update {
-	Relevant(SerializedEntity),
-	Update(SerializedEntity),
-	Irrelevant(hecs::Entity),
-	Destroyed(hecs::Entity),
-}
-
-impl std::fmt::Debug for Update {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		match self {
-			Self::Relevant(serialized) => {
-				write!(f, "Relevant({})", serialized.entity.id())
-			}
-			Self::Update(serialized) => {
-				write!(f, "Update({})", serialized.entity.id())
-			}
-			Self::Irrelevant(entity) => write!(f, "Irrelevant({})", entity.id()),
-			Self::Destroyed(entity) => write!(f, "Destroyed({})", entity.id()),
-		}
-	}
+pub fn spawn(connection: Weak<Connection>, channel: update::Receiver) -> anyhow::Result<()> {
+	let arc = Connection::upgrade(&connection)?;
+	arc.spawn(async move {
+		use socknet::stream::handler::Initiator;
+		let mut stream = server::Sender::open(&connection)?.await?;
+		stream.send_until_closed(channel).await?;
+		Ok(())
+	});
+	Ok(())
 }

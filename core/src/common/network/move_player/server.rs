@@ -1,4 +1,5 @@
-use crate::common::network::move_player::{Builder, Datum};
+use crate::common::network::move_player::Datum;
+use chrono::{DateTime, Utc};
 use socknet::{
 	connection::{Active, Connection},
 	stream::{
@@ -6,19 +7,30 @@ use socknet::{
 		kind::recv::{self},
 	},
 };
-use std::sync::Arc;
+use std::{
+	collections::HashMap,
+	net::SocketAddr,
+	sync::{Arc, RwLock, Weak},
+};
 
-type Context = stream::Context<Builder, recv::Datagram>;
+pub struct AppContext {
+	pub entity_world: Weak<RwLock<hecs::World>>,
+	pub sequencer: Arc<RwLock<HashMap<SocketAddr, DateTime<Utc>>>>,
+}
+impl stream::recv::AppContext for AppContext {
+	type Extractor = stream::datagram::Extractor;
+	type Receiver = Handler;
+}
 
 pub struct Handler {
 	#[allow(dead_code)]
-	context: Arc<Builder>,
+	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	recv: recv::Datagram,
 }
 
-impl From<Context> for Handler {
-	fn from(context: Context) -> Self {
+impl From<stream::recv::Context<AppContext>> for Handler {
+	fn from(context: stream::recv::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -28,7 +40,7 @@ impl From<Context> for Handler {
 }
 
 impl stream::handler::Receiver for Handler {
-	type Builder = Builder;
+	type Identifier = super::Identifier;
 	fn receive(mut self) {
 		self.connection.clone().spawn(async move {
 			use crate::entity::component::{physics::linear, Orientation};

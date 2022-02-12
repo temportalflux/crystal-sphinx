@@ -78,7 +78,7 @@ pub fn add_load_network_listener(
 					// initialization for entities on the client in the replication packet,
 					// running both for Integrated Client-Server/Client-on-top-of-Server.
 					if instruction.mode.contains(mode::Kind::Client) {
-						use crate::common::network::Handshake;
+						use crate::common::network::handshake::client::Handshake;
 						use socknet::stream::handler::Initiator;
 						let url = match instruction.mode == mode::Kind::Client {
 							true => instruction.server_url.unwrap().parse()?,
@@ -125,19 +125,29 @@ fn load_network(
 				use crate::common::network::*;
 				use socknet::stream::Registry;
 				let mut registry = Registry::default();
-				registry.register(handshake::Builder {
-					storage: Arc::downgrade(&storage),
-					app_state: Arc::downgrade(&app_state),
-					entity_world: entity_world.clone(),
+				registry.register(handshake::Identifier {
+					client: Arc::new(handshake::client::AppContext {
+						app_state: Arc::downgrade(&app_state),
+					}),
+					server: Arc::new(handshake::server::AppContext {
+						storage: Arc::downgrade(&storage),
+						entity_world: entity_world.clone(),
+					}),
 				});
-				registry.register(ClientJoined {});
-				registry.register(replication::entity::Builder {
-					entity_world: entity_world.clone(),
+				registry.register(client_joined::Identifier::default());
+				registry.register(replication::entity::Identifier {
+					server: Arc::default(),
+					client: Arc::new(replication::entity::client::AppContext {
+						entity_world: entity_world.clone(),
+					}),
 				});
 				replication::world::register(&mut registry, Arc::downgrade(&storage));
-				registry.register(move_player::Builder {
-					entity_world: entity_world.clone(),
-					sequencer: Default::default(),
+				registry.register(move_player::Identifier {
+					client: Arc::default(),
+					server: Arc::new(move_player::server::AppContext {
+						entity_world: entity_world.clone(),
+						sequencer: Default::default(),
+					}),
 				});
 				registry
 			}),

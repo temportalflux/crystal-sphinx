@@ -1,8 +1,11 @@
-use crate::{entity::{
-	self,
-	component::{self, debug},
-	ArcLockEntityWorld,
-}, common::account};
+use crate::{
+	common::account,
+	entity::{
+		self,
+		component::{self, debug},
+		ArcLockEntityWorld,
+	},
+};
 use anyhow::Result;
 use engine::ui::egui::Element;
 use enumset::{EnumSet, EnumSetType};

@@ -1,5 +1,8 @@
 use super::{relevancy, EntityOperation};
-use crate::{common::network::replication, entity::component::binary};
+use crate::{
+	common::network::replication::{self, entity::update::Update as EntityUpdate},
+	entity::component::binary,
+};
 use engine::math::nalgebra::Point3;
 use socknet::connection::Connection;
 use std::{
@@ -17,7 +20,7 @@ use std::{
 /// Its lifetime is owned by the replicator system.
 pub struct Handle {
 	send_world_rel: async_channel::Sender<relevancy::WorldUpdate>,
-	send_entities: async_channel::Sender<replication::entity::Update>,
+	send_entities: async_channel::Sender<EntityUpdate>,
 	chunk_relevance: relevancy::Relevance,
 	entity_relevance: relevancy::Relevance,
 	relevancy_log: String,
@@ -25,35 +28,26 @@ pub struct Handle {
 }
 
 impl Handle {
-	pub fn new(address: SocketAddr, connection: &Weak<Connection>) -> Self {
+	pub fn new(address: SocketAddr, connection: &Weak<Connection>) -> anyhow::Result<Self> {
 		let relevancy_log = format!("relevancy[{}]", address);
 		let (send_world_rel, recv_world_rel) = async_channel::unbounded();
 		let (send_entities, recv_entities) = async_channel::unbounded();
 		let (send_chunks, recv_chunks) = async_channel::unbounded();
 
-		{
-			use replication::entity::send::Handler;
-			Handler::spawn(connection.clone(), recv_entities);
-		}
-
-		{
-			use replication::world::relevancy::Handler;
-			Handler::spawn(connection.clone(), recv_world_rel, send_chunks);
-		}
-
+		replication::entity::spawn(connection.clone(), recv_entities)?;
+		replication::world::relevancy::spawn(connection.clone(), recv_world_rel, send_chunks)?;
 		for i in 0..10 {
-			use replication::world::chunk::server;
-			server::Chunk::spawn(connection.clone(), i, recv_chunks.clone());
+			replication::world::chunk::spawn(connection.clone(), i, recv_chunks.clone())?;
 		}
 
-		Self {
+		Ok(Self {
 			send_world_rel,
 			send_entities,
 			chunk_relevance: relevancy::Relevance::default(),
 			entity_relevance: relevancy::Relevance::default(),
 			relevancy_log,
 			pending_chunks: HashSet::new(),
-		}
+		})
 	}
 
 	pub fn send_relevance_updates(&mut self, updates: Vec<relevancy::Update>) {
@@ -111,7 +105,7 @@ impl Handle {
 		serialized: &HashMap<hecs::Entity, binary::SerializedEntity>,
 	) {
 		use async_channel::TrySendError;
-		use replication::entity::Update;
+		use replication::entity::update::Update;
 		for (operation, entity) in operations.into_iter() {
 			let update = match operation {
 				EntityOperation::Relevant => {

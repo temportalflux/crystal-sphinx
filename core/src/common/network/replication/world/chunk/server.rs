@@ -1,25 +1,30 @@
-use super::Builder;
-use crate::server::world::chunk::Chunk as ServerChunk;
+use crate::{
+	common::network::replication::world::RecvChunks, server::world::chunk::Chunk as ServerChunk,
+};
 use anyhow::Result;
 use socknet::{
 	connection::Connection,
 	stream::{self, kind::send::Ongoing},
 };
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, RwLock};
 
-pub type Context = stream::Context<Builder, Ongoing>;
-pub type RecvChunks = async_channel::Receiver<Weak<RwLock<ServerChunk>>>;
+#[derive(Default)]
+pub struct AppContext;
 
-pub struct Chunk {
+impl stream::send::AppContext for AppContext {
+	type Opener = stream::uni::Opener;
+}
+
+pub struct Sender {
 	#[allow(dead_code)]
-	context: Arc<Builder>,
+	context: Arc<AppContext>,
 	#[allow(dead_code)]
 	connection: Arc<Connection>,
 	send: Ongoing,
 }
 
-impl From<Context> for Chunk {
-	fn from(context: Context) -> Self {
+impl From<stream::send::Context<AppContext>> for Sender {
+	fn from(context: stream::send::Context<AppContext>) -> Self {
 		Self {
 			context: context.builder,
 			connection: context.connection,
@@ -28,29 +33,12 @@ impl From<Context> for Chunk {
 	}
 }
 
-impl stream::handler::Initiator for Chunk {
-	type Builder = Builder;
+impl stream::handler::Initiator for Sender {
+	type Identifier = super::Identifier;
 }
 
-impl Chunk {
-	pub fn spawn(connection: Weak<Connection>, index: usize, recv_chunks: RecvChunks) {
-		let arc = Connection::upgrade(&connection).unwrap();
-		arc.spawn(async move {
-			use stream::handler::Initiator;
-			let mut stream = Self::open(&connection)?.await?;
-			stream.initiate().await?;
-			stream.send_until_closed(index, recv_chunks).await?;
-			Ok(())
-		});
-	}
-
-	async fn initiate(&mut self) -> Result<()> {
-		use stream::{kind::Write, Identifier};
-		self.send.write(&Builder::unique_id().to_owned()).await?;
-		Ok(())
-	}
-
-	async fn send_until_closed(&mut self, index: usize, recv_chunks: RecvChunks) -> Result<()> {
+impl Sender {
+	pub async fn send_until_closed(&mut self, index: usize, recv_chunks: RecvChunks) -> Result<()> {
 		use stream::kind::Write;
 		self.send.write_size(index).await?;
 		while let Ok(weak_server_chunk) = recv_chunks.recv().await {
