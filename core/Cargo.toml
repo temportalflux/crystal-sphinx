@@ -50,7 +50,7 @@ rustls-pemfile = "0.2"
 # [net] [en/de]crypting data for key exchange
 ring = "0.16"
 # [net] high-level wrapper around quinn which contains dynamic message handling
-socknet = { path = "../temportal-engine/socknet/socknet", features = ["derive"] }
+socknet = { path = "../crates/socknet/socknet", features = ["derive"] }
 
 # [serialization] general usage
 serde = { version = "1.0", features = ["derive"] }

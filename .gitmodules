@@ -1,3 +1,6 @@
 [submodule "temportal-engine"]
 	path = temportal-engine
 	url = git@github.com:temportalflux/TemportalEngine.git
+[submodule "crates/socknet"]
+	path = crates/socknet
+	url = git@github.com:temportalflux/socknet.git
