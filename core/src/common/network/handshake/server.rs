@@ -71,13 +71,11 @@ impl Handshake {
 impl stream::handler::Receiver for Handshake {
 	type Identifier = super::Identifier;
 	fn receive(mut self) {
-		self.connection.clone().spawn(async move {
+		use stream::Identifier;
+		let log = super::Identifier::log_category("server", &self.connection);
+		self.connection.clone().spawn(log.clone(), async move {
 			use anyhow::Context;
-			use stream::{
-				kind::{Recv, Send},
-				Identifier,
-			};
-			let log = super::Identifier::log_category("server", &self.connection);
+			use stream::kind::{Recv, Send};
 			if let Err(error) = self
 				.process_server(&log)
 				.await

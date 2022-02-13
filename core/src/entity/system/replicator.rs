@@ -78,12 +78,7 @@ impl Replicator {
 						return Ok(None);
 					}
 				};
-				let (
-					server,
-					connection_recv,
-					connections,
-					local_client_chunk_sender
-				) = {
+				let (server, connection_recv, connections, local_client_chunk_sender) = {
 					let storage = arc_storage.read().unwrap();
 					let server = storage.server().as_ref().unwrap().clone();
 					let (connection_recv, connections) = {

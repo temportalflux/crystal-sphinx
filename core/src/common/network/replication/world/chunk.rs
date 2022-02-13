@@ -15,7 +15,12 @@ pub fn spawn(
 	recv_chunks: RecvChunks,
 ) -> anyhow::Result<()> {
 	let arc = Connection::upgrade(&connection)?;
-	arc.spawn(async move {
+	let log = format!(
+		"{}[{}]",
+		<Identifier as stream::Identifier>::log_category("server", &arc),
+		index
+	);
+	arc.spawn(log, async move {
 		use stream::handler::Initiator;
 		let mut stream = server::Sender::open(&connection)?.await?;
 		stream.send_until_closed(index, recv_chunks).await?;

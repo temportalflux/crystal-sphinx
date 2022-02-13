@@ -276,7 +276,12 @@ impl EngineSystem for PlayerController {
 				}
 
 				if let Some(connection) = self.server_connection.as_ref() {
-					if has_significantly_changed {
+					use socknet::connection::Active;
+					let is_local = match connection.upgrade() {
+						Some(arc) => arc.is_local(),
+						None => false,
+					};
+					if has_significantly_changed && !is_local {
 						let server_entity = *replicated.get_id_on_server().unwrap();
 						let result = move_player::Datum {
 							timestamp: Utc::now(),

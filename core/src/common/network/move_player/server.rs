@@ -42,7 +42,9 @@ impl From<stream::recv::Context<AppContext>> for Handler {
 impl stream::handler::Receiver for Handler {
 	type Identifier = super::Identifier;
 	fn receive(mut self) {
-		self.connection.clone().spawn(async move {
+		use stream::Identifier;
+		let log = super::Identifier::log_category("server", &self.connection);
+		self.connection.clone().spawn(log.clone(), async move {
 			use crate::entity::component::{physics::linear, Orientation};
 			use stream::kind::Read;
 			let data = self.recv.read::<Datum>().await?;

@@ -49,7 +49,7 @@ impl Handle {
 		let (send_world_rel, recv_world_rel) = async_channel::unbounded();
 		let (send_entities, recv_entities) = async_channel::unbounded();
 		let (send_chunks, recv_chunks) = async_channel::unbounded();
-		
+
 		replication::entity::spawn(connection.clone(), recv_entities)?;
 		replication::world::relevancy::spawn(connection.clone(), recv_world_rel, send_chunks)?;
 		for i in 0..10 {

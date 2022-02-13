@@ -20,7 +20,9 @@ pub struct Datum {
 
 impl Datum {
 	pub fn send(self, connection: Weak<Connection>) -> Result<()> {
-		Connection::upgrade(&connection)?.spawn(async move {
+		let arc = Connection::upgrade(&connection)?;
+		let log = <Identifier as stream::Identifier>::log_category("client", &arc);
+		arc.spawn(log, async move {
 			use stream::handler::Initiator;
 			let mut stream = client::Sender::open(&connection)?.await?;
 			stream.send_datum(self).await?;

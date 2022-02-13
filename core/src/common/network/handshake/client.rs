@@ -43,9 +43,9 @@ impl Handshake {
 	}
 
 	pub fn initiate(mut self) {
-		self.connection.clone().spawn(async move {
-			use stream::Identifier;
-			let log = super::Identifier::log_category("client", &self.connection);
+		use stream::Identifier;
+		let log = super::Identifier::log_category("client", &self.connection);
+		self.connection.clone().spawn(log.clone(), async move {
 			self.process(&log).await?;
 			Ok(())
 		});

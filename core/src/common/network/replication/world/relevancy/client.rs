@@ -56,13 +56,10 @@ impl From<stream::recv::Context<AppContext>> for Handler {
 impl stream::handler::Receiver for Handler {
 	type Identifier = super::Identifier;
 	fn receive(mut self) {
-		self.connection.clone().spawn(async move {
-			use stream::{
-				kind::{Read, Write},
-				Identifier,
-			};
-
-			let log = super::Identifier::log_category("client", &self.connection);
+		use stream::Identifier;
+		let log = super::Identifier::log_category("client", &self.connection);
+		self.connection.clone().spawn(log.clone(), async move {
+			use stream::kind::{Read, Write};
 
 			// Read any incoming relevancy until the client is disconnected.
 			while let Ok(relevance) = self.recv.read::<relevancy::Relevance>().await {

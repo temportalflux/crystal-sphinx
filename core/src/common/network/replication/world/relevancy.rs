@@ -14,9 +14,11 @@ pub fn spawn(
 	channel: RecvUpdate,
 	send_chunks: SendChunks,
 ) -> anyhow::Result<()> {
+	use socknet::stream;
 	let arc = Connection::upgrade(&connection)?;
-	arc.spawn(async move {
-		use socknet::stream::handler::Initiator;
+	let log = <Identifier as stream::Identifier>::log_category("server", &arc);
+	arc.spawn(log, async move {
+		use stream::handler::Initiator;
 		let mut stream = server::Sender::open(&connection)?.await?;
 		stream.send_until_closed(channel, send_chunks).await?;
 		Ok(())

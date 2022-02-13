@@ -1,5 +1,10 @@
 use crate::common::network::connection;
-use socknet::{self, connection::Connection, stream, utility::PinFutureResult};
+use socknet::{
+	self,
+	connection::{Active, Connection},
+	stream,
+	utility::PinFutureResult,
+};
 use std::{
 	collections::HashSet,
 	net::SocketAddr,
@@ -39,7 +44,6 @@ where
 	}
 
 	pub fn ignore(mut self, connection: Arc<Connection>) -> Self {
-		use socknet::connection::Active;
 		self.ignored_addresses.insert(connection.remote_address());
 		self
 	}
@@ -67,6 +71,10 @@ where
 			.collect()
 	}
 
+	fn unique_stream_id() -> &'static str {
+		<T::Identifier as stream::Identifier>::unique_id()
+	}
+
 	pub fn open(self) {
 		assert!(self.on_established.is_some());
 		for connection in self.make_target_list() {
@@ -75,7 +83,8 @@ where
 				Err(_) => continue,
 			};
 			let when_established = self.on_established.as_ref().unwrap().clone();
-			arc.spawn(async move {
+			let log_target = format!("broadcast[{}][{}]", Self::unique_stream_id(), arc.remote_address());
+			arc.spawn(log_target, async move {
 				let handler = T::open(&connection)?.await?;
 				(when_established)(handler).await?;
 				Ok(())

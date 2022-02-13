@@ -84,7 +84,7 @@ impl stream::handler::Receiver for Receiver {
 			<Identifier as stream::Identifier>::unique_id(),
 			self.connection.remote_address()
 		);
-		self.connection.clone().spawn(async move {
+		self.connection.clone().spawn(log.clone(), async move {
 			use stream::kind::Read;
 			let account_id = self.recv.read::<account::Id>().await?;
 			log::info!(target: &log, "ClientJoined({})", account_id);
