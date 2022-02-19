@@ -1,3 +1,5 @@
+//! See [Identifier] for stream graph.
+
 mod identifier;
 pub use identifier::*;
 

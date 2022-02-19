@@ -86,3 +86,6 @@ chrono = { version = "0.4", features = ["serde"]}
 enumset = { version = "1.0", features = ["serde"] }
 # [collections] one-to-many_of<T> relationship data structure
 multimap = "0.8"
+
+# [docs] Embedding graphs in generated documentation
+aquamarine = "0.1"
