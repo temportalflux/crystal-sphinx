@@ -9,7 +9,7 @@ pub mod storage;
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// The life-cycle phase of the application.
-/// 
+///
 /// [Edit diagram](https://mermaid.live/edit/#pako:eNp9VE1P4zAQ_Ssjn4oEyr0HJESrpRIIJHbFwcnBG88Si9SOYoddlOS_Y3uaxG1ZLtYbvzfj-Up6VhqJbM1eW9FU8HMDuc7dY4P6pmk490etSuGU0RAuURZFENyLTpeV0q8rPsPiIjAPQukH1N2KBwQBEnFvhPSqF9PW0nuRBdEkwa3RGksXgy6YuJ3-Ifa44jsNAdDlL11TlBWfITEbZcsk2pFJiu0_5TgPJxWUVA1XV9cwV3VUbaSejI3FeGm_s7BBGTqEEp6xfcd2DB6JJvgM2gwwdeYLHoYPtAOkLfKqpJsxRReUt7VCHX15duejgIC_QZ8Vi-Y8zslNootXfR8guAop2DguImr9d8kchsWzAwBnfFY2diNNaxnqcncntLSVeMO-31onftfKVgdXqCbu63SWvaCJoXjHYPEsQloten_m4jCUBUlDk1DGCgY4WpGzFYoPpOWfBaSUB5gX8WhBoz9Z8wgSk2dkpCkn9EnSftOm18L-_kc8FZZmPWFYZhe_gyyc8cPKishRXHbJ9tjuhZL-_9DnGiBnfkV899naQynat5zlevS6rpE-sa1UzrRs_UfUFi-Z6Jx5_tAlW7u2w0m0UcL_a_YH1fgJ_beinQ)
 /// ```mermaid
 /// graph TD
@@ -22,16 +22,16 @@ pub mod storage;
 /// 	Unloading([Unloading])
 /// 	Disconnecting([Disconnecting])
 /// 	Exit[[Exit]]
-/// 	
+///
 /// 	OpenApp --> Launching
 /// 	Launching --> PostLoadApp{Is Dedicated Server}
 /// 	PostLoadApp -->|no| MainMenu
 /// 	PostLoadApp --> |yes| LoadingWorld
-/// 
+///
 /// 	MainMenu
 /// 		--> ClientLoad[/Host a world/]
 /// 		--> LoadingWorld
-/// 
+///
 /// 	LoadingWorld
 /// 		--> LoadWorld{{Load the world}}
 /// 		--> InGame
@@ -40,7 +40,7 @@ pub mod storage;
 /// 		--> Connecting
 /// 		--> Handshake{{Establish server handshake}}
 /// 		--> InGame
-/// 	
+///
 /// 	InGame --> LeaveGame[/Leave World/]
 /// 	LeaveGame -->|is dedicatd client| Disconnecting
 /// 	Disconnecting --> MainMenu

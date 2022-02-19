@@ -15,11 +15,12 @@ use std::{
 	sync::{Arc, RwLock, Weak},
 };
 
+/// The application context for the client/receiver of the entity replication stream.
 pub struct AppContext {
 	pub entity_world: Weak<RwLock<hecs::World>>,
 }
 
-/// Receiving the handler results in an incoming unidirectional stream
+/// Creates the handler from an incoming unidirectional stream
 impl stream::recv::AppContext for AppContext {
 	type Extractor = stream::uni::Extractor;
 	type Receiver = Handler;
@@ -34,8 +35,8 @@ impl AppContext {
 	}
 }
 
+/// The stream handler for the client/receiver of the entity replication stream.
 pub struct Handler {
-	#[allow(dead_code)]
 	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	recv: Ongoing,

@@ -6,7 +6,7 @@ use std::sync::Arc;
 /// Client-Initiated stream which handles the authentication protocol.
 /// While clients are technically connected when the stream is initiated,
 /// they don't really count as valid clients until the stream is concluded.
-/// 
+///
 /// [Edit Diagram](https://mermaid.live/edit/#pako:eNp9VE1v2zAM_SuEL7t0f8CHAoVTbNnQbpiLnXxhJDoVIlOePgIERf_7KEtelzQofLBlvke-R9J-aZTT1LRNoD-JWNHG4N7jNPAQMUXHadqRz6cZfTTKzMgROsAAnWMmFUlDZw1xvAT1GdSTP17h31mbo_n2Iz6TrylCBnafb2_7Fr4i6_CMB4KtlpAZTclTw4XwKcDPtLNGwXc65eijiwROSkLGoFXJorxRKzqxEZ-w3bwD_yLUgEq5JAI1RnyH-I3W6JxtLiUPpWQVtDFhtniCR5zoHTXNC1FXDF_D7InJZ5QX526C6A7EGdVLga6FuySdkkYojMYxPK3htyQCCmbPb8wqrZeXMqYrjOyKvBlPC1EwCxVwj4ZDvDBadQg7E46Zt4oJEWMK_4HuWUMfPdVNshHMCDOGIDXwzEiOX0jq8UiQghzWOVwOVhLLMSeJJxidrwMuUNm0undiB7as3GR4X2IX7XqSXgdT-ynQL3Uw-apOyqLBN2ekPyWG2dy_AssChzOW7PVV4ln1BdTHtCsx4gVENlDu1YjGJl_FrFLKF5fVdtaFNesHjh5kjg_EaclcCjQ3zUR-QqPlq38ZGGBoxIH4blp51OgPQzPwq-DK1t5rE51v2hFF2k2T_wr9iVXTRp9oBdXfRkW9_gX2CJCU)
 /// ```mermaid
 /// sequenceDiagram
@@ -30,6 +30,7 @@ use std::sync::Arc;
 /// 	S->>C: End Stream
 /// 	alt if passed authentication
 /// 		Note over S: Save user data
+/// 		Note over S: Trigger Client Authenticate Event
 /// 		Note over S: Create entity for client
 /// 		par Server to Incoming
 /// 			Note over C: Transition To InGame

@@ -8,14 +8,16 @@ use socknet::{
 };
 use std::sync::Arc;
 
+/// The application context for the server/sender of a world-relevancy stream.
 #[derive(Default)]
 pub struct AppContext;
 
-/// Opening the handler results in an outgoing bidirectional stream
+/// Opening the stream using an outgoing bidirectional stream
 impl stream::send::AppContext for AppContext {
 	type Opener = stream::bi::Opener;
 }
 
+/// The stream handler for the server/sender of a world-relevancy stream.
 pub struct Sender {
 	#[allow(dead_code)]
 	context: Arc<AppContext>,
@@ -41,6 +43,9 @@ impl stream::handler::Initiator for Sender {
 }
 
 impl Sender {
+	/// Ongoing async task which dispatches relevancy updates to the client.
+	/// When each update is acknowledged, the relevant chunks are sent
+	/// through the provided send channel to be replicated.
 	pub async fn send_until_closed(
 		&mut self,
 		channel: RecvUpdate,
@@ -63,6 +68,7 @@ impl Sender {
 		Ok(())
 	}
 
+	/// Sends an individual relevance update, and awaits until it is acknowledged by the client.
 	async fn send_relevance(&mut self, relevance: relevancy::Relevance) -> Result<()> {
 		use stream::kind::{Read, Write};
 

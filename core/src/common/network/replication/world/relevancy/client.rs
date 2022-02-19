@@ -9,19 +9,25 @@ use socknet::{
 };
 use std::sync::{Arc, RwLock, Weak};
 
+/// The application context for the client/receiver of a world-relevancy stream.
 #[derive(Default)]
 pub struct AppContext {
+	/// The network storage for the client.
 	pub storage: Weak<RwLock<Storage>>,
+	/// The world relevancy last received from the server.
+	/// Arc-locked so it can also be used by each [data stream](super::super::chunk).
 	pub local_relevance: Arc<RwLock<relevancy::Relevance>>,
 }
 
-/// Receiving the handler results in an incoming bidirectional stream
+/// Creates the handler from an incoming bidirectional stream
 impl stream::recv::AppContext for AppContext {
 	type Extractor = stream::bi::Extractor;
 	type Receiver = Handler;
 }
 
 impl AppContext {
+	/// Returns the client application's chunk instance buffer operation sender
+	/// (to send update operations to the graphics buffer).
 	fn client_chunk_sender(&self) -> Result<chunk::OperationSender> {
 		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
@@ -34,8 +40,8 @@ impl AppContext {
 	}
 }
 
+/// The stream handler for the client/receiver of a world-relevancy stream.
 pub struct Handler {
-	#[allow(dead_code)]
 	context: Arc<AppContext>,
 	connection: Arc<Connection>,
 	send: send::Ongoing,

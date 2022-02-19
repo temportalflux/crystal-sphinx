@@ -87,7 +87,7 @@ impl List {
 	}
 
 	/// Non-blocking async-spawning broadcast to reliably send some event through the bus.
-	fn broadcast(&self, event: super::Event) {
+	pub fn broadcast(&self, event: super::Event) {
 		let arclock_dispatcher = self.event_dispatcher.clone();
 		engine::task::spawn("connection-list".to_owned(), async move {
 			let mut dispatcher = arclock_dispatcher.lock().unwrap();

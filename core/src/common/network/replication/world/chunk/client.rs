@@ -13,17 +13,21 @@ use std::{
 	time::Instant,
 };
 
+/// The application context for the client/receiver of a chunk replication stream.
 pub struct AppContext {
 	pub local_relevance: Arc<RwLock<Relevance>>,
 	pub storage: Weak<RwLock<Storage>>,
 }
 
+/// Creates the handler from an incoming unidirectional stream
 impl stream::recv::AppContext for AppContext {
 	type Extractor = stream::uni::Extractor;
 	type Receiver = Handler;
 }
 
 impl AppContext {
+	/// Returns the client application's chunk instance buffer operation sender
+	/// (to send update operations to the graphics buffer).
 	pub fn client_chunk_sender(&self) -> anyhow::Result<chunk::OperationSender> {
 		use crate::common::network::Error::{
 			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
@@ -36,6 +40,7 @@ impl AppContext {
 	}
 }
 
+/// The stream handler for the client/receiver of a chunk replication stream.
 pub struct Handler {
 	#[allow(dead_code)]
 	context: Arc<AppContext>,
@@ -73,6 +78,8 @@ impl stream::handler::Receiver for Handler {
 }
 
 impl Handler {
+	/// Reads a chunk from the stream, after the initial coordinate has been read.
+	/// Keeps track of how long it took to replicate, and enqueues the new chunk for display once replication is complete.
 	async fn process_chunk(&mut self, log: &str, coord: Point3<i64>) -> anyhow::Result<()> {
 		use stream::kind::Read;
 		let start_time = Instant::now();

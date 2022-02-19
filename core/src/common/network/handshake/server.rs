@@ -98,6 +98,7 @@ impl Handshake {
 		use crate::common::network::Error::{FailedToReadServer, FailedToWriteServer};
 		use account::key::{Key, PublicKey};
 		use anyhow::Context;
+		use socknet::connection::Active;
 		use stream::kind::{Read, Recv, Send, Write};
 
 		let account_id = self.connection.fingerprint()?;
@@ -195,7 +196,6 @@ impl Handshake {
 		self.send.finish().await?;
 
 		if !verified {
-			use socknet::connection::Active;
 			log::info!(target: &log, "Failed authentication");
 			self.connection
 				.close(CloseCode::FailedAuthentication as u32, &vec![]);
@@ -213,9 +213,18 @@ impl Handshake {
 			server.add_user(account_id.clone(), arc_user);
 		}
 
+		// Broadcast authenticated event locally to initiate other objects (like replication streams)
+		let connection_list = self.connection_list()?;
+		connection_list
+			.write()
+			.map_err(|_| connection::Error::FailedToWriteList)?
+			.broadcast(connection::Event::Authenticated(
+				self.connection.remote_address(),
+				Arc::downgrade(&self.connection),
+			));
+
 		{
 			use entity::archetype;
-			use socknet::connection::Active;
 			let arc_world = self.entity_world()?;
 			let mut world = arc_world.write().unwrap();
 			log::debug!(
@@ -245,7 +254,7 @@ impl Handshake {
 			world.spawn(builder.build());
 		}
 
-		Broadcast::<client_joined::Sender>::new(self.connection_list()?)
+		Broadcast::<client_joined::Sender>::new(connection_list)
 			.with_on_established(move |client_joined: client_joined::Sender| {
 				let account_id = account_id.clone();
 				Box::pin(async move {

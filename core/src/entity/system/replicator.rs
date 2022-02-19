@@ -461,7 +461,7 @@ impl Replicator {
 		let mut new_connections = HashSet::new();
 		'poll: loop {
 			match self.connection_recv.try_recv() {
-				Ok(Event::Created(address, connection, _is_local)) => {
+				Ok(Event::Authenticated(address, connection)) => {
 					log::debug!("found {}", address);
 					match self.add_connection(address.clone(), &connection) {
 						Ok(_) => {
@@ -472,6 +472,8 @@ impl Replicator {
 						}
 					}
 				}
+				// We wait for full authentication before creating the replication streams
+				Ok(Event::Created(_, _, _)) => {}
 				Ok(Event::Dropped(address)) => {
 					self.remove_connection(&address);
 				}

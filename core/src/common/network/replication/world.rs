@@ -1,3 +1,6 @@
+//! Stream for replicating data about the physical world; what chunks are relevant and what blocks each chunk contains.
+//!
+//! See [`register`] for stream graph.
 use std::sync::{Arc, RwLock, Weak};
 
 use socknet::stream::Registry;
@@ -11,12 +14,34 @@ use crate::{
 pub mod chunk;
 pub mod relevancy;
 
+/// Async channel for sending world updates to the world-relevancy async task.
 pub type SendUpdate = async_channel::Sender<WorldUpdate>;
+/// Async channel for receiving world updates in the world-relevancy async task.
 pub type RecvUpdate = async_channel::Receiver<WorldUpdate>;
 
+/// Async channel for sending chunks to one of the chunk replication async tasks.
 pub type SendChunks = async_channel::Sender<Weak<RwLock<Chunk>>>;
+/// Async channel for receiving chunks in one of the chunk replication async tasks.
 pub type RecvChunks = async_channel::Receiver<Weak<RwLock<Chunk>>>;
 
+#[cfg_attr(doc, aquamarine::aquamarine)]
+/// Client-Initiated stream which handles the authentication protocol.
+/// While clients are technically connected when the stream is initiated,
+/// they don't really count as valid clients until the stream is concluded.
+///
+/// [Edit Diagram](https://mermaid.live/edit#pako:eNptkcFqwzAMhl9F-LRD9gI5FEZW2GmM5eqLamuLiSNnthwope8-uc1gsPliW_-nn1_2xbjkyfSm0FcldvQc8DPjYtkKVklclxPldlsxS3BhRRYYAQuMlLe_0tCkIQZiadJrEoKkHIw9vJOjsJHfdXiqMukeHCp03FrpoRDBC7IvE87UHMbHw2Ho4VgETzGUSV0ibcjuDEUy3aPGlFYYpsrzeKu9pRRb_Z_2G7W3AjeI2FsGXb_Cdtpztyow0yqAUZND1bQR3D2-D8UlZnJSTGcWygsGr095aW7W6GwLWdPr0WOerbF8Va6uXsc9-iApm_4DY6HOtKcez-xML7nSD7T_xU5dvwE3YJpC)
+/// ```mermaid
+/// sequenceDiagram
+/// 	autonumber
+/// 	participant S as Server
+/// 	participant C as Client
+/// 	Note over S: Received Client Authenticate Event (see Handshake)
+/// 	S->>C: Establish Relevancy stream
+/// 	loop ChunkStreamPool
+/// 		S->>C: Establish Chunk stream n
+/// 	end
+/// 	Note over S,C: Streams kept alive until client disconnects
+/// ```
 pub fn register(registry: &mut Registry, storage: Weak<RwLock<Storage>>) {
 	let local_relevance = Arc::new(RwLock::new(Relevance::default()));
 	registry.register(relevancy::Identifier {

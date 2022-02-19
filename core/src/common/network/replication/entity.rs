@@ -1,15 +1,24 @@
-mod identifier;
+//! Stream used to replicate entities and their components to relevant clients.
+//!
+//! See [Identifier] for stream graph.
+use socknet::connection::Connection;
 use std::sync::Weak;
 
+#[doc(hidden)]
+mod identifier;
 pub use identifier::*;
-use socknet::connection::Connection;
 
-pub mod update;
+#[doc(hidden)]
+mod update;
+pub use update::*;
 
+/// Context & Handler for the client/receiver.
 pub mod client;
+/// Context & Handler for the server/sender.
 pub mod server;
 
-pub fn spawn(connection: Weak<Connection>, channel: update::Receiver) -> anyhow::Result<()> {
+/// Spawns an entity replication stream, which persists until either the provided connection or channel are closed (whichever comes first).
+pub fn spawn(connection: Weak<Connection>, channel: RecvUpdate) -> anyhow::Result<()> {
 	use socknet::stream;
 	let arc = Connection::upgrade(&connection)?;
 	let log = <Identifier as stream::Identifier>::log_category("server", &arc);

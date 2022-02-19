@@ -114,7 +114,9 @@ impl OwnedByConnection {
 				Ok(Event::Dropped(address)) => {
 					dropped_connections.insert(address);
 				}
-				Ok(Event::Created(_, _, _)) => {} // NO-OP: We dont care about new connections
+				// NO-OP: We dont care about new connections (neither when created or authenticated)
+				Ok(Event::Created(_, _, _)) => {}
+				Ok(Event::Authenticated(_, _)) => {}
 				Err(TryRecvError::Empty) => {
 					// the receiver is empty, we can return the gathered changes
 					break 'poll;

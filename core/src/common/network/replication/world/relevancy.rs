@@ -1,14 +1,25 @@
-mod identifier;
+//! Stream used to replicate world-relevancy updates to a specific client.
+//! Specifically this replicates the location and radius of relevancy triggers
+//! to the owning client so the client knows both
+//! what chunks to discard locally (were previously relevant and are no longer relevant)
+//! and what chunks to expect in the chunk replication streams (no previously relevant and are now relevant).
+//!
+//! See [Identifier] for stream graph.
+use crate::common::network::replication::world::{RecvUpdate, SendChunks};
+use socknet::connection::Connection;
 use std::sync::Weak;
 
+#[doc(hidden)]
+mod identifier;
 pub use identifier::*;
-use socknet::connection::Connection;
 
-use crate::common::network::replication::world::{RecvUpdate, SendChunks};
-
+/// Context & Handler for the client/receiver.
 pub mod client;
+/// Context & Handler for the server/sender.
 pub mod server;
 
+/// Creates a world relevancy stream for the provided connection,
+/// given the proper channels for cross-thread communication.
 pub fn spawn(
 	connection: Weak<Connection>,
 	channel: RecvUpdate,

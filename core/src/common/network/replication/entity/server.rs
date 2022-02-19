@@ -5,15 +5,18 @@ use socknet::{
 };
 use std::sync::Arc;
 
-use crate::common::network::replication::entity::update;
+use crate::common::network::replication::entity::RecvUpdate;
 
+/// The application context for the server/sender of the entity replication stream.
 #[derive(Default)]
 pub struct AppContext;
-/// Opening the handler results in an outgoing unidirectional stream
+
+/// Opening the stream using an outgoing unidirectional stream
 impl stream::send::AppContext for AppContext {
 	type Opener = stream::uni::Opener;
 }
 
+/// The stream handler for the server/sender of the entity replication stream.
 pub struct Sender {
 	#[allow(dead_code)]
 	context: Arc<AppContext>,
@@ -37,7 +40,9 @@ impl stream::handler::Initiator for Sender {
 }
 
 impl Sender {
-	pub async fn send_until_closed(&mut self, channel: update::Receiver) -> Result<()> {
+	/// Ongoing async task which dispatches the entity updates to the client.
+	/// Will keep the stream alive until its connection or the provided channel closes.
+	pub async fn send_until_closed(&mut self, channel: RecvUpdate) -> Result<()> {
 		use stream::kind::Write;
 		while let Ok(update) = channel.recv().await {
 			self.send.write(&update).await?;

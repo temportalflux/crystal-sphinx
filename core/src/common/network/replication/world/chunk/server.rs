@@ -8,13 +8,16 @@ use socknet::{
 };
 use std::sync::{Arc, RwLock};
 
+/// The application context for the server/sender of a chunk replication stream.
 #[derive(Default)]
 pub struct AppContext;
 
+/// Opening the stream using an outgoing unidirectional stream
 impl stream::send::AppContext for AppContext {
 	type Opener = stream::uni::Opener;
 }
 
+/// The stream handler for the server/sender of a chunk replication stream.
 pub struct Sender {
 	#[allow(dead_code)]
 	context: Arc<AppContext>,
@@ -38,6 +41,13 @@ impl stream::handler::Initiator for Sender {
 }
 
 impl Sender {
+	/// Ongoing async task which dispatches chunks to be replicated to the client.
+	///
+	/// Each of the chunk replication threads is given a receiver to the same channel,
+	/// so when a stream becomes idle, it will wait until a chunk is ready for replication.
+	/// When it is, only one of the streams takes ownership of that chunk and performs the entire replication for it.
+	///
+	/// When a replication is complete, the stream goes back to being idle.
 	pub async fn send_until_closed(&mut self, index: usize, recv_chunks: RecvChunks) -> Result<()> {
 		use stream::kind::Write;
 		self.send.write_size(index).await?;
@@ -52,6 +62,7 @@ impl Sender {
 		Ok(())
 	}
 
+	/// Writes a chunk to the stream.
 	pub async fn write_chunk(&mut self, arc_server_chunk: Arc<RwLock<ServerChunk>>) -> Result<()> {
 		use stream::kind::Write;
 		let chunk = {

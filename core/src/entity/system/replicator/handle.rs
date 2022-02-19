@@ -28,7 +28,7 @@ pub struct Handle {
 }
 
 enum UpdateChannel {
-	Remote(relevancy::WorldUpdateSender, entity::update::Sender),
+	Remote(relevancy::WorldUpdateSender, entity::SendUpdate),
 	Local(ClientChunkOperationSender),
 }
 
@@ -161,7 +161,7 @@ impl Handle {
 		serialized: &HashMap<hecs::Entity, binary::SerializedEntity>,
 	) {
 		use async_channel::TrySendError;
-		use replication::entity::update::Update;
+		use replication::entity::Update;
 		if let UpdateChannel::Remote(_, send_entities) = &self.channel {
 			for (operation, entity) in operations.into_iter() {
 				let update = match operation {

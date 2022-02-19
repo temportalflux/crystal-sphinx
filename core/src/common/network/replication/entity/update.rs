@@ -1,14 +1,21 @@
 use crate::entity::component::binary::SerializedEntity;
 use serde::{Deserialize, Serialize};
 
-pub type Sender = async_channel::Sender<Update>;
-pub type Receiver = async_channel::Receiver<Update>;
+/// Async channel to send entity updates to be replicated to some client.
+pub type SendUpdate = async_channel::Sender<Update>;
+/// Async channel to receive entity updates to be replicated to some client.
+pub type RecvUpdate = async_channel::Receiver<Update>;
 
+/// An update to be replicated to some client.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Update {
+	/// An entity is now relevant to the client and should be replicated.
 	Relevant(SerializedEntity),
+	/// A relevant entity has changed and should be replicated.
 	Update(SerializedEntity),
+	/// An entity was relevant and is no longer relevant to that client.
 	Irrelevant(hecs::Entity),
+	/// An entity was destroyed while it was relevant to some client.
 	Destroyed(hecs::Entity),
 }
 
