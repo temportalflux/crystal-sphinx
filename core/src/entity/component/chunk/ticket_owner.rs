@@ -11,7 +11,8 @@ pub(crate) struct ActiveTicket {
 
 #[derive(Clone, Default)]
 pub struct TicketOwner {
-	/// The radius of chunks around the [`current chunk coordinate`](super::Position::chunk)
+	/// The radius of chunks around the
+	/// [`current chunk coordinate`](crate::entity::component::physics::linear::Position::chunk)
 	/// to load on the server.
 	server_load_radius: usize,
 

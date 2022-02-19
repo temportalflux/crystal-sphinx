@@ -3,6 +3,6 @@ pub enum CloseCode {
 	/// Error code for clients which failed authentication.
 	/// Reason:
 	/// Ø => token failed verification
-	/// [0u8] => there was an error while processing the stream
+	/// \[0u8\] => there was an error while processing the stream
 	FailedAuthentication = 1,
 }
