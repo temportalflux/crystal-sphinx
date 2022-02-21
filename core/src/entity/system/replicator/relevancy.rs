@@ -82,6 +82,7 @@ impl Relevance {
 		false
 	}
 
+	#[profiling::function]
 	pub fn difference(&self, other: &Relevance) -> HashSet<Point3<i64>> {
 		// For now this is brute force, but there has GOT to be a faster way
 		// to calculate the area difference between two sets of cuboid areas.
@@ -99,6 +100,7 @@ impl Relevance {
 			.fold(f32::INFINITY, |a1, a2| a1.min(a2))
 	}
 
+	#[profiling::function]
 	pub fn sort_vec_by_sig_dist(&self, points: &mut Vec<Point3<i64>>) {
 		points.sort_by(|a, b| {
 			let a_dist = self.min_sig_dist_sq(&a);

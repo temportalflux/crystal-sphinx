@@ -73,6 +73,7 @@ impl Handle {
 	}
 
 	pub fn send_relevance_updates(&mut self, updates: Vec<relevancy::Update>) {
+		profiling::scope!("send_relevance_updates", &format!("count: {}", updates.len()));
 		for update in updates.into_iter() {
 			match update {
 				relevancy::Update::World(update) => {

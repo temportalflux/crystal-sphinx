@@ -170,9 +170,12 @@ impl EngineSystem for Replicator {
 		let operations =
 			updates.as_operations(&mut self.entities_relevant, &self.connection_handles);
 
-		for (address, updates) in updates.into_items().into_iter() {
-			if let Some(handle) = self.connection_handles.get_mut(&address) {
-				handle.send_relevance_updates(updates);
+		{
+			profiling::scope!("update-connection-relevance");
+			for (address, updates) in updates.into_items().into_iter() {
+				if let Some(handle) = self.connection_handles.get_mut(&address) {
+					handle.send_relevance_updates(updates);
+				}
 			}
 		}
 
@@ -271,6 +274,7 @@ struct EntityUpdates {
 
 impl EntityUpdates {
 	fn new(relevant_entities: &MultiSet<hecs::Entity, SocketAddr>) -> Self {
+		profiling::scope!("entity-updates:new");
 		Self {
 			relevance: RelevanceByConnection::default(),
 			updates: MultiMap::new(),
@@ -284,6 +288,7 @@ impl EntityUpdates {
 		arc_chunk_cache: &chunk::cache::ArcLock,
 		connection_handles: &mut HashMap<SocketAddr, Handle>,
 	) -> Self {
+		profiling::scope!("entity-updates:collect_chunks", &format!("connections: {}", connection_handles.len()));
 		let chunk_cache = arc_chunk_cache.read().unwrap();
 		for (handle_addr, handle) in connection_handles.iter_mut() {
 			let prev_relevance = handle.chunk_relevance();
@@ -303,23 +308,30 @@ impl EntityUpdates {
 			);
 
 			let mut pending_chunks = next_relevance.difference(&prev_relevance);
-			for coordinate in handle.take_pending_chunks().into_iter() {
-				if next_relevance.is_relevant(&coordinate) {
-					pending_chunks.insert(coordinate);
+			{
+				profiling::scope!("take-pending-chunks");
+				for coordinate in handle.take_pending_chunks().into_iter() {
+					if next_relevance.is_relevant(&coordinate) {
+						pending_chunks.insert(coordinate);
+					}
 				}
 			}
+
 			let mut pending_chunks = pending_chunks.into_iter().collect::<Vec<_>>();
 			next_relevance.sort_vec_by_sig_dist(&mut pending_chunks);
-			for coordinate in pending_chunks.into_iter() {
-				// If the chunk is in the cache, then the server has it loaded (to some degree).
-				// If not, it needs to go back on the component for the next update cycle.
-				match chunk_cache.find(&coordinate) {
-					Some(weak_chunk) => {
-						self.new_chunks
-							.insert(handle_addr.clone(), weak_chunk.clone());
-					}
-					None => {
-						handle.insert_pending_chunk(coordinate);
+			{
+				profiling::scope!("send-pending");
+				for coordinate in pending_chunks.into_iter() {
+					// If the chunk is in the cache, then the server has it loaded (to some degree).
+					// If not, it needs to go back on the component for the next update cycle.
+					match chunk_cache.find(&coordinate) {
+						Some(weak_chunk) => {
+							self.new_chunks
+								.insert(handle_addr.clone(), weak_chunk.clone());
+						}
+						None => {
+							handle.insert_pending_chunk(coordinate);
+						}
 					}
 				}
 			}
@@ -328,7 +340,7 @@ impl EntityUpdates {
 	}
 
 	fn query(mut self, arc_world: &Arc<RwLock<hecs::World>>) -> Self {
-		profiling::scope!("query-entity-updates");
+		profiling::scope!("entity-updates:query");
 		let mut world = arc_world.write().unwrap();
 		for mut entity_query in GatherEntity::query_mut(&mut world) {
 			entity_query.push_relevance(&mut self.relevance);
@@ -436,6 +448,7 @@ impl EntityUpdates {
 		}
 	}
 
+	#[profiling::function]
 	fn into_items(mut self) -> HashMap<SocketAddr, Vec<relevancy::Update>> {
 		use relevancy::{Update::*, WorldUpdate};
 		let relevance = self.relevance.into_inner();
