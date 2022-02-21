@@ -244,7 +244,7 @@ impl<'c> GatherEntity<'c> {
 		));
 	}
 
-	fn is_entity_replicated(&self) -> bool {
+	fn is_entity_replicatable(&self) -> bool {
 		self.components.replicated.is_some()
 	}
 
@@ -332,7 +332,7 @@ impl EntityUpdates {
 		let mut world = arc_world.write().unwrap();
 		for mut entity_query in GatherEntity::query_mut(&mut world) {
 			entity_query.push_relevance(&mut self.relevance);
-			if entity_query.is_entity_replicated() {
+			if entity_query.is_entity_replicatable() {
 				// Prune all entities from `destroyed_entities` that still exist,
 				// (leaving it only containing the entities which do not still exist).
 				self.destroyed.remove(&entity_query.entity);

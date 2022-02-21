@@ -109,6 +109,7 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 
 impl network::Replicatable for Position {
 	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
+		/*
 		if is_locally_owned {
 			let offset =
 				(replicated.chunk - self.chunk).component_mul(&chunk::SIZE_I.cast::<i64>());
@@ -117,6 +118,7 @@ impl network::Replicatable for Position {
 				return;
 			}
 		}
+		*/
 		*self = *replicated;
 	}
 }

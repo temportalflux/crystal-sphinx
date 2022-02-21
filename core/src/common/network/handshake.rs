@@ -1,5 +1,5 @@
 //! Stream initiated by clients to join the server.
-//! 
+//!
 //! See [Identifier] for stream graph.
 
 #[doc(hidden)]

@@ -89,7 +89,8 @@ impl IntegratedBuffer {
 		&mut self,
 		chunk: Point3<i64>,
 		block_ids: Vec<(Point3<usize>, block::LookupId)>,
-	) {
+	) -> anyhow::Result<()> {
+		use anyhow::Context;
 		profiling::scope!(
 			"insert_chunk",
 			&format!(
@@ -104,40 +105,48 @@ impl IntegratedBuffer {
 		let mut points = HashSet::with_capacity(block_ids.len());
 		for (point, block_id) in block_ids.into_iter() {
 			let point = block::Point::new(chunk, point.cast::<i8>());
-			self.insert_inactive(&point, block_id, Instance::from(&point, EnumSet::empty()));
+			self.insert_inactive(&point, block_id, Instance::from(&point, EnumSet::empty()))
+				.with_context(|| format!("insert chunk <{}, {}, {}>", chunk.x, chunk.y, chunk.z))?;
 			points.insert(point);
 		}
 		self.update_faces(points);
+
+		Ok(())
 	}
 
-	pub fn remove_chunk(&mut self, coord: &Point3<i64>) {
+	pub fn remove_chunk(&mut self, coord: &Point3<i64>) -> anyhow::Result<()> {
+		use anyhow::Context;
 		if let Some(active_points) = self.active_points.get(&coord).cloned() {
 			for (point_offset, (block_id, _instance_idx)) in active_points.into_iter() {
-				self.remove(&block::Point::new(*coord, point_offset), block_id);
+				let point = block::Point::new(*coord, point_offset);
+				self.remove(&point, block_id)
+					.with_context(|| format!("removing chunk {coord}"))?;
 			}
 			assert_eq!(self.active_points.get(&coord).unwrap().len(), 0);
 		}
 
 		let _ = self.active_points.remove(&coord);
 		let _ = self.inactive_points.remove(&coord);
+		Ok(())
 	}
 
-	pub fn set_id_for(&mut self, point: &block::Point, id: Option<block::LookupId>) {
+	pub fn set_id_for(
+		&mut self,
+		point: &block::Point,
+		id: Option<block::LookupId>,
+	) -> anyhow::Result<()> {
+		use anyhow::Context;
 		match self.get_block_id(&point) {
 			Some((_phase, prev_block_id)) => match id {
-				Some(next_block_id) => {
-					self.change_id(&point, prev_block_id, next_block_id);
-				}
-				None => {
-					self.remove(&point, prev_block_id);
-				}
+				Some(next_block_id) => self.change_id(&point, prev_block_id, next_block_id),
+				None => self.remove(&point, prev_block_id),
 			},
-			None => {
-				if let Some(id) = id {
-					self.insert(&point, id);
-				}
-			}
+			None => match id {
+				Some(id) => self.insert(&point, id),
+				None => Ok(()),
+			},
 		}
+		.with_context(|| format!("set id of {point} to {id:?}"))
 	}
 }
 
@@ -163,9 +172,12 @@ impl IntegratedBuffer {
 		&mut self.categories[idx]
 	}
 
-	fn insert(&mut self, point: &block::Point, next_id: block::LookupId) {
-		self.insert_inactive(&point, next_id, Instance::from(&point, EnumSet::empty()));
+	fn insert(&mut self, point: &block::Point, next_id: block::LookupId) -> anyhow::Result<()> {
+		use anyhow::Context;
+		self.insert_inactive(&point, next_id, Instance::from(&point, EnumSet::empty()))
+			.with_context(|| format!("insert {next_id} at {point}"))?;
 		self.update_faces(HashSet::from([*point]));
+		Ok(())
 	}
 
 	fn change_id(
@@ -173,44 +185,66 @@ impl IntegratedBuffer {
 		point: &block::Point,
 		prev_id: block::LookupId,
 		next_id: block::LookupId,
-	) {
-		self.change_category(
-			&point,
-			category::Key::Id(prev_id),
-			category::Key::Id(next_id),
-		);
+	) -> anyhow::Result<()> {
+		use anyhow::Context;
+		let _ = self
+			.change_category(
+				&point,
+				category::Key::Id(prev_id),
+				category::Key::Id(next_id),
+			)
+			.with_context(|| format!("change point {point} from {prev_id} -> {next_id}."))?;
+		Ok(())
 	}
 
 	/// Deallocates the instance data and removes all reference to the point from the metadata (active AND inactive).
-	fn remove(&mut self, point: &block::Point, prev_id: block::LookupId) {
-		if let Some(idx) = self.change_category(
-			&point,
-			category::Key::Id(prev_id),
-			category::Key::Unallocated,
-		) {
-			self.instances[idx] = Instance::default();
-			self.changed_ranges.insert(idx);
-		}
+	fn remove(&mut self, point: &block::Point, prev_id: block::LookupId) -> anyhow::Result<()> {
+		use anyhow::Context;
+		let idx = self
+			.change_category(
+				&point,
+				category::Key::Id(prev_id),
+				category::Key::Unallocated,
+			)
+			.with_context(|| format!("remove point {point} with id {prev_id}."))?;
+		self.instances[idx] = Instance::default();
+		self.changed_ranges.insert(idx);
+		Ok(())
 	}
 
-	fn insert_inactive(&mut self, point: &block::Point, id: block::LookupId, instance: Instance) {
-		self.remove_point(&point);
+	fn insert_inactive(
+		&mut self,
+		point: &block::Point,
+		id: block::LookupId,
+		instance: Instance,
+	) -> anyhow::Result<()> {
+		use anyhow::Context;
+		self.remove_point(&point)
+			.with_context(|| format!("insert inactive {id} at point {point}"))?;
 		if !self.inactive_points.contains_key(point.chunk()) {
 			self.inactive_points.insert(*point.chunk(), HashMap::new());
 		}
 		let inactive_chunk_points = self.inactive_points.get_mut(point.chunk()).unwrap();
 		let _ = inactive_chunk_points.insert(*point.offset(), (id, instance));
+		Ok(())
 	}
 
-	fn remove_point(&mut self, point: &block::Point) {
-		if let Some(chunk_points) = self.active_points.get_mut(&point.chunk()) {
-			if let Some((block_id, _instance_idx)) = chunk_points.remove(&point.offset()) {
-				self.remove(&point, block_id);
-			}
+	fn remove_point(&mut self, point: &block::Point) -> anyhow::Result<()> {
+		use anyhow::Context;
+		if let Some(block_id) = self
+			.active_points
+			.get(&point.chunk())
+			.map(|chunk_points| chunk_points.get(&point.offset()))
+			.flatten()
+			.map(|(id, _)| *id)
+		{
+			self.remove(&point, block_id)
+				.with_context(|| format!("remove point {point}"))?;
 		}
 		if let Some(chunk_points) = self.inactive_points.get_mut(&point.chunk()) {
 			let _ = chunk_points.remove(&point.offset());
 		}
+		Ok(())
 	}
 
 	fn get_block_id(&self, point: &block::Point) -> Option<(IdPhase, block::LookupId)> {
@@ -232,21 +266,29 @@ impl IntegratedBuffer {
 		point: &block::Point,
 		start: category::Key,
 		destination: category::Key,
-	) -> Option<usize> {
-		let path = match category::Key::new_path(start, destination, self.max_block_id()) {
-			Some(path) => path,
-			None => return None,
-		};
-
+	) -> Result<usize, Error> {
 		let mut instance_idx = match start {
 			category::Key::Unallocated => self.get_category(start).start(),
 			_ => match self.active_points.get_mut(&point.chunk()) {
 				Some(chunk_points) => match chunk_points.remove(&point.offset()) {
 					Some((_id, instance_idx)) => instance_idx,
-					None => unimplemented!(),
+					None => {
+						return Err(Error::PointNotAllocatedInChunk(*point));
+					}
 				},
-				None => unimplemented!(),
+				None => {
+					return Err(Error::ChunkNotAllocated(
+						point.chunk().x,
+						point.chunk().y,
+						point.chunk().z,
+					));
+				}
 			},
+		};
+
+		let path = match category::Key::new_path(start, destination, self.max_block_id()) {
+			Some(path) => path,
+			None => return Ok(instance_idx),
 		};
 
 		let direction = category::Direction::from(&start, &destination);
@@ -282,7 +324,7 @@ impl IntegratedBuffer {
 			let _ = chunk_points.insert(*point.offset(), (block_id, instance_idx));
 		}
 
-		Some(instance_idx)
+		Ok(instance_idx)
 	}
 
 	fn set_point_index(&mut self, point: &block::Point, idx: usize) {
@@ -388,9 +430,16 @@ impl IntegratedBuffer {
 		}
 
 		{
+			use anyhow::Context;
 			profiling::scope!("apply-phase-changes");
 			for (point, phase, desired_phase) in changes.into_iter() {
-				self.change_phase(&point, phase, desired_phase);
+				let res = self.change_phase(&point, phase, desired_phase);
+				let res = res.with_context(|| {
+					format!("update phase {phase:?} -> {desired_phase:?} when updating faces")
+				});
+				if let Err(err) = res {
+					log::error!(target: "local", "{:?}", err);
+				}
 			}
 		}
 	}
@@ -463,7 +512,13 @@ impl IntegratedBuffer {
 		desired_phase
 	}
 
-	fn change_phase(&mut self, point: &block::Point, prev: IdPhase, next: IdPhase) {
+	fn change_phase(
+		&mut self,
+		point: &block::Point,
+		prev: IdPhase,
+		next: IdPhase,
+	) -> anyhow::Result<()> {
+		use anyhow::Context;
 		profiling::scope!("change_phase", &format!("{} {:?}->{:?}", point, prev, next));
 		match (prev, next) {
 			// Deactivating a block, time to remove it from the buffered data.
@@ -471,15 +526,22 @@ impl IntegratedBuffer {
 				let (id, instance_idx) = match self.active_points.get_mut(&point.chunk()) {
 					Some(chunk_points) => match chunk_points.get(&point.offset()) {
 						Some((id, instance_idx)) => (*id, *instance_idx),
-						None => return,
+						None => return Err(Error::PointNotAllocatedInChunk(*point))?,
 					},
-					None => return,
+					None => {
+						return Err(Error::ChunkNotAllocated(
+							point.chunk().x,
+							point.chunk().y,
+							point.chunk().z,
+						))?
+					}
 				};
 				// Clone the instance out of the buffered data
 				let instance = self.instances.get(instance_idx).unwrap().clone();
 
 				// Move the instance data to the unallocated section
-				self.remove(&point, id);
+				self.remove(&point, id)
+					.with_context(|| format!("deactivate point {point}"))?;
 
 				// Insert the point and instance into the inactive thunk
 				if !self.inactive_points.contains_key(&point.chunk()) {
@@ -488,6 +550,8 @@ impl IntegratedBuffer {
 				if let Some(chunk_points) = self.inactive_points.get_mut(&point.chunk()) {
 					chunk_points.insert(*point.offset(), (id, instance));
 				}
+
+				Ok(())
 			}
 			(IdPhase::Inactive, IdPhase::Active) => {
 				// The voxel should be rendered! (at least 1 face).
@@ -495,23 +559,49 @@ impl IntegratedBuffer {
 				let (id, instance) = match self.inactive_points.get_mut(&point.chunk()) {
 					Some(chunk_points) => match chunk_points.remove(&point.offset()) {
 						Some((id, instance)) => (id, instance),
-						None => return,
+						None => return Err(Error::PointNotReservedInChunk(*point))?,
 					},
-					None => return,
+					None => {
+						return Err(Error::ChunkNotReserved(
+							point.chunk().x,
+							point.chunk().y,
+							point.chunk().z,
+						))?
+					}
 				};
 
-				let instance_idx = self
-					.change_category(&point, category::Key::Unallocated, category::Key::Id(id))
-					.unwrap();
+				let instance_idx = self.change_category(
+					&point,
+					category::Key::Unallocated,
+					category::Key::Id(id),
+				)?;
 				match self.instances.get_mut(instance_idx) {
 					Some(target) => {
 						*target = instance;
 						self.changed_ranges.insert(instance_idx);
 					}
-					None => return,
+					None => return Err(Error::NoSuchInstance(instance_idx, self.instances.len()))?,
 				}
+
+				Ok(())
 			}
 			_ => unimplemented!(),
 		}
 	}
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+	#[error("Chunk <{0}, {1}, {2}> has no allocations.")]
+	ChunkNotAllocated(i64, i64, i64),
+	#[error("Chunk <{0}, {1}, {2}> is not reserved.")]
+	ChunkNotReserved(i64, i64, i64),
+
+	#[error("Point {0} is not allocated in its chunk.")]
+	PointNotAllocatedInChunk(block::Point),
+	#[error("Point {0} is not reserved in its chunk.")]
+	PointNotReservedInChunk(block::Point),
+
+	#[error("Instance index {0} is out of bounds of [0..{1}).")]
+	NoSuchInstance(usize, usize),
 }

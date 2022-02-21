@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// The identifier struct for connecting to a server (`handshake`).
-/// 
+///
 /// Client-Initiated stream which handles the authentication protocol.
 /// While clients are technically connected when the stream is initiated,
 /// they don't really count as valid clients until the stream is concluded.

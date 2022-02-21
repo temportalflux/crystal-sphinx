@@ -107,16 +107,32 @@ impl Buffer {
 				if !chunk_receiver.is_empty() {
 					profiling::scope!("process");
 					if let Ok(mut description) = arc_description.try_lock() {
+						use anyhow::Context;
 						delay_ms = delay_between_batches;
 						let mut operation_count = 0;
 						while let Ok(operation) = chunk_receiver.try_recv() {
-							match operation {
+							let res = match operation {
 								Operation::Remove(coord) => {
-									description.remove_chunk(&coord);
+									let res = description.remove_chunk(&coord);
+									res.with_context(|| {
+										format!(
+											"remove chunk <{}, {}, {}>",
+											coord.x, coord.y, coord.z
+										)
+									})
 								}
-								Operation::Insert(coordinate, updates) => {
-									description.insert_chunk(coordinate, updates);
+								Operation::Insert(coord, updates) => {
+									let res = description.insert_chunk(coord, updates);
+									res.with_context(|| {
+										format!(
+											"insert chunk <{}, {}, {}>",
+											coord.x, coord.y, coord.z
+										)
+									})
 								}
+							};
+							if let Err(err) = res {
+								log::error!(target: "thread", "{:?}", err);
 							}
 							operation_count += 1;
 							if operation_count >= operation_batch_size {
