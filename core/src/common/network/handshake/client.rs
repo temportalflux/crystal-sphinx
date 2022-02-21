@@ -3,14 +3,19 @@ use anyhow::Result;
 use socknet::{self, connection::Connection, stream};
 use std::sync::{Arc, RwLock, Weak};
 
+/// The application context for the client/sender of the handshake.
 pub struct AppContext {
+	/// The client's application state so they can be transitioned
+	/// to the correct state once the handshake is complte.
 	pub app_state: Weak<RwLock<app::state::Machine>>,
 }
 
+/// Opening the stream using an outgoing bidirectional stream
 impl stream::send::AppContext for AppContext {
 	type Opener = stream::bi::Opener;
 }
 
+/// The stream handler for the client/sender of the handshake.
 pub struct Handshake {
 	context: Arc<AppContext>,
 	connection: Arc<Connection>,
@@ -42,6 +47,7 @@ impl Handshake {
 			.ok_or(Error::InvalidAppState)?)
 	}
 
+	/// Initiates the connection, performing the client-side of the handshake.
 	pub fn initiate(mut self) {
 		use stream::Identifier;
 		let log = super::Identifier::log_category("client", &self.connection);
@@ -51,6 +57,7 @@ impl Handshake {
 		});
 	}
 
+	/// Actual handshake procedure for the client.
 	async fn process(&mut self, log: &str) -> Result<()> {
 		use anyhow::Context;
 		use stream::kind::{Read, Write};
@@ -117,6 +124,7 @@ impl Handshake {
 		// that it is safe to enter the game, once relevant chunks and entities have been loaded.
 		// Must require:
 		// - player's entity and components have been replicated
+		// - some of the chunks in the immediate vicinity (so the entity doesn't fall through the world)
 
 		self.app_state()?.write().unwrap().transition_to(
 			match authenticated {
