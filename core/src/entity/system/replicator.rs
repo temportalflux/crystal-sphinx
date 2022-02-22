@@ -288,52 +288,92 @@ impl EntityUpdates {
 		arc_chunk_cache: &chunk::cache::ArcLock,
 		connection_handles: &mut HashMap<SocketAddr, Handle>,
 	) -> Self {
-		profiling::scope!("entity-updates:collect_chunks", &format!("connections: {}", connection_handles.len()));
-		let chunk_cache = arc_chunk_cache.read().unwrap();
+		use std::time::{Instant, Duration};
+		profiling::scope!(
+			"entity-updates:collect_chunks",
+			&format!("connections: {}", connection_handles.len())
+		);
+		// Throttles this function to make sure it doesnt exceed a max number of ms.
+		// Needed because the `send-pending` block can consume tens of ms per frame without rate-limiting.
+		static PERF_BUDGET_MS_PER_CONNECTION: Duration = Duration::from_micros(500); // 0.5 ms
+		
+		let chunk_cache = match arc_chunk_cache.try_read() {
+			Ok(locked) => locked,
+			Err(_) => return self,
+		};
+
 		for (handle_addr, handle) in connection_handles.iter_mut() {
-			let prev_relevance = handle.chunk_relevance();
+			let perf_budget_start = Instant::now();
+
 			let next_relevance = match self.relevance.0.get(handle_addr) {
-				Some(relevance) => &relevance.chunk,
-				None => continue,
+				Some(relevance) if *handle.chunk_relevance() != relevance.chunk => {
+					Some(&relevance.chunk)
+				}
+				_ => None,
 			};
-			if *prev_relevance == *next_relevance {
-				continue;
-			}
 
-			log::debug!(
-				"{}: {:?} -> {:?}",
-				handle_addr,
-				prev_relevance,
-				next_relevance
-			);
+			if let Some(next_relevance) = next_relevance {
+				profiling::scope!("update-pending");
 
-			let mut pending_chunks = next_relevance.difference(&prev_relevance);
-			{
-				profiling::scope!("take-pending-chunks");
-				for coordinate in handle.take_pending_chunks().into_iter() {
-					if next_relevance.is_relevant(&coordinate) {
-						pending_chunks.insert(coordinate);
+				// Only keep chunks in the pending list that are still relevant
+				{
+					profiling::scope!("retain-relevant-pending");
+					let pending_chunks = handle.pending_chunks_mut();
+					pending_chunks.retain(|coord| next_relevance.is_relevant(&coord));
+				}
+
+				{
+					profiling::scope!("append-new-pending");
+					let cuboids = next_relevance.difference(&handle.chunk_relevance());
+					let pending_chunks = handle.pending_chunks_mut();
+					for cuboid in cuboids.into_iter() {
+						let cuboid_coords: HashSet<Point3<i64>> = cuboid.into();
+						for coord in cuboid_coords {
+							pending_chunks.insert(coord);
+						}
 					}
 				}
 			}
 
-			let mut pending_chunks = pending_chunks.into_iter().collect::<Vec<_>>();
-			next_relevance.sort_vec_by_sig_dist(&mut pending_chunks);
-			{
-				profiling::scope!("send-pending");
-				for coordinate in pending_chunks.into_iter() {
+			if Instant::now().duration_since(perf_budget_start) < PERF_BUDGET_MS_PER_CONNECTION {
+				let pending_chunks = handle.pending_chunks_mut();
+				profiling::scope!(
+					"send-pending",
+					&format!(
+						"count:{}",
+						pending_chunks.len(),
+					)
+				);
+				
+				let mut chunks_to_process = pending_chunks.drain().collect::<Vec<_>>();
+				let mut still_pending = Vec::new();
+				'process_next_chunk: loop {					
+					profiling::scope!("send-pending-chunk");
+
+					let coordinate = match chunks_to_process.pop() {
+						Some(coord) => coord,
+						None => break 'process_next_chunk,
+					};
+
 					// If the chunk is in the cache, then the server has it loaded (to some degree).
-					// If not, it needs to go back on the component for the next update cycle.
-					match chunk_cache.find(&coordinate) {
-						Some(weak_chunk) => {
-							self.new_chunks
-								.insert(handle_addr.clone(), weak_chunk.clone());
-						}
-						None => {
-							handle.insert_pending_chunk(coordinate);
-						}
+					if let Some(weak_chunk) = chunk_cache.find(&coordinate) {
+						self.new_chunks
+							.insert(handle_addr.clone(), weak_chunk.clone());
+					}
+					else
+					{
+						// If chunk is not load or we've exceeded our alloted time/amount for this update,
+						// then the chunk needs to go back on the component for the next update cycle.
+						still_pending.push(coordinate);
+					}
+
+					if Instant::now().duration_since(perf_budget_start) >= PERF_BUDGET_MS_PER_CONNECTION {
+						break 'process_next_chunk;
 					}
 				}
+
+				chunks_to_process.append(&mut still_pending);
+				*pending_chunks = chunks_to_process.into_iter().collect();
 			}
 		}
 		self

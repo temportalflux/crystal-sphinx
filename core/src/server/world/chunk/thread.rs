@@ -168,9 +168,9 @@ impl ThreadState {
 				(false, some_arc_chunk.unwrap())
 			}
 			None => {
-				let mut cache = self.cache.write().unwrap();
 				let root_dir = self.root_dir.clone();
 				let arc_chunk = Chunk::load_or_generate(&coordinate, level, root_dir);
+				let mut cache = self.cache.write().unwrap();
 				cache.insert(coordinate, Arc::downgrade(&arc_chunk));
 				(true, arc_chunk)
 			}

@@ -73,7 +73,10 @@ impl Handle {
 	}
 
 	pub fn send_relevance_updates(&mut self, updates: Vec<relevancy::Update>) {
-		profiling::scope!("send_relevance_updates", &format!("count: {}", updates.len()));
+		profiling::scope!(
+			"send_relevance_updates",
+			&format!("count: {}", updates.len())
+		);
 		for update in updates.into_iter() {
 			match update {
 				relevancy::Update::World(update) => {
@@ -111,9 +114,12 @@ impl Handle {
 				use crate::client::world::chunk::Operation;
 				match update {
 					relevancy::WorldUpdate::Relevance(relevance) => {
-						let old_chunks = self.chunk_relevance.difference(&relevance);
-						for coord in old_chunks.into_iter() {
-							let _ = chunk_sender.try_send(Operation::Remove(coord));
+						let old_chunk_cuboids = self.chunk_relevance.difference(&relevance);
+						for cuboid in old_chunk_cuboids.into_iter() {
+							let cuboid_coords: HashSet<Point3<i64>> = cuboid.into();
+							for coord in cuboid_coords.into_iter() {
+								let _ = chunk_sender.try_send(Operation::Remove(coord));
+							}
 						}
 					}
 					relevancy::WorldUpdate::Chunks(new_chunks) => {
@@ -140,12 +146,8 @@ impl Handle {
 		}
 	}
 
-	pub fn take_pending_chunks(&mut self) -> HashSet<Point3<i64>> {
-		self.pending_chunks.drain().collect()
-	}
-
-	pub fn insert_pending_chunk(&mut self, coordinate: Point3<i64>) {
-		self.pending_chunks.insert(coordinate);
+	pub fn pending_chunks_mut(&mut self) -> &mut HashSet<Point3<i64>> {
+		&mut self.pending_chunks
 	}
 
 	pub fn chunk_relevance(&self) -> &relevancy::Relevance {

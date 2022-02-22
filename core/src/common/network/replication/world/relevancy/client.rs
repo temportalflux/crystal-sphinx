@@ -2,11 +2,13 @@ use crate::{
 	client::world::chunk, common::network::Storage, entity::system::replicator::relevancy,
 };
 use anyhow::Result;
+use engine::math::nalgebra::Point3;
 use socknet::stream;
 use socknet::{
 	connection::Connection,
 	stream::kind::{recv, send},
 };
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock, Weak};
 
 /// The application context for the client/receiver of a world-relevancy stream.
@@ -71,22 +73,28 @@ impl stream::handler::Receiver for Handler {
 			while let Ok(relevance) = self.recv.read::<relevancy::Relevance>().await {
 				// Get the set of chunks which are only in the old relevance,
 				// and write the new relevance to the shared list.
-				let old_chunks = {
+				let old_chunk_cuboids = {
 					// Contain the write-lock on local relevance to only this block
 					// so it doesn't get held after the acknowledgement is sent.
 					let mut local_relevance = self.context.local_relevance.write().unwrap();
 					// Compare old relevance with new relevance to determine what chunks are no longer relevant
-					let old_chunks = local_relevance.difference(&relevance);
+					let cuboids = local_relevance.difference(&relevance);
 					// Save new relevance (before sending acknowledgement) so that the incoming chunk packets are actually processed
 					*local_relevance = relevance.clone();
-					old_chunks
+					cuboids
 				};
 
 				// Acknowledge that the relevancy was received and we are
 				// ready to receive the individual streams for chunk data.
 				self.send.write_size(0).await?;
 
-				let mut old_chunks = old_chunks.into_iter().collect::<Vec<_>>();
+				let mut old_chunks = Vec::with_capacity(old_chunk_cuboids.len());
+				for cuboid in old_chunk_cuboids.into_iter() {
+					let cuboid_coords: HashSet<Point3<i64>> = cuboid.into();
+					for coord in cuboid_coords.into_iter() {
+						old_chunks.push(coord);
+					}
+				}
 				relevance.sort_vec_by_sig_dist(&mut old_chunks);
 
 				// We can expect that sometime after the acknowledgement is sent,

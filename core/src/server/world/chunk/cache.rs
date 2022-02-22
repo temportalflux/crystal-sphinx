@@ -33,6 +33,10 @@ impl Cache {
 	}
 
 	pub fn find(&self, coordinate: &Point3<i64>) -> Option<&Weak<RwLock<Chunk>>> {
+		profiling::scope!(
+			"find-server-chunk",
+			&format!("<{}, {}, {}>", coordinate.x, coordinate.y, coordinate.z)
+		);
 		self.loaded_chunks.get(coordinate)
 	}
 }
