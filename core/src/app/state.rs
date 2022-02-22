@@ -10,7 +10,7 @@ pub mod storage;
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// The life-cycle phase of the application.
 ///
-/// [Edit diagram](https://mermaid.live/edit/#pako:eNp9VE1P4zAQ_Ssjn4oEyr0HJESrpRIIJHbFwcnBG88Si9SOYoddlOS_Y3uaxG1ZLtYbvzfj-Up6VhqJbM1eW9FU8HMDuc7dY4P6pmk490etSuGU0RAuURZFENyLTpeV0q8rPsPiIjAPQukH1N2KBwQBEnFvhPSqF9PW0nuRBdEkwa3RGksXgy6YuJ3-Ifa44jsNAdDlL11TlBWfITEbZcsk2pFJiu0_5TgPJxWUVA1XV9cwV3VUbaSejI3FeGm_s7BBGTqEEp6xfcd2DB6JJvgM2gwwdeYLHoYPtAOkLfKqpJsxRReUt7VCHX15duejgIC_QZ8Vi-Y8zslNootXfR8guAop2DguImr9d8kchsWzAwBnfFY2diNNaxnqcncntLSVeMO-31onftfKVgdXqCbu63SWvaCJoXjHYPEsQloten_m4jCUBUlDk1DGCgY4WpGzFYoPpOWfBaSUB5gX8WhBoz9Z8wgSk2dkpCkn9EnSftOm18L-_kc8FZZmPWFYZhe_gyyc8cPKishRXHbJ9tjuhZL-_9DnGiBnfkV899naQynat5zlevS6rpE-sa1UzrRs_UfUFi-Z6Jx5_tAlW7u2w0m0UcL_a_YH1fgJ_beinQ)
+/// [Edit diagram](https://mermaid.live/edit/#pako:eNp9VE1r3DAQ_SuDThtI8H0PgZJdmoWEFtLSg-yDak1jEa9kLDltkP3fK2nWtjab9iLe6L0ZzZftWW0ksi177kXXwLcdlLp0XzrUn7qO83C0qhZOGQ3xEmVVRcGDGHTdKP284QusriLzKJR-RD1seEQQIREPRsig-mH6VgYvsiCZJLgzWmPtUtAVE3fQn8URN_ygIQK6_K5birLhCyRmp2ydRTszSbH_oxzn8aSCsqrh5uYWlqrOqk3UV2NTMUHqDxZ2KGOHUMIT9q_YT9Ej00SfUZsR5s58wMP4hnaEvEVBlXUzpeii8q5VqJMvL-5DFBDwO-qLatVcxnl3k-nSlfcRgmuQgk3TKqLW_y-Z07B4cQLgTMjKpm7kaa1DXe_uhZa2ES_o_d468bNVtjm5QjNzH6ez7gVNDMUrRosXCdJq0fsLl4ahLEgamoQ6VTDC2YpcrFB6IC__IiClPMKyiGcLmvzJWkaQmd6TQSlTtRn9LumwafNrcX__IZ4Ly7OeMayzS99BEc_0YRVV4iguu2ZH7I9CyfB_8KUGKFlYkdB9tg1Qiv6lZKWegm7oZEhsL5UzPdv-Eq3FayYGZ57edM22rh9wFu2UCP-a40k1_QXN7qN3)
 /// ```mermaid
 /// graph TD
 /// 	OpenApp[[Application Opened]]
@@ -46,7 +46,7 @@ pub mod storage;
 /// 	Disconnecting --> MainMenu
 /// 	LeaveGame -->|is server| Unloading
 /// 	Unloading --> UnloadWorld
-/// 	UnloadWorld[/Unload World/]
+/// 	UnloadWorld{{Unload World}}
 /// 	UnloadWorld -->|is dedicated server| Exit
 /// 	UnloadWorld -->|is client| MainMenu
 /// 	MainMenu --> ClientExit[/Exit Game/] --> Exit
