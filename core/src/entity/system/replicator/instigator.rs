@@ -25,7 +25,7 @@ impl UpdatedEntity {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum EntityOperation {
 	/// Entity was spawned within relevancy range, or has entered relevancy range.
 	/// Entities can enter range when relevancy-owning entities move, changing what chunks are relevant,

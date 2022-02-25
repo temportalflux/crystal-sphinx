@@ -614,7 +614,10 @@ impl Replicator {
 		let registry = component::Registry::read();
 		for entity in entities.into_iter() {
 			let entity_ref = world.entity(entity).unwrap();
-			assert!(entity_ref.has::<network::Replicated>());
+			// Should never happen unless the world is being actively destroyed
+			if !entity_ref.has::<network::Replicated>() {
+				continue;
+			}
 
 			match self.serialize_entity(&registry, entity_ref) {
 				Ok(serialized) => {

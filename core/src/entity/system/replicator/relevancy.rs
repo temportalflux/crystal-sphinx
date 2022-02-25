@@ -20,26 +20,16 @@ impl Area {
 		Self(point, radius)
 	}
 
-	pub fn get_relevant_chunks(&self) -> HashSet<Point3<i64>> {
-		let diameter = 2 * self.1 + 1;
-		let mut coordinates = HashSet::with_capacity(diameter.pow(3) as usize);
-		let diameter = diameter as i64;
-		let centering_offset = Vector3::new(self.1, self.1, self.1).cast::<i64>();
-		for y in 0..diameter {
-			for x in 0..diameter {
-				for z in 0..diameter {
-					coordinates.insert(self.0 + Vector3::new(x, y, z) - centering_offset);
-				}
-			}
-		}
-		coordinates
-	}
-
 	pub fn is_relevant(&self, chunk: &Point3<i64>) -> bool {
 		let offset = chunk - self.0;
 		return offset.x.abs() as u64 <= self.1
 			&& offset.y.abs() as u64 <= self.1
 			&& offset.z.abs() as u64 <= self.1;
+	}
+	
+	pub fn min_dist_to_relevance(&self, chunk: &Point3<i64>) -> f64 {
+		let offset = chunk - self.0;
+		offset.cast::<f64>().magnitude()
 	}
 }
 
@@ -63,25 +53,15 @@ impl Relevance {
 		self.0.push(area);
 	}
 
-	pub fn get_relevant_chunks(&self) -> HashSet<Point3<i64>> {
-		let mut coords = HashSet::new();
-		for area in self.0.iter() {
-			for coord in area.get_relevant_chunks().into_iter() {
-				coords.insert(coord);
-			}
-		}
-		coords
-	}
-
 	#[profiling::function]
 	fn as_cuboids(&self) -> HashSet<AxisAlignedBoundingBox> {
 		let mut cuboids = HashSet::new();
 		for area in self.0.iter() {
 			let radius = area.1 as i64;
-			let diameter = 2 * radius + 1;
+			let radius_vec = Vector3::new(radius, radius, radius);
 			cuboids.insert(AxisAlignedBoundingBox {
-				min: area.0 - Vector3::new(radius, radius, radius),
-				max: area.0 + Vector3::new(diameter, diameter, diameter),
+				min: area.0 - radius_vec,
+				max: area.0 + radius_vec,
 			});
 		}
 		cuboids
@@ -94,6 +74,17 @@ impl Relevance {
 			}
 		}
 		false
+	}
+
+	pub fn min_dist_to_relevance(&self, chunk: &Point3<i64>) -> f64 {
+		let mut dist = f64::MAX;
+		for area in self.0.iter() {
+			let d = area.min_dist_to_relevance(&chunk);
+			if d < dist {
+				dist = d;
+			}
+		}
+		dist
 	}
 
 	#[profiling::function]

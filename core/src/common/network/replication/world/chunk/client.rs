@@ -114,8 +114,9 @@ impl Handler {
 			if !relevance.is_relevant(&coord) {
 				log::warn!(
 					target: &log,
-					"Chunk is being discarded because it is no longer relevant to {:?}.",
-					relevance
+					"Chunk is being discarded because it is no longer relevant to {:?} (min-dist={:.2}).",
+					relevance,
+					relevance.min_dist_to_relevance(&coord),
 				);
 				return Ok(());
 			}
