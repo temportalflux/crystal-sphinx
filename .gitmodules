@@ -4,3 +4,6 @@
 [submodule "crates/socknet"]
 	path = crates/socknet
 	url = git@github.com:temportalflux/socknet.git
+[submodule "concepts"]
+	path = concepts
+	url = git@github.com:temportalflux/crystal-sphinx.git
