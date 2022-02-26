@@ -1,15 +1,17 @@
 asset-type "render-pass"
 
 attachments \
-	"crystal-sphinx:render_pass/frame_image" \
-	"crystal-sphinx:render_pass/depth_image"
+	"crystal-sphinx:render_pass/attachments/frame_image" \
+	"crystal-sphinx:render_pass/attachments/color_image" \
+	"crystal-sphinx:render_pass/attachments/depth_image"
 
 // An ordered list of subpasses that are processed in the render pass
 subpasses {
-	world "crystal-sphinx:render_pass/world_subpass"
-	debug "crystal-sphinx:render_pass/debug_subpass"
-	ui "crystal-sphinx:render_pass/ui_subpass"
-	egui "crystal-sphinx:render_pass/egui_subpass"
+	world "crystal-sphinx:render_pass/subpass/world"
+	debug "crystal-sphinx:render_pass/subpass/debug"
+	resolve_msaa "crystal-sphinx:render_pass/subpass/resolve_msaa"
+	ui "crystal-sphinx:render_pass/subpass/ui"
+	egui "crystal-sphinx:render_pass/subpass/egui"
 }
 
 dependencies {
@@ -40,6 +42,16 @@ dependencies {
 	}
 	link {
 		first "debug" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
+		then "resolve_msaa" {
+			stage "ColorAttachmentOutput"
+			access "ColorAttachmentWrite"
+		}
+	}
+	link {
+		first "resolve_msaa" {
 			stage "ColorAttachmentOutput"
 			access "ColorAttachmentWrite"
 		}

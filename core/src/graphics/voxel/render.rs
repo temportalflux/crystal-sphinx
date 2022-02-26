@@ -36,7 +36,7 @@ pub struct RenderVoxel {
 
 impl RenderVoxel {
 	fn subpass_id() -> asset::Id {
-		CrystalSphinx::get_asset_id("render_pass/world_subpass")
+		CrystalSphinx::get_asset_id("render_pass/subpass/world")
 	}
 
 	pub fn add_state_listener(
@@ -224,6 +224,11 @@ impl RenderChainElement for RenderVoxel {
 				.set_color_blending(
 					color_blend::ColorBlend::default()
 						.add_attachment(color_blend::Attachment::default()),
+				)
+				.with_multisampling(
+					Multisampling::default()
+						.with_sample_count(render_chain.max_common_sample_count())
+						.with_sample_shading(Some(0.25)),
 				)
 				.with_depth_stencil(
 					DepthStencil::default()

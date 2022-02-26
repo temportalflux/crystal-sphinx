@@ -195,7 +195,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			let command_list = commands::create_list(&app_state);
 			let ui = Ui::create_with_subpass(
 				&mut engine,
-				Some(CrystalSphinx::get_asset_id("render_pass/egui_subpass").as_string()),
+				Some(CrystalSphinx::get_asset_id("render_pass/subpass/egui").as_string()),
 			)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(input_user.as_ref().unwrap())
@@ -238,7 +238,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 					.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
 					.attach_system(
 						&mut engine,
-						Some(CrystalSphinx::get_asset_id("render_pass/ui_subpass").as_string()),
+						Some(CrystalSphinx::get_asset_id("render_pass/subpass/ui").as_string()),
 					)?
 			};
 			viewport.write().unwrap().set_system(&ui_system);

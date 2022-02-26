@@ -26,7 +26,7 @@ impl Area {
 			&& offset.y.abs() as u64 <= self.1
 			&& offset.z.abs() as u64 <= self.1;
 	}
-	
+
 	pub fn min_dist_to_relevance(&self, chunk: &Point3<i64>) -> f64 {
 		let offset = chunk - self.0;
 		offset.cast::<f64>().magnitude()

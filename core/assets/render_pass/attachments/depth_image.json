@@ -1,6 +1,7 @@
 {
 	"asset_type": "render-attachment",
 	"format": "Depth",
+	"use_max_common_samples": true,
 	"operations": {
 		"general": {
 			"load": "Clear",

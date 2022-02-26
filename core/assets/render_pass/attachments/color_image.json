@@ -1,0 +1,12 @@
+{
+	"asset_type": "render-attachment",
+	"format": "Viewport",
+	"use_max_common_samples": true,
+	"operations": {
+		"general": {
+			"load": "Clear",
+			"store": "Store"
+		}
+	},
+	"layout": "ColorAttachmentOptimal"
+}

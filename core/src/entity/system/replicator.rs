@@ -288,7 +288,7 @@ impl EntityUpdates {
 		arc_chunk_cache: &chunk::cache::ArcLock,
 		connection_handles: &mut HashMap<SocketAddr, Handle>,
 	) -> Self {
-		use std::time::{Instant, Duration};
+		use std::time::{Duration, Instant};
 		profiling::scope!(
 			"entity-updates:collect_chunks",
 			&format!("connections: {}", connection_handles.len())
@@ -296,7 +296,7 @@ impl EntityUpdates {
 		// Throttles this function to make sure it doesnt exceed a max number of ms.
 		// Needed because the `send-pending` block can consume tens of ms per frame without rate-limiting.
 		static PERF_BUDGET_MS_PER_CONNECTION: Duration = Duration::from_micros(500); // 0.5 ms
-		
+
 		let chunk_cache = match arc_chunk_cache.try_read() {
 			Ok(locked) => locked,
 			Err(_) => return self,
@@ -337,17 +337,11 @@ impl EntityUpdates {
 
 			if Instant::now().duration_since(perf_budget_start) < PERF_BUDGET_MS_PER_CONNECTION {
 				let pending_chunks = handle.pending_chunks_mut();
-				profiling::scope!(
-					"send-pending",
-					&format!(
-						"count:{}",
-						pending_chunks.len(),
-					)
-				);
-				
+				profiling::scope!("send-pending", &format!("count:{}", pending_chunks.len(),));
+
 				let mut chunks_to_process = pending_chunks.drain().collect::<Vec<_>>();
 				let mut still_pending = Vec::new();
-				'process_next_chunk: loop {					
+				'process_next_chunk: loop {
 					profiling::scope!("send-pending-chunk");
 
 					let coordinate = match chunks_to_process.pop() {
@@ -359,15 +353,15 @@ impl EntityUpdates {
 					if let Some(weak_chunk) = chunk_cache.find(&coordinate) {
 						self.new_chunks
 							.insert(handle_addr.clone(), weak_chunk.clone());
-					}
-					else
-					{
+					} else {
 						// If chunk is not load or we've exceeded our alloted time/amount for this update,
 						// then the chunk needs to go back on the component for the next update cycle.
 						still_pending.push(coordinate);
 					}
 
-					if Instant::now().duration_since(perf_budget_start) >= PERF_BUDGET_MS_PER_CONNECTION {
+					if Instant::now().duration_since(perf_budget_start)
+						>= PERF_BUDGET_MS_PER_CONNECTION
+					{
 						break 'process_next_chunk;
 					}
 				}

@@ -1,0 +1,15 @@
+{
+	"asset_type": "render-subpass",
+	"attachments": [
+		{
+			"kind": "Color",
+			"id": "crystal-sphinx:render_pass/attachments/color_image",
+			"layout": "ColorAttachmentOptimal"
+		},
+		{
+			"kind": "DepthStencil",
+			"id": "crystal-sphinx:render_pass/attachments/depth_image",
+			"layout": "DepthStencilAttachmentOptimal"
+		}
+	]
+}

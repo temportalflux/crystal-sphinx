@@ -216,7 +216,7 @@ pub struct Render {
 
 impl Render {
 	fn subpass_id() -> asset::Id {
-		CrystalSphinx::get_asset_id("render_pass/debug_subpass")
+		CrystalSphinx::get_asset_id("render_pass/subpass/debug")
 	}
 
 	pub fn add_state_listener(
@@ -426,6 +426,10 @@ impl RenderChainElement for Render {
 				}))
 				.with_topology(
 					Topology::default().with_primitive(flags::PrimitiveTopology::LINE_LIST),
+				)
+				.with_multisampling(
+					Multisampling::default()
+						.with_sample_count(render_chain.max_common_sample_count()),
 				)
 				.set_color_blending(
 					color_blend::ColorBlend::default()
