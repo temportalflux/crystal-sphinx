@@ -449,6 +449,7 @@ impl RenderChainElement for Render {
 		Ok(())
 	}
 
+	#[profiling::function]
 	fn prerecord_update(
 		&mut self,
 		_render_chain: &graphics::RenderChain,
@@ -468,6 +469,7 @@ impl RenderChainElement for Render {
 		Ok(has_changed_kind)
 	}
 
+	#[profiling::function]
 	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<()> {
 		use graphics::debug;
 

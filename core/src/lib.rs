@@ -169,6 +169,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 				.unwrap();
 			let render_pass = asset.as_graphics(&asset_id, &render_chain)?;
 			render_chain.set_render_pass_info(render_pass);
+			render_chain.enable_color_buffer();
 		}
 
 		// TODO: wait for the thread to finish before allowing the user in the world.

@@ -246,6 +246,7 @@ impl RenderChainElement for RenderVoxel {
 		Ok(())
 	}
 
+	#[profiling::function]
 	fn prerecord_update(
 		&mut self,
 		render_chain: &graphics::RenderChain,
