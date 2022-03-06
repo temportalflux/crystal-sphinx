@@ -172,6 +172,10 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			render_chain.enable_color_buffer();
 		}
 
+		if let Ok(mut chain) = engine.window().unwrap().graphics_chain().write() {
+			graphics::initialize_chain(&mut chain)?;
+		}
+
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::model::load_models(

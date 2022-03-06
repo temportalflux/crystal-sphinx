@@ -1,7 +1,4 @@
-use crate::{
-	common::world::chunk,
-	entity::component::{binary, debug, network, Component, Registration},
-};
+use crate::entity::component::{binary, debug, network, Component, Registration};
 use anyhow::Result;
 use engine::math::nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
