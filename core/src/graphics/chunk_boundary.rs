@@ -329,7 +329,7 @@ impl Render {
 
 		GpuOperationBuilder::new(
 			vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
+			render_chain,
 		)?
 		.begin()?
 		.stage(&vertices[..])?
@@ -347,7 +347,7 @@ impl Render {
 
 		GpuOperationBuilder::new(
 			index_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
+			render_chain,
 		)?
 		.begin()?
 		.stage(&indices[..])?

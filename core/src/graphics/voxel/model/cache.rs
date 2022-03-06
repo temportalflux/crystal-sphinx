@@ -82,7 +82,7 @@ impl Cache {
 
 			GpuOperationBuilder::new(
 				vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-				&render_chain,
+				render_chain,
 			)?
 			.begin()?
 			.stage(&builder.vertices[..])?
@@ -100,7 +100,7 @@ impl Cache {
 
 			GpuOperationBuilder::new(
 				index_buffer.wrap_name(|v| format!("Write({})", v)),
-				&render_chain,
+				render_chain,
 			)?
 			.begin()?
 			.stage(&builder.indices[..])?

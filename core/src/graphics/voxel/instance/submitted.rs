@@ -43,7 +43,7 @@ impl Description {
 			profiling::scope!("prepare-task");
 			let mut task = GpuOperationBuilder::new(
 				self.buffer.wrap_name(|v| format!("Write({})", v)),
-				&render_chain,
+				render_chain,
 			)?
 			.begin()?;
 			task.stage_start(total_count * instance_size)?;
