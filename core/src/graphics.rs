@@ -61,17 +61,16 @@ pub fn initialize_chain(chain: &mut Chain) -> anyhow::Result<()> {
 			.with_clear_value(ClearValue::DepthStencil(1.0, 0)),
 	);
 
-	chain.set_procedure(create_procedure(&frame, &color_buffer, &depth_buffer)?);
+	let procedure = create_procedure(&frame, &color_buffer, &depth_buffer)?;
+	chain.set_procedure(procedure, frame);
 
-	chain.resources_mut().add(
-		ColorBuffer::builder()
-			.with_attachment(color_buffer.clone())
-			.build(),
-	);
+	chain
+		.resources_mut()
+		.add(ColorBuffer::builder().with_attachment(color_buffer).build());
 	chain.resources_mut().add(
 		DepthBuffer::builder()
 			.with_query(depth_query)
-			.with_attachment(depth_buffer.clone())
+			.with_attachment(depth_buffer)
 			.build(),
 	);
 
@@ -84,7 +83,7 @@ fn create_procedure(
 	depth_buffer: &Arc<Attachment>,
 ) -> anyhow::Result<engine::graphics::procedure::Procedure> {
 	let world_phase = Arc::new(
-		Phase::new()
+		Phase::new("World")
 			.with_dependency(
 				Dependency::new(None)
 					.first(
@@ -113,7 +112,7 @@ fn create_procedure(
 	);
 
 	let debug_phase = Arc::new(
-		Phase::new()
+		Phase::new("Debug")
 			.with_dependency(
 				Dependency::new(Some(&world_phase))
 					.first(
@@ -143,7 +142,7 @@ fn create_procedure(
 	);
 
 	let resolve_antialiasing_phase = Arc::new(
-		Phase::new()
+		Phase::new("Resolve Antialiasing")
 			.with_dependency(
 				Dependency::new(Some(&debug_phase))
 					.first(
@@ -170,7 +169,7 @@ fn create_procedure(
 	);
 
 	let ui_phase = Arc::new(
-		Phase::new()
+		Phase::new("UI")
 			.with_dependency(
 				Dependency::new(Some(&resolve_antialiasing_phase))
 					.first(
@@ -192,7 +191,7 @@ fn create_procedure(
 	);
 
 	let egui_phase = Arc::new(
-		Phase::new()
+		Phase::new("EGui")
 			.with_dependency(
 				Dependency::new(Some(&ui_phase))
 					.first(
