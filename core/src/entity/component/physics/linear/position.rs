@@ -105,7 +105,7 @@ impl std::ops::AddAssign<Vector3<f32>> for Position {
 }
 
 impl network::Replicatable for Position {
-	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
+	fn on_replication(&mut self, replicated: &Self, _is_locally_owned: bool) {
 		/*
 		if is_locally_owned {
 			let offset =
