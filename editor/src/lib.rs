@@ -30,7 +30,11 @@ pub fn run(_config: plugin::Config) -> Result<()> {
 		.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 		.build(&mut engine)?;
 
-	let ui = engine::ui::egui::Ui::create(&mut engine)?;
+	let render_phase = {
+		let chain = engine.window().unwrap().graphics_chain();
+		editor::graphics::ProcedureConfig::initialize_chain(chain)?
+	};
+	let ui = engine::ui::egui::Ui::create(&mut engine, &render_phase)?;
 
 	let workspace = editor::ui::Workspace::new();
 	ui.write().unwrap().add_element(&workspace);

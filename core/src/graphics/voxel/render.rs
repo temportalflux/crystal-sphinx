@@ -157,8 +157,13 @@ impl RenderVoxel {
 		let instance_buffer =
 			instance::Buffer::new(&render_chain, Arc::downgrade(&model_cache), chunk_receiver)?;
 
-		let camera_uniform =
-			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
+		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+			"RenderVoxel.Camera",
+			&render_chain.logical(),
+			&render_chain.allocator(),
+			render_chain.persistent_descriptor_pool(),
+			render_chain.frame_count(),
+		)?;
 
 		Ok(Self {
 			pending_gpu_signals,
@@ -192,8 +197,9 @@ impl RenderChainElement for RenderVoxel {
 	) -> Result<Vec<Arc<command::Semaphore>>> {
 		let gpu_signals = Vec::new();
 
-		self.drawable.create_shaders(render_chain)?;
-		self.camera_uniform.write_descriptor_sets(render_chain);
+		self.drawable.create_shaders(&render_chain.logical())?;
+		self.camera_uniform
+			.write_descriptor_sets(&render_chain.logical());
 
 		Ok(gpu_signals)
 	}
@@ -206,7 +212,7 @@ impl RenderChainElement for RenderVoxel {
 	) -> Result<()> {
 		use graphics::pipeline::{state::*, Pipeline};
 		Ok(self.drawable.create_pipeline(
-			render_chain,
+			&render_chain.logical(),
 			vec![
 				self.camera_uniform.layout(),
 				self.model_cache.descriptor_layout(),
@@ -237,12 +243,13 @@ impl RenderChainElement for RenderVoxel {
 						.with_depth_bounds(0.0, 1.0)
 						.with_depth_compare_op(flags::CompareOp::LESS),
 				),
-			subpass_id,
+			render_chain.render_pass(),
+			render_chain.render_pass().subpass_index(subpass_id) as usize,
 		)?)
 	}
 
 	fn destroy_render_chain(&mut self, render_chain: &RenderChain) -> Result<()> {
-		self.drawable.destroy_pipeline(render_chain)?;
+		self.drawable.destroy_pipeline()?;
 		Ok(())
 	}
 

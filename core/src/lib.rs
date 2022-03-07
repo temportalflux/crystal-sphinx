@@ -172,9 +172,8 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			render_chain.enable_color_buffer();
 		}
 
-		if let Ok(mut chain) = engine.window().unwrap().graphics_chain().write() {
-			graphics::initialize_chain(&mut chain)?;
-		}
+		let render_phases =
+			graphics::ProcedureConfig::initialize_chain(engine.window().unwrap().graphics_chain())?;
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
@@ -187,7 +186,8 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 		graphics::chunk_boundary::Render::add_state_listener(
 			&app_state,
-			&engine.render_chain().unwrap(),
+			&engine.display_chain().unwrap(),
+			Arc::downgrade(&render_phases.debug),
 			&arc_camera,
 			input_user.as_ref().unwrap(),
 		);
@@ -198,10 +198,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		{
 			use engine::ui::egui::Ui;
 			let command_list = commands::create_list(&app_state);
-			let ui = Ui::create_with_subpass(
-				&mut engine,
-				Some(CrystalSphinx::get_asset_id("render_pass/subpass/egui").as_string()),
-			)?;
+			let ui = Ui::create(&mut engine, &render_phases.egui)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(input_user.as_ref().unwrap())
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))

@@ -173,7 +173,7 @@ pub fn load_models(
 			let descriptor_set = atlas_descriptor_cache.insert(
 				(0, 0), // NOTE: This should be the id of the atlas and sampler in their respective caches
 				Some(format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0)),
-				&render_chain,
+				render_chain.persistent_descriptor_pool(),
 			)?;
 
 			Queue::default()
