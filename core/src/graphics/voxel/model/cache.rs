@@ -3,9 +3,10 @@ use crate::{
 	graphics::voxel::model::{Model, Vertex},
 };
 use anyhow::Result;
+use crossbeam_channel::Sender;
 use engine::graphics::{
 	buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
-	GpuOperationBuilder, RenderChain,
+	GpuOpContext, GpuOperationBuilder, RenderChain,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -39,8 +40,12 @@ impl CacheBuilder {
 		self.atlas_descriptor_cache = Some(cache);
 	}
 
-	pub fn build(self, render_chain: &RenderChain) -> Result<(Cache, Vec<Arc<Semaphore>>)> {
-		Cache::create(self, render_chain)
+	pub fn build(
+		self,
+		context: &impl GpuOpContext,
+		signal_sender: &Sender<Arc<Semaphore>>,
+	) -> Result<Cache> {
+		Cache::create(self, context, signal_sender)
 	}
 }
 
@@ -65,16 +70,16 @@ impl Cache {
 
 	fn create(
 		builder: CacheBuilder,
-		render_chain: &RenderChain,
-	) -> Result<(Self, Vec<Arc<Semaphore>>)> {
+		context: &impl GpuOpContext,
+		signal_sender: &Sender<Arc<Semaphore>>,
+	) -> Result<Self> {
 		let vbuff_size = std::mem::size_of::<Vertex>() * builder.vertices.len();
 		let ibuff_size = std::mem::size_of::<u32>() * builder.indices.len();
-		let mut pending_gpu_signals = Vec::with_capacity(/*buffer writes*/ 2);
 
 		let (vertex_buffer, index_buffer) = {
 			let vertex_buffer = buffer::Buffer::create_gpu(
 				Some("RenderVoxel.VertexBuffer".to_owned()),
-				&render_chain.allocator(),
+				&context.object_allocator()?,
 				flags::BufferUsage::VERTEX_BUFFER,
 				vbuff_size,
 				None,
@@ -82,44 +87,38 @@ impl Cache {
 
 			GpuOperationBuilder::new(
 				vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-				render_chain,
+				context,
 			)?
 			.begin()?
 			.stage(&builder.vertices[..])?
 			.copy_stage_to_buffer(&vertex_buffer)
-			.add_signal_to(&mut pending_gpu_signals)
+			.send_signal_to(signal_sender)?
 			.end()?;
 
 			let index_buffer = buffer::Buffer::create_gpu(
 				Some("RenderVoxel.IndexBuffer".to_owned()),
-				&render_chain.allocator(),
+				&context.object_allocator()?,
 				flags::BufferUsage::INDEX_BUFFER,
 				ibuff_size,
 				Some(flags::IndexType::UINT32),
 			)?;
 
-			GpuOperationBuilder::new(
-				index_buffer.wrap_name(|v| format!("Write({})", v)),
-				render_chain,
-			)?
-			.begin()?
-			.stage(&builder.indices[..])?
-			.copy_stage_to_buffer(&index_buffer)
-			.add_signal_to(&mut pending_gpu_signals)
-			.end()?;
+			GpuOperationBuilder::new(index_buffer.wrap_name(|v| format!("Write({})", v)), context)?
+				.begin()?
+				.stage(&builder.indices[..])?
+				.copy_stage_to_buffer(&index_buffer)
+				.send_signal_to(signal_sender)?
+				.end()?;
 
 			(vertex_buffer, index_buffer)
 		};
 
-		Ok((
-			Self {
-				models: builder.models,
-				atlas_descriptor_cache: builder.atlas_descriptor_cache.unwrap(),
-				vertex_buffer,
-				index_buffer,
-			},
-			pending_gpu_signals,
-		))
+		Ok(Self {
+			models: builder.models,
+			atlas_descriptor_cache: builder.atlas_descriptor_cache.unwrap(),
+			vertex_buffer,
+			index_buffer,
+		})
 	}
 
 	pub fn descriptor_layout(&self) -> &Arc<descriptor::layout::SetLayout> {

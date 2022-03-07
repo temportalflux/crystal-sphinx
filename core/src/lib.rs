@@ -180,7 +180,8 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		graphics::voxel::model::load_models(
 			&app_state,
 			Arc::downgrade(&network_storage),
-			&engine.render_chain().unwrap(),
+			engine.display_chain().unwrap(),
+			&render_phases.world,
 			&arc_camera,
 		);
 

@@ -1,10 +1,11 @@
 use anyhow::Result;
+use crossbeam_channel::Sender;
 use engine::{
 	asset,
 	graphics::{
 		command, flags, image, image_view, structs,
 		utility::{BuildFromDevice, NameableBuilder, NamedObject},
-		GpuOperationBuilder, RenderChain, Texture,
+		GpuOpContext, GpuOperationBuilder, RenderChain, Texture,
 	},
 	math::nalgebra::{Point2, Vector2},
 };
@@ -181,13 +182,12 @@ impl Builder {
 
 	pub fn build(
 		self,
-		render_chain: &RenderChain,
+		context: &impl GpuOpContext,
+		signal_sender: &Sender<Arc<command::Semaphore>>,
 		name: String,
-	) -> Result<(Atlas, Vec<Arc<command::Semaphore>>)> {
-		let mut gpu_signals = Vec::new();
-
+	) -> Result<Atlas> {
 		let image = Arc::new(image::Image::create_gpu(
-			&render_chain.allocator(),
+			&context.object_allocator()?,
 			Some(name.clone()),
 			flags::format::SRGB_8BIT,
 			structs::Extent3D {
@@ -197,13 +197,13 @@ impl Builder {
 			},
 		)?);
 
-		GpuOperationBuilder::new(image.wrap_name(|v| format!("Create({})", v)), render_chain)?
+		GpuOperationBuilder::new(image.wrap_name(|v| format!("Create({})", v)), context)?
 			.begin()?
 			.format_image_for_write(&image)
 			.stage(&self.as_binary()[..])?
 			.copy_stage_to_image(&image)
 			.format_image_for_read(&image)
-			.add_signal_to(&mut gpu_signals)
+			.send_signal_to(signal_sender)?
 			.end()?;
 
 		let view = Arc::new(
@@ -214,17 +214,14 @@ impl Builder {
 				.with_range(
 					structs::subresource::Range::default().with_aspect(flags::ImageAspect::COLOR),
 				)
-				.build(&render_chain.logical())?,
+				.build(&context.logical_device()?)?,
 		);
 
-		Ok((
-			Atlas {
-				size: self.size,
-				entries: self.entries,
-				view,
-			},
-			gpu_signals,
-		))
+		Ok(Atlas {
+			size: self.size,
+			entries: self.entries,
+			view,
+		})
 	}
 }
 

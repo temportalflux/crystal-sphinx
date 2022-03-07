@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 use engine::{
-	graphics::{command, RenderChain},
+	graphics::{alloc, command, Chain, RenderChain},
 	utility::{self},
 };
 use std::sync::{Arc, Mutex, Weak};
@@ -25,7 +25,7 @@ pub struct Buffer {
 
 impl Buffer {
 	pub fn new(
-		render_chain: &RenderChain,
+		allocator: &Arc<alloc::Allocator>,
 		model_cache: Weak<model::Cache>,
 		chunk_receiver: ChunkOperationReceiver,
 	) -> Result<Self> {
@@ -65,8 +65,7 @@ impl Buffer {
 			max_rendered_instances,
 			model_cache.clone(),
 		)));
-		let submitted_description =
-			submitted::Description::new(&render_chain, instance_buffer_size)?;
+		let submitted_description = submitted::Description::new(allocator, instance_buffer_size)?;
 
 		let _thread_handle =
 			Self::start_thread(chunk_receiver, Arc::downgrade(&local_integrated_buffer));
@@ -157,26 +156,21 @@ impl Buffer {
 		&self.submitted_description
 	}
 
-	pub fn prerecord_update(
-		&mut self,
-		render_chain: &RenderChain,
-	) -> Result<(bool, Vec<Arc<command::Semaphore>>)> {
+	pub fn submit_pending_changes(&mut self, chain: &Chain) -> Result<bool> {
 		profiling::scope!("update_voxel_instances");
-		let mut pending_gpu_signals = Vec::new();
-		let mut was_able_to_lock = false;
+		let mut was_changed = false;
 		if let Ok(mut local_description) = self.local_integrated_buffer.try_lock() {
-			was_able_to_lock = true;
-
 			if let Some((changed_ranges, total_count)) = local_description.take_changed_ranges() {
+				was_changed = true;
 				self.submitted_description.submit(
 					changed_ranges,
 					total_count,
 					&local_description,
-					&render_chain,
-					&mut pending_gpu_signals,
+					chain,
+					chain.signal_sender(),
 				)?;
 			}
 		}
-		Ok((was_able_to_lock, pending_gpu_signals))
+		Ok(was_changed)
 	}
 }
