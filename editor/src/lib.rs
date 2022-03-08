@@ -27,7 +27,6 @@ pub fn run(_config: plugin::Config) -> Result<()> {
 		.with_size(1280.0, 720.0)
 		.with_resizable(true)
 		.with_application::<CrystalSphinx>()
-		.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 		.build(&mut engine)?;
 
 	let render_phase = {

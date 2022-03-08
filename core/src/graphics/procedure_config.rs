@@ -9,7 +9,7 @@ use engine::graphics::{
 	resource::{depth_buffer::QueryResult, ColorBuffer, DepthBuffer, Registry},
 	Chain,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub struct ChainConfig;
 impl ProcedureConfig for ChainConfig {
