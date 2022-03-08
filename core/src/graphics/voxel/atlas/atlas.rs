@@ -5,7 +5,7 @@ use engine::{
 	graphics::{
 		command, flags, image, image_view, structs,
 		utility::{BuildFromDevice, NameableBuilder, NamedObject},
-		GpuOpContext, GpuOperationBuilder, RenderChain, Texture,
+		GpuOpContext, GpuOperationBuilder, Texture,
 	},
 	math::nalgebra::{Point2, Vector2},
 };

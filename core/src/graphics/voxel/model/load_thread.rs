@@ -11,7 +11,7 @@ use engine::{
 		procedure::Phase,
 		sampler,
 		utility::{BuildFromDevice, NameableBuilder},
-		ArcRenderChain, Chain, DescriptorCache, Texture,
+		Chain, DescriptorCache, Texture,
 	},
 	task,
 };

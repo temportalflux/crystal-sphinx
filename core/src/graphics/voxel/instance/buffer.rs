@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::Result;
 use engine::{
-	graphics::{alloc, command, Chain, RenderChain},
+	graphics::{alloc, Chain},
 	utility::{self},
 };
 use std::sync::{Arc, Mutex, Weak};

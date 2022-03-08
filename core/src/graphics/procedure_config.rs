@@ -1,79 +1,31 @@
 use engine::graphics::{
+	chain::procedure::{AttachmentConfig, PhaseConfig, ProcedureConfig, ResourceConfig},
 	flags::{
 		Access, AttachmentKind, AttachmentOps, ImageLayout, ImageSampleKind, LoadOp, PipelineStage,
 		SampleCount, StoreOp,
 	},
 	procedure::*,
 	renderpass::ClearValue,
-	resource::{depth_buffer::QueryResult, ColorBuffer, DepthBuffer},
+	resource::{depth_buffer::QueryResult, ColorBuffer, DepthBuffer, Registry},
 	Chain,
 };
 use std::sync::{Arc, RwLock};
 
-pub struct ProcedureConfig {
-	attachments: AttachmentConfig,
-	phases: PhaseConfig,
+pub struct ChainConfig;
+impl ProcedureConfig for ChainConfig {
+	type Attachments = Attachments;
+	type Phases = Phases;
+	type Resources = Resources;
 }
 
-pub struct AttachmentConfig {
+pub struct Attachments {
 	frame: Arc<Attachment>,
 	color_buffer: Arc<Attachment>,
 	depth_buffer: Arc<Attachment>,
 	depth_query: QueryResult,
 }
 
-#[derive(Clone)]
-pub struct PhaseConfig {
-	pub world: Arc<Phase>,
-	pub debug: Arc<Phase>,
-	pub resolve_antialiasing: Arc<Phase>,
-	pub ui: Arc<Phase>,
-	pub egui: Arc<Phase>,
-}
-
-impl ProcedureConfig {
-	pub fn initialize_chain(chain: &Arc<RwLock<Chain>>) -> anyhow::Result<PhaseConfig> {
-		let mut chain = chain.write().unwrap();
-		Self::new(&chain)?.apply_to(&mut chain)
-	}
-
-	fn new(chain: &Chain) -> anyhow::Result<Self> {
-		let attachments = AttachmentConfig::new(chain)?;
-		let phases = PhaseConfig::new(&attachments);
-		Ok(Self {
-			attachments,
-			phases,
-		})
-	}
-
-	fn apply_to(self, chain: &mut Chain) -> anyhow::Result<PhaseConfig> {
-		let phases = self.phases.clone();
-		let procedure = Procedure::default()
-			.with_phase(self.phases.world)?
-			.with_phase(self.phases.debug)?
-			.with_phase(self.phases.resolve_antialiasing)?
-			.with_phase(self.phases.ui)?
-			.with_phase(self.phases.egui)?;
-		chain.set_procedure(procedure, self.attachments.frame);
-		{
-			let resources = chain.resources_mut();
-			resources.add(
-				ColorBuffer::builder()
-					.with_attachment(self.attachments.color_buffer)
-					.build(),
-			);
-			resources.add(
-				DepthBuffer::builder()
-					.with_query(self.attachments.depth_query)
-					.with_attachment(self.attachments.depth_buffer)
-					.build(),
-			);
-		}
-		Ok(phases)
-	}
-}
-
-impl AttachmentConfig {
+impl AttachmentConfig for Attachments {
 	fn new(chain: &Chain) -> anyhow::Result<Self> {
 		let viewport_format = chain.swapchain_image_format();
 		let max_common_samples = chain
@@ -128,10 +80,21 @@ impl AttachmentConfig {
 			depth_query,
 		})
 	}
+
+	fn swapchain_attachment(&self) -> &Arc<Attachment> {
+		&self.frame
+	}
 }
 
-impl PhaseConfig {
-	pub fn new(attachments: &AttachmentConfig) -> Self {
+pub struct Phases {
+	pub world: Arc<Phase>,
+	pub debug: Arc<Phase>,
+	pub resolve_antialiasing: Arc<Phase>,
+	pub ui: Arc<Phase>,
+	pub egui: Arc<Phase>,
+}
+impl PhaseConfig<Attachments> for Phases {
+	fn new(attachments: &Attachments) -> anyhow::Result<Self> {
 		let world = Arc::new(
 			Phase::new("World")
 				.with_dependency(
@@ -262,12 +225,39 @@ impl PhaseConfig {
 				),
 		);
 
-		Self {
+		Ok(Self {
 			world,
 			debug,
 			resolve_antialiasing,
 			ui,
 			egui,
-		}
+		})
+	}
+
+	fn apply_to(&self, procedure: &mut Procedure) -> anyhow::Result<()> {
+		procedure.add_phase(self.world.clone())?;
+		procedure.add_phase(self.debug.clone())?;
+		procedure.add_phase(self.resolve_antialiasing.clone())?;
+		procedure.add_phase(self.ui.clone())?;
+		procedure.add_phase(self.egui.clone())?;
+		Ok(())
+	}
+}
+
+pub struct Resources;
+impl ResourceConfig<Attachments> for Resources {
+	fn create_resources(attachments: Attachments, resources: &mut Registry) -> anyhow::Result<()> {
+		resources.add(
+			ColorBuffer::builder()
+				.with_attachment(attachments.color_buffer)
+				.build(),
+		);
+		resources.add(
+			DepthBuffer::builder()
+				.with_query(attachments.depth_query)
+				.with_attachment(attachments.depth_buffer)
+				.build(),
+		);
+		Ok(())
 	}
 }

@@ -425,7 +425,7 @@ impl Operation for Render {
 		Ok(())
 	}
 
-	fn deconstruct(&mut self, chain: &Chain) -> anyhow::Result<()> {
+	fn deconstruct(&mut self, _chain: &Chain) -> anyhow::Result<()> {
 		self.drawable.destroy_pipeline()?;
 		Ok(())
 	}

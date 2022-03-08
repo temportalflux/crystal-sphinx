@@ -49,6 +49,8 @@ pub mod ui;
 
 use std::sync::{Arc, RwLock};
 
+use crate::graphics::ChainConfig;
+
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
 	fn name() -> &'static str {
@@ -172,8 +174,11 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			render_chain.enable_color_buffer();
 		}
 
-		let render_phases =
-			graphics::ProcedureConfig::initialize_chain(engine.window().unwrap().graphics_chain())?;
+		let render_phases = {
+			let arc = engine.display_chain().unwrap();
+			let mut chain = arc.write().unwrap();
+			chain.apply_procedure::<ChainConfig>()?
+		};
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
@@ -232,17 +237,14 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		{
 			let ui_system = {
 				use engine::ui::{oui::viewport, raui::make_widget};
-				engine::ui::System::new(engine.render_chain().unwrap())?
+				engine::ui::System::new(engine.display_chain().unwrap())?
 					.with_engine_shaders()?
 					.with_all_fonts()?
 					//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
 					.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
 					.with_context(viewport.clone())
 					.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
-					.attach_system(
-						&mut engine,
-						Some(CrystalSphinx::get_asset_id("render_pass/subpass/ui").as_string()),
-					)?
+					.attach_system(&mut engine, &render_phases.ui)?
 			};
 			viewport.write().unwrap().set_system(&ui_system);
 		}

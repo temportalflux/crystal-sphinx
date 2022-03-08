@@ -3,7 +3,6 @@ use anyhow::Result;
 use crossbeam_channel::Sender;
 use engine::graphics::{
 	alloc, buffer::Buffer, command, flags, utility::NamedObject, GpuOpContext, GpuOperationBuilder,
-	RenderChain,
 };
 use std::sync::Arc;
 

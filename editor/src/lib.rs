@@ -1,5 +1,5 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::Application;
+use engine::{graphics::chain::procedure::DefaultProcedure, Application};
 
 use anyhow::Result;
 pub mod block;
@@ -31,8 +31,9 @@ pub fn run(_config: plugin::Config) -> Result<()> {
 		.build(&mut engine)?;
 
 	let render_phase = {
-		let chain = engine.window().unwrap().graphics_chain();
-		editor::graphics::ProcedureConfig::initialize_chain(chain)?
+		let arc = engine.display_chain().unwrap();
+		let mut chain = arc.write().unwrap();
+		chain.apply_procedure::<DefaultProcedure>()?.into_inner()
 	};
 	let ui = engine::ui::egui::Ui::create(&mut engine, &render_phase)?;
 

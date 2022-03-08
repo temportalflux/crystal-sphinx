@@ -6,7 +6,7 @@ use anyhow::Result;
 use crossbeam_channel::Sender;
 use engine::graphics::{
 	buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
-	GpuOpContext, GpuOperationBuilder, RenderChain,
+	GpuOpContext, GpuOperationBuilder,
 };
 use std::{collections::HashMap, sync::Arc};
 

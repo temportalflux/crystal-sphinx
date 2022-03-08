@@ -19,9 +19,8 @@ use engine::{
 		command, flags,
 		procedure::Phase,
 		resource::ColorBuffer,
-		structs, ArcRenderChain, Chain, Drawable, Uniform,
+		Chain, Drawable, Uniform,
 	},
-	math::nalgebra::Vector2,
 	Application,
 };
 use std::sync::{Arc, RwLock, Weak};
