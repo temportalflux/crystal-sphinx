@@ -7,9 +7,11 @@ use crate::{
 use engine::{
 	asset,
 	graphics::{
-		descriptor, flags, sampler,
+		descriptor, flags,
+		procedure::Phase,
+		sampler,
 		utility::{BuildFromDevice, NameableBuilder},
-		ArcRenderChain, DescriptorCache, Texture,
+		Chain, DescriptorCache, Texture,
 	},
 	task,
 };
@@ -25,12 +27,14 @@ static LOG: &'static str = "model::loader";
 pub fn load_models(
 	app_state: &ArcLockMachine,
 	storage: Weak<RwLock<Storage>>,
-	render_chain: &ArcRenderChain,
+	chain: &Arc<RwLock<Chain>>,
+	phase: &Arc<Phase>,
 	camera: &Arc<RwLock<camera::Camera>>,
 ) {
 	let thread_app_state = app_state.clone();
 	let thread_storage = storage.clone();
-	let thread_render_chain = render_chain.clone();
+	let thread_chain = chain.clone();
+	let thread_phase = Arc::downgrade(&phase);
 	let thread_camera = camera.clone();
 	task::spawn(LOG.to_string(), async move {
 		profiling::scope!("load_models");
@@ -121,7 +125,7 @@ pub fn load_models(
 
 		log::debug!(target: LOG, "Creating block texture descriptor cache");
 		let mut atlas_descriptor_cache = {
-			let render_chain = thread_render_chain.read().unwrap();
+			let chain = thread_chain.read().unwrap();
 			DescriptorCache::<(usize, usize)>::new(
 				descriptor::layout::SetLayout::builder()
 					.with_name("RenderVoxel.Atlas.DescriptorLayout")
@@ -133,7 +137,7 @@ pub fn load_models(
 						1,
 						flags::ShaderKind::Fragment,
 					)
-					.build(&render_chain.logical())?,
+					.build(&chain.logical()?)?,
 			)
 		};
 
@@ -142,8 +146,8 @@ pub fn load_models(
 		// For now, all blocks use the nearest-neighbor sampler.
 		log::debug!(target: LOG, "Building atlas sampler");
 		let atlas_sampler = Arc::new({
-			let render_chain = thread_render_chain.read().unwrap();
-			let max_anisotropy = render_chain.physical().max_sampler_anisotropy();
+			let chain = thread_chain.read().unwrap();
+			let max_anisotropy = chain.physical()?.max_sampler_anisotropy();
 			sampler::Builder::default()
 				.with_optname(Some("RenderVoxel.Atlas.Sampler".to_owned()))
 				.with_magnification(flags::Filter::NEAREST)
@@ -153,27 +157,27 @@ pub fn load_models(
 				.with_border_color(flags::BorderColor::INT_OPAQUE_BLACK)
 				.with_compare_op(Some(flags::CompareOp::ALWAYS))
 				.with_mips(flags::SamplerMipmapMode::LINEAR, 0.0, 0.0..0.0)
-				.build(&render_chain.logical())?
+				.build(&chain.logical()?)?
 		});
 
 		log::debug!(target: LOG, "Compiling atlas binary");
-		let mut gpu_signals = Vec::new();
 		let atlas = {
-			let render_chain = thread_render_chain.read().unwrap();
-			let (atlas, mut signals) =
-				atlas.build(&render_chain, "RenderVoxel.Atlas.0".to_owned())?;
-			gpu_signals.append(&mut signals);
-			Arc::new(atlas)
+			let chain = thread_chain.read().unwrap();
+			Arc::new(atlas.build(
+				&*chain,
+				chain.signal_sender(),
+				"RenderVoxel.Atlas.0".to_owned(),
+			)?)
 		};
 
 		// Create the descriptor set for the texture/atlas
 		let descriptor_set = {
 			use descriptor::update::*;
-			let render_chain = thread_render_chain.read().unwrap();
+			let chain = thread_chain.read().unwrap();
 			let descriptor_set = atlas_descriptor_cache.insert(
 				(0, 0), // NOTE: This should be the id of the atlas and sampler in their respective caches
 				Some(format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0)),
-				&render_chain,
+				chain.persistent_descriptor_pool(),
 			)?;
 
 			Queue::default()
@@ -190,7 +194,7 @@ pub fn load_models(
 						layout: flags::ImageLayout::ShaderReadOnlyOptimal,
 					}]),
 				}))
-				.apply(&render_chain.logical());
+				.apply(&*chain.logical()?);
 
 			descriptor_set
 		};
@@ -244,20 +248,19 @@ pub fn load_models(
 
 		log::debug!(target: LOG, "Finalizing model cache");
 		let model_cache = {
-			let render_chain = thread_render_chain.read().unwrap();
-			let (model_cache, mut signals) = cache_builder.build(&render_chain)?;
-			gpu_signals.append(&mut signals);
+			let chain = thread_chain.read().unwrap();
+			let model_cache = cache_builder.build(&*chain, chain.signal_sender())?;
 			model_cache
 		};
 
 		log::debug!(target: LOG, "Registering block renderer");
 		RenderVoxel::add_state_listener(
 			&thread_app_state,
-			thread_storage.clone(),
-			&thread_render_chain,
-			&thread_camera,
+			thread_storage,
+			Arc::downgrade(&thread_chain),
+			thread_phase,
+			Arc::downgrade(&thread_camera),
 			Arc::new(model_cache),
-			gpu_signals,
 		);
 
 		Ok(())

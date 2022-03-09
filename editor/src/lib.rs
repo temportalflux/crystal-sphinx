@@ -1,5 +1,5 @@
 use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::Application;
+use engine::{graphics::chain::procedure::DefaultProcedure, Application};
 
 use anyhow::Result;
 pub mod block;
@@ -27,10 +27,14 @@ pub fn run(_config: plugin::Config) -> Result<()> {
 		.with_size(1280.0, 720.0)
 		.with_resizable(true)
 		.with_application::<CrystalSphinx>()
-		.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
 		.build(&mut engine)?;
 
-	let ui = engine::ui::egui::Ui::create(&mut engine)?;
+	let render_phase = {
+		let arc = engine.display_chain().unwrap();
+		let mut chain = arc.write().unwrap();
+		chain.apply_procedure::<DefaultProcedure>()?.into_inner()
+	};
+	let ui = engine::ui::egui::Ui::create(&mut engine, &render_phase)?;
 
 	let workspace = editor::ui::Workspace::new();
 	ui.write().unwrap().add_element(&workspace);

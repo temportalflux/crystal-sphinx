@@ -8,20 +8,23 @@ use anyhow::Result;
 use engine::{
 	asset,
 	graphics::{
-		self, buffer, command, flags, pipeline, structs,
+		self, buffer,
+		chain::{operation::RequiresRecording, Chain, Operation},
+		command, flags, pipeline,
+		procedure::Phase,
+		resource::ColorBuffer,
 		types::{Vec3, Vec4},
 		utility::NamedObject,
-		vertex_object, ArcRenderChain, Drawable, GpuOperationBuilder, RenderChain,
-		RenderChainElement, Uniform,
+		vertex_object, Drawable, GpuOperationBuilder, Uniform,
 	},
 	input,
-	math::nalgebra::{Point3, Vector2, Vector4},
+	math::nalgebra::{Point3, Vector4},
 	Application, Engine, EngineSystem,
 };
 use enumset::{EnumSet, EnumSetType};
 use std::{
 	collections::HashMap,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
 static ID: &'static str = "render-chunk-boundary";
@@ -210,8 +213,6 @@ pub struct Render {
 
 	camera: Arc<RwLock<camera::Camera>>,
 	camera_uniform: Uniform,
-
-	pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 }
 
 impl Render {
@@ -221,7 +222,8 @@ impl Render {
 
 	pub fn add_state_listener(
 		app_state: &ArcLockMachine,
-		render_chain: &ArcRenderChain,
+		chain: &Arc<RwLock<Chain>>,
+		phase: Weak<Phase>,
 		camera: &Arc<RwLock<camera::Camera>>,
 		arc_user: &input::ArcLockUser,
 	) {
@@ -232,8 +234,9 @@ impl Render {
 			*,
 		};
 
-		let callback_render_chain = Arc::downgrade(&render_chain);
+		let callback_chain = Arc::downgrade(&chain);
 		let callback_camera = Arc::downgrade(&camera);
+		let callback_phase = phase;
 		let callback_action =
 			input::User::get_action_in(&arc_user, crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES)
 				.unwrap();
@@ -245,10 +248,11 @@ impl Render {
 			.create_callbacks(&app_state, move || {
 				profiling::scope!("init-render", ID);
 				log::trace!(target: ID, "Received Enter(InGame) transition");
-				let arc_render_chain = callback_render_chain.upgrade().unwrap();
+				let arc_chain = callback_chain.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
+				let arc_phase = callback_phase.upgrade().unwrap();
 				Ok(
-					match Self::create(arc_render_chain, arc_camera, callback_action.clone()) {
+					match Self::create(arc_chain, &arc_phase, arc_camera, callback_action.clone()) {
 						Ok(arclocked) => Some(arclocked),
 						Err(err) => {
 							log::error!(target: ID, "{}", err);
@@ -260,30 +264,20 @@ impl Render {
 	}
 
 	fn create(
-		render_chain: Arc<RwLock<RenderChain>>,
+		chain: Arc<RwLock<Chain>>,
+		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,
 		weak_action: input::action::WeakLockState,
 	) -> Result<ArcLockRender> {
 		log::info!(target: ID, "Initializing");
-		let render_chunks = {
-			let render_chain = render_chain.read().unwrap();
-			Self::new(&render_chain, camera, weak_action)?.arclocked()
-		};
-
-		let subpass_id = Self::subpass_id();
-		let element = render_chunks.clone();
-		engine::task::spawn(ID.to_owned(), async move {
-			log::trace!(target: ID, "Adding to render chain");
-			let mut render_chain = render_chain.write().unwrap();
-			render_chain.add_render_chain_element(Some(subpass_id.as_string()), &element)?;
-			Ok(())
-		});
-
+		let mut chain = chain.write().unwrap();
+		let render_chunks = Self::new(&chain, camera, weak_action)?.arclocked();
+		chain.add_operation(phase, Arc::downgrade(&render_chunks))?;
 		Ok(render_chunks)
 	}
 
 	fn new(
-		render_chain: &RenderChain,
+		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
 		weak_action: input::action::WeakLockState,
 	) -> Result<Self> {
@@ -297,8 +291,6 @@ impl Render {
 		drawable.add_shader(&CrystalSphinx::get_asset_id(
 			"shaders/debug/chunk_boundary/fragment",
 		))?;
-
-		let mut pending_gpu_signals = Vec::new();
 
 		let mut type_settings = HashMap::new();
 		let mut vertices = Vec::new();
@@ -321,42 +313,41 @@ impl Render {
 
 		let vertex_buffer = buffer::Buffer::create_gpu(
 			Some(format!("ChunkBoundary.VertexBuffer")),
-			&render_chain.allocator(),
+			&chain.allocator()?,
 			flags::BufferUsage::VERTEX_BUFFER,
 			vertices.len() * std::mem::size_of::<Vertex>(),
 			None,
 		)?;
 
-		GpuOperationBuilder::new(
-			vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
-		)?
-		.begin()?
-		.stage(&vertices[..])?
-		.copy_stage_to_buffer(&vertex_buffer)
-		.add_signal_to(&mut pending_gpu_signals)
-		.end()?;
+		GpuOperationBuilder::new(vertex_buffer.wrap_name(|v| format!("Write({})", v)), chain)?
+			.begin()?
+			.stage(&vertices[..])?
+			.copy_stage_to_buffer(&vertex_buffer)
+			.send_signal_to(chain.signal_sender())?
+			.end()?;
 
 		let index_buffer = buffer::Buffer::create_gpu(
 			Some(format!("ChunkBoundary.IndexBuffer")),
-			&render_chain.allocator(),
+			&chain.allocator()?,
 			flags::BufferUsage::INDEX_BUFFER,
 			indices.len() * std::mem::size_of::<u32>(),
 			Some(flags::IndexType::UINT32),
 		)?;
 
-		GpuOperationBuilder::new(
-			index_buffer.wrap_name(|v| format!("Write({})", v)),
-			&render_chain,
-		)?
-		.begin()?
-		.stage(&indices[..])?
-		.copy_stage_to_buffer(&index_buffer)
-		.add_signal_to(&mut pending_gpu_signals)
-		.end()?;
+		GpuOperationBuilder::new(index_buffer.wrap_name(|v| format!("Write({})", v)), chain)?
+			.begin()?
+			.stage(&indices[..])?
+			.copy_stage_to_buffer(&index_buffer)
+			.send_signal_to(chain.signal_sender())?
+			.end()?;
 
-		let camera_uniform =
-			Uniform::new::<camera::UniformData, &str>("ChunkBoundary.Camera", &render_chain)?;
+		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+			"ChunkBoundary.Camera",
+			&chain.logical()?,
+			&chain.allocator()?,
+			chain.persistent_descriptor_pool(),
+			chain.view_count(),
+		)?;
 
 		let control = BoundaryControl::create(Type::None, weak_action);
 
@@ -368,7 +359,6 @@ impl Render {
 			type_settings,
 			vertex_buffer,
 			index_buffer,
-			pending_gpu_signals,
 			camera_uniform,
 			camera,
 		})
@@ -385,52 +375,41 @@ impl Drop for Render {
 	}
 }
 
-impl RenderChainElement for Render {
-	fn name(&self) -> &'static str {
-		ID
-	}
-
-	fn initialize_with(
-		&mut self,
-		render_chain: &mut RenderChain,
-	) -> Result<Vec<Arc<command::Semaphore>>> {
-		let gpu_signals = Vec::new();
-
-		self.drawable.create_shaders(render_chain)?;
-		self.camera_uniform.write_descriptor_sets(render_chain);
+impl Operation for Render {
+	#[profiling::function]
+	fn initialize(&mut self, chain: &Chain) -> anyhow::Result<()> {
+		self.drawable.create_shaders(&chain.logical()?)?;
+		self.camera_uniform
+			.write_descriptor_sets(&*chain.logical()?);
 
 		let control_kind = self.control.read().unwrap().kind;
-		self.recorded_kind = vec![control_kind; render_chain.frame_count()];
-
-		Ok(gpu_signals)
+		self.recorded_kind = vec![control_kind; chain.view_count()];
+		Ok(())
 	}
 
-	fn on_render_chain_constructed(
-		&mut self,
-		render_chain: &RenderChain,
-		resolution: &Vector2<f32>,
-		subpass_id: &Option<String>,
-	) -> Result<()> {
+	#[profiling::function]
+	fn construct(&mut self, chain: &Chain, subpass_index: usize) -> anyhow::Result<()> {
 		use graphics::pipeline::{state::*, Pipeline};
-		Ok(self.drawable.create_pipeline(
-			render_chain,
+
+		let sample_count = {
+			let arc = chain.resources().get::<ColorBuffer>()?;
+			let color_buffer = arc.read().unwrap();
+			color_buffer.sample_count()
+		};
+
+		self.drawable.create_pipeline(
+			&chain.logical()?,
 			vec![self.camera_uniform.layout()],
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
 						.with_object::<Vertex>(0, flags::VertexInputRate::VERTEX),
 				)
-				.set_viewport_state(Viewport::from(structs::Extent2D {
-					width: resolution.x as u32,
-					height: resolution.y as u32,
-				}))
+				.set_viewport_state(Viewport::from(*chain.extent()))
 				.with_topology(
 					Topology::default().with_primitive(flags::PrimitiveTopology::LINE_LIST),
 				)
-				.with_multisampling(
-					Multisampling::default()
-						.with_sample_count(render_chain.max_common_sample_count()),
-				)
+				.with_multisampling(Multisampling::default().with_sample_count(sample_count))
 				.set_color_blending(
 					color_blend::ColorBlend::default()
 						.add_attachment(color_blend::Attachment::default()),
@@ -440,49 +419,58 @@ impl RenderChainElement for Render {
 						.with_depth_test()
 						.with_depth_compare_op(flags::CompareOp::LESS),
 				),
-			subpass_id,
-		)?)
+			chain.render_pass(),
+			subpass_index,
+		)?;
+		Ok(())
 	}
 
-	fn destroy_render_chain(&mut self, render_chain: &RenderChain) -> Result<()> {
-		self.drawable.destroy_pipeline(render_chain)?;
+	fn deconstruct(&mut self, _chain: &Chain) -> anyhow::Result<()> {
+		self.drawable.destroy_pipeline()?;
 		Ok(())
 	}
 
 	#[profiling::function]
-	fn prerecord_update(
+	fn prepare_for_submit(
 		&mut self,
-		_render_chain: &graphics::RenderChain,
-		_buffer: &command::Buffer,
-		frame: usize,
-		resolution: &Vector2<f32>,
-	) -> Result<bool> {
-		let data = self.camera.read().unwrap().as_uniform_data(resolution);
-		self.camera_uniform.write_data(frame, &data)?;
+		chain: &Chain,
+		frame_image: usize,
+	) -> anyhow::Result<RequiresRecording> {
+		let data = self
+			.camera
+			.read()
+			.unwrap()
+			.as_uniform_data(&chain.resolution());
+		self.camera_uniform.write_data(frame_image, &data)?;
 
 		let control_kind = self.control.read().unwrap().kind;
-		let has_changed_kind = self.recorded_kind[frame] != control_kind;
-		if has_changed_kind {
-			self.recorded_kind[frame] = control_kind;
+		if self.recorded_kind[frame_image] != control_kind {
+			self.recorded_kind[frame_image] = control_kind;
+			Ok(RequiresRecording::CurrentFrame)
+		} else {
+			Ok(RequiresRecording::NotRequired)
 		}
-
-		Ok(has_changed_kind)
 	}
 
 	#[profiling::function]
-	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<()> {
+	fn record(&mut self, buffer: &mut command::Buffer, buffer_index: usize) -> anyhow::Result<()> {
 		use graphics::debug;
 
 		buffer.begin_label("Draw:Debug", debug::LABEL_COLOR_DRAW);
 		{
 			self.drawable.bind_pipeline(buffer);
-			self.drawable
-				.bind_descriptors(buffer, vec![&self.camera_uniform.get_set(frame).unwrap()]);
+			self.drawable.bind_descriptors(
+				buffer,
+				vec![&self.camera_uniform.get_set(buffer_index).unwrap()],
+			);
 
 			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
-			for kind in self.recorded_kind[frame].rendered_kinds().into_iter() {
+			for kind in self.recorded_kind[buffer_index]
+				.rendered_kinds()
+				.into_iter()
+			{
 				if let Some(settings) = self.type_settings.get(&kind) {
 					buffer.draw(
 						settings.index_count,
@@ -497,9 +485,5 @@ impl RenderChainElement for Render {
 		buffer.end_label();
 
 		Ok(())
-	}
-
-	fn take_gpu_signals(&mut self) -> Vec<Arc<command::Semaphore>> {
-		self.pending_gpu_signals.drain(..).collect()
 	}
 }

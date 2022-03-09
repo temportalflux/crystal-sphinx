@@ -14,10 +14,13 @@ use anyhow::Result;
 use engine::{
 	asset,
 	graphics::{
-		self, command, flags, structs, ArcRenderChain, Drawable, RenderChain, RenderChainElement,
-		Uniform,
+		self,
+		chain::{operation::RequiresRecording, Operation},
+		command, flags,
+		procedure::Phase,
+		resource::ColorBuffer,
+		Chain, Drawable, Uniform,
 	},
-	math::nalgebra::Vector2,
 	Application,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -26,7 +29,6 @@ static ID: &'static str = "render-voxel";
 
 pub type ArcLockRenderVoxel = Arc<RwLock<RenderVoxel>>;
 pub struct RenderVoxel {
-	pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	drawable: Drawable,
 	instance_buffer: instance::Buffer,
 	camera_uniform: Uniform,
@@ -42,10 +44,10 @@ impl RenderVoxel {
 	pub fn add_state_listener(
 		app_state: &ArcLockMachine,
 		storage: Weak<RwLock<Storage>>,
-		render_chain: &ArcRenderChain,
-		camera: &Arc<RwLock<camera::Camera>>,
+		chain: Weak<RwLock<Chain>>,
+		phase: Weak<Phase>,
+		camera: Weak<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
-		mut gpu_signals: Vec<Arc<command::Semaphore>>,
 	) {
 		use state::{
 			storage::{Event::*, Storage},
@@ -54,11 +56,11 @@ impl RenderVoxel {
 			*,
 		};
 
-		let callback_render_chain = Arc::downgrade(&render_chain);
-		let callback_storage = storage.clone();
+		let callback_chain = chain;
+		let callback_phase = phase;
+		let callback_storage = storage;
 		let callback_model_cache = model_cache;
-		let callback_camera = Arc::downgrade(&camera);
-		let pending_gpu_signals = gpu_signals.drain(..).collect::<Vec<_>>();
+		let callback_camera = camera;
 		Storage::<ArcLockRenderVoxel>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
@@ -67,7 +69,8 @@ impl RenderVoxel {
 			.create_callbacks(&app_state, move || {
 				profiling::scope!("init-render", ID);
 				log::trace!(target: ID, "Received Enter(InGame) transition");
-				let render_chain = callback_render_chain.upgrade().unwrap();
+				let chain = callback_chain.upgrade().unwrap();
+				let phase = callback_phase.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
 
 				let chunk_receiver = match callback_storage.upgrade() {
@@ -92,11 +95,11 @@ impl RenderVoxel {
 
 				Ok(
 					match Self::create(
-						render_chain,
+						&chain,
+						&phase,
 						arc_camera,
-						&callback_model_cache,
+						callback_model_cache.clone(),
 						chunk_receiver,
-						pending_gpu_signals.clone(),
 					) {
 						Ok(arclocked) => Some(arclocked),
 						Err(err) => {
@@ -109,43 +112,28 @@ impl RenderVoxel {
 	}
 
 	fn create(
-		render_chain: Arc<RwLock<RenderChain>>,
+		chain: &Arc<RwLock<Chain>>,
+		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,
-		model_cache: &Arc<model::Cache>,
+		model_cache: Arc<model::Cache>,
 		chunk_receiver: chunk::OperationReceiver,
-		gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<ArcLockRenderVoxel> {
 		log::info!(target: ID, "Initializing");
-		let render_chunks = {
-			let render_chain = render_chain.read().unwrap();
-			Self::new(
-				&render_chain,
-				camera,
-				model_cache.clone(),
-				chunk_receiver,
-				gpu_signals,
-			)?
-			.arclocked()
-		};
+		let render_chunks =
+			Self::new(&chain.read().unwrap(), camera, model_cache, chunk_receiver)?.arclocked();
 
-		let subpass_id = Self::subpass_id();
-		let element = render_chunks.clone();
-		engine::task::spawn(ID.to_owned(), async move {
-			log::trace!(target: ID, "Adding to render chain");
-			let mut render_chain = render_chain.write().unwrap();
-			render_chain.add_render_chain_element(Some(subpass_id.as_string()), &element)?;
-			Ok(())
-		});
+		log::trace!(target: ID, "Adding to render chain");
+		let mut chain = chain.write().unwrap();
+		chain.add_operation(phase, Arc::downgrade(&render_chunks))?;
 
 		Ok(render_chunks)
 	}
 
 	fn new(
-		render_chain: &RenderChain,
+		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
 		chunk_receiver: chunk::OperationReceiver,
-		pending_gpu_signals: Vec<Arc<command::Semaphore>>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
@@ -154,14 +142,21 @@ impl RenderVoxel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/vertex"))?;
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/world/fragment"))?;
 
-		let instance_buffer =
-			instance::Buffer::new(&render_chain, Arc::downgrade(&model_cache), chunk_receiver)?;
+		let instance_buffer = instance::Buffer::new(
+			&chain.allocator()?,
+			Arc::downgrade(&model_cache),
+			chunk_receiver,
+		)?;
 
-		let camera_uniform =
-			Uniform::new::<camera::UniformData, &str>("RenderVoxel.Camera", &render_chain)?;
+		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+			"RenderVoxel.Camera",
+			&chain.logical()?,
+			&chain.allocator()?,
+			chain.persistent_descriptor_pool(),
+			chain.view_count(),
+		)?;
 
 		Ok(Self {
-			pending_gpu_signals,
 			drawable,
 			instance_buffer,
 			camera_uniform,
@@ -181,32 +176,25 @@ impl Drop for RenderVoxel {
 	}
 }
 
-impl RenderChainElement for RenderVoxel {
-	fn name(&self) -> &'static str {
-		ID
+impl Operation for RenderVoxel {
+	fn initialize(&mut self, chain: &Chain) -> anyhow::Result<()> {
+		self.drawable.create_shaders(&chain.logical()?)?;
+		self.camera_uniform
+			.write_descriptor_sets(&*chain.logical()?);
+		Ok(())
 	}
 
-	fn initialize_with(
-		&mut self,
-		render_chain: &mut RenderChain,
-	) -> Result<Vec<Arc<command::Semaphore>>> {
-		let gpu_signals = Vec::new();
-
-		self.drawable.create_shaders(render_chain)?;
-		self.camera_uniform.write_descriptor_sets(render_chain);
-
-		Ok(gpu_signals)
-	}
-
-	fn on_render_chain_constructed(
-		&mut self,
-		render_chain: &RenderChain,
-		resolution: &Vector2<f32>,
-		subpass_id: &Option<String>,
-	) -> Result<()> {
+	fn construct(&mut self, chain: &Chain, subpass_index: usize) -> anyhow::Result<()> {
 		use graphics::pipeline::{state::*, Pipeline};
-		Ok(self.drawable.create_pipeline(
-			render_chain,
+
+		let sample_count = {
+			let arc = chain.resources().get::<ColorBuffer>()?;
+			let color_buffer = arc.read().unwrap();
+			color_buffer.sample_count()
+		};
+
+		self.drawable.create_pipeline(
+			&chain.logical()?,
 			vec![
 				self.camera_uniform.layout(),
 				self.model_cache.descriptor_layout(),
@@ -217,17 +205,14 @@ impl RenderChainElement for RenderVoxel {
 						.with_object::<model::Vertex>(0, flags::VertexInputRate::VERTEX)
 						.with_object::<Instance>(1, flags::VertexInputRate::INSTANCE),
 				)
-				.set_viewport_state(Viewport::from(structs::Extent2D {
-					width: resolution.x as u32,
-					height: resolution.y as u32,
-				}))
+				.set_viewport_state(Viewport::from(*chain.extent()))
 				.set_color_blending(
 					color_blend::ColorBlend::default()
 						.add_attachment(color_blend::Attachment::default()),
 				)
 				.with_multisampling(
 					Multisampling::default()
-						.with_sample_count(render_chain.max_common_sample_count())
+						.with_sample_count(sample_count)
 						.with_sample_shading(Some(0.25)),
 				)
 				.with_depth_stencil(
@@ -237,36 +222,42 @@ impl RenderChainElement for RenderVoxel {
 						.with_depth_bounds(0.0, 1.0)
 						.with_depth_compare_op(flags::CompareOp::LESS),
 				),
-			subpass_id,
-		)?)
-	}
-
-	fn destroy_render_chain(&mut self, render_chain: &RenderChain) -> Result<()> {
-		self.drawable.destroy_pipeline(render_chain)?;
+			chain.render_pass(),
+			subpass_index,
+		)?;
 		Ok(())
 	}
 
-	#[profiling::function]
-	fn prerecord_update(
-		&mut self,
-		render_chain: &graphics::RenderChain,
-		_buffer: &command::Buffer,
-		frame: usize,
-		resolution: &Vector2<f32>,
-	) -> Result<bool> {
-		let data = self.camera.read().unwrap().as_uniform_data(resolution);
-		self.camera_uniform.write_data(frame, &data)?;
-
-		let (was_able_to_lock, mut instance_signals) =
-			self.instance_buffer.prerecord_update(&render_chain)?;
-		let should_record = !was_able_to_lock || !instance_signals.is_empty();
-		self.pending_gpu_signals.append(&mut instance_signals);
-
-		// If the instances change, we need to re-record the render
-		Ok(should_record)
+	fn deconstruct(&mut self, _chain: &Chain) -> anyhow::Result<()> {
+		self.drawable.destroy_pipeline()?;
+		Ok(())
 	}
 
-	fn record_to_buffer(&self, buffer: &mut command::Buffer, frame: usize) -> Result<()> {
+	fn prepare_for_frame(&mut self, _chain: &Chain) -> anyhow::Result<()> {
+		Ok(())
+	}
+
+	fn prepare_for_submit(
+		&mut self,
+		chain: &Chain,
+		frame_image: usize,
+	) -> anyhow::Result<RequiresRecording> {
+		let data = self
+			.camera
+			.read()
+			.unwrap()
+			.as_uniform_data(&chain.resolution());
+		self.camera_uniform.write_data(frame_image, &data)?;
+
+		// If the instances change, we need to re-record the render
+		let was_changed = self.instance_buffer.submit_pending_changes(&chain)?;
+		Ok(match was_changed {
+			true => RequiresRecording::CurrentFrame,
+			false => RequiresRecording::NotRequired,
+		})
+	}
+
+	fn record(&mut self, buffer: &mut command::Buffer, buffer_index: usize) -> anyhow::Result<()> {
 		use graphics::debug;
 		profiling::scope!("record:RenderVoxel");
 
@@ -300,7 +291,7 @@ impl RenderChainElement for RenderVoxel {
 					vec![
 						// Descriptor set=0 is the camera uniform.
 						// layout(set = 0, binding = 0) uniform CameraUniform ...
-						&self.camera_uniform.get_set(frame).unwrap(),
+						&self.camera_uniform.get_set(buffer_index).unwrap(),
 						// Descriptor set=1 is the texture sampler.
 						// The binding number is defined when creating the descriptor cache.
 						// layout(set = 1, binding = 0) uniform sampler2D texSampler;
@@ -323,9 +314,5 @@ impl RenderChainElement for RenderVoxel {
 		buffer.end_label();
 
 		Ok(())
-	}
-
-	fn take_gpu_signals(&mut self) -> Vec<Arc<command::Semaphore>> {
-		self.pending_gpu_signals.drain(..).collect()
 	}
 }

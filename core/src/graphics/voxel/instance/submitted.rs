@@ -1,7 +1,8 @@
 use crate::graphics::voxel::instance::{category::Category, local::IntegratedBuffer, Instance};
 use anyhow::Result;
+use crossbeam_channel::Sender;
 use engine::graphics::{
-	buffer::Buffer, command, flags, utility::NamedObject, GpuOperationBuilder, RenderChain,
+	alloc, buffer::Buffer, command, flags, utility::NamedObject, GpuOpContext, GpuOperationBuilder,
 };
 use std::sync::Arc;
 
@@ -11,10 +12,10 @@ pub struct Description {
 }
 
 impl Description {
-	pub fn new(render_chain: &RenderChain, instance_buffer_size: usize) -> Result<Self> {
+	pub fn new(allocator: &Arc<alloc::Allocator>, instance_buffer_size: usize) -> Result<Self> {
 		let buffer = Buffer::create_gpu(
 			Some(format!("RenderVoxel.InstanceBuffer")),
-			&render_chain.allocator(),
+			allocator,
 			flags::BufferUsage::VERTEX_BUFFER,
 			instance_buffer_size,
 			None,
@@ -31,8 +32,8 @@ impl Description {
 		changed_ranges: Vec<std::ops::Range<usize>>,
 		total_count: usize,
 		local: &IntegratedBuffer,
-		render_chain: &RenderChain,
-		pending_gpu_signals: &mut Vec<Arc<command::Semaphore>>,
+		context: &impl GpuOpContext,
+		signal_sender: &Sender<Arc<command::Semaphore>>,
 	) -> Result<()> {
 		self.categories.clear();
 
@@ -43,7 +44,7 @@ impl Description {
 			profiling::scope!("prepare-task");
 			let mut task = GpuOperationBuilder::new(
 				self.buffer.wrap_name(|v| format!("Write({})", v)),
-				&render_chain,
+				context,
 			)?
 			.begin()?;
 			task.stage_start(total_count * instance_size)?;
@@ -70,7 +71,7 @@ impl Description {
 		{
 			profiling::scope!("run-task");
 			task.copy_stage_to_buffer_ranges(&self.buffer, ranges)
-				.add_signal_to(pending_gpu_signals)
+				.send_signal_to(signal_sender)?
 				.end()?;
 		}
 

@@ -49,6 +49,8 @@ pub mod ui;
 
 use std::sync::{Arc, RwLock};
 
+use crate::graphics::ChainConfig;
+
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
 	fn name() -> &'static str {
@@ -159,31 +161,28 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			.with_size(1280.0, 720.0)
 			.with_resizable(true)
 			.with_application::<CrystalSphinx>()
-			.with_clear_color([0.0, 0.0, 0.0, 1.0].into())
-			.with_depth_attachment()
 			.build(&mut engine)?;
-		if let Some(mut render_chain) = engine.render_chain_write() {
-			let asset_id = CrystalSphinx::get_asset_id("render_pass/root");
-			let asset = engine::asset::Loader::load_sync(&asset_id)?
-				.downcast::<engine::graphics::render_pass::Pass>()
-				.unwrap();
-			let render_pass = asset.as_graphics(&asset_id, &render_chain)?;
-			render_chain.set_render_pass_info(render_pass);
-			render_chain.enable_color_buffer();
-		}
+
+		let render_phases = {
+			let arc = engine.display_chain().unwrap();
+			let mut chain = arc.write().unwrap();
+			chain.apply_procedure::<ChainConfig>()?
+		};
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::model::load_models(
 			&app_state,
 			Arc::downgrade(&network_storage),
-			&engine.render_chain().unwrap(),
+			engine.display_chain().unwrap(),
+			&render_phases.world,
 			&arc_camera,
 		);
 
 		graphics::chunk_boundary::Render::add_state_listener(
 			&app_state,
-			&engine.render_chain().unwrap(),
+			&engine.display_chain().unwrap(),
+			Arc::downgrade(&render_phases.debug),
 			&arc_camera,
 			input_user.as_ref().unwrap(),
 		);
@@ -194,10 +193,7 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		{
 			use engine::ui::egui::Ui;
 			let command_list = commands::create_list(&app_state);
-			let ui = Ui::create_with_subpass(
-				&mut engine,
-				Some(CrystalSphinx::get_asset_id("render_pass/subpass/egui").as_string()),
-			)?;
+			let ui = Ui::create(&mut engine, &render_phases.egui)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(input_user.as_ref().unwrap())
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
@@ -230,17 +226,14 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		{
 			let ui_system = {
 				use engine::ui::{oui::viewport, raui::make_widget};
-				engine::ui::System::new(engine.render_chain().unwrap())?
+				engine::ui::System::new(engine.display_chain().unwrap())?
 					.with_engine_shaders()?
 					.with_all_fonts()?
 					//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
 					.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
 					.with_context(viewport.clone())
 					.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
-					.attach_system(
-						&mut engine,
-						Some(CrystalSphinx::get_asset_id("render_pass/subpass/ui").as_string()),
-					)?
+					.attach_system(&mut engine, &render_phases.ui)?
 			};
 			viewport.write().unwrap().set_system(&ui_system);
 		}
