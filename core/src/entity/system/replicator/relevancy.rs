@@ -168,7 +168,7 @@ impl std::fmt::Display for AxisAlignedBoundingBox {
 
 impl AxisAlignedBoundingBox {
 	/// AABBxAABB intersection test
-	/// https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection#aabb_vs._aabb
+	/// `<https://developer.mozilla.org/en-US/docs/Games/Techniques/3D_collision_detection#aabb_vs._aabb>`
 	fn intersects(&self, other: &Self) -> bool {
 		let x = self.min.x < other.max.x && other.min.x < self.max.x;
 		let y = self.min.y < other.max.y && other.min.y < self.max.y;
