@@ -1,3 +1,5 @@
+pub mod mesh;
+
 pub trait ModelBuilder {
 	type Vertex;
 	type Index;
