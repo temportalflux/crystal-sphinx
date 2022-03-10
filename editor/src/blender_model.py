@@ -10,7 +10,6 @@ import sys
 import argparse
 from mathutils import Vector
 
-# blender ./assets/entity/humanoid/default.blend --background --python ./scripts/blender/export_model.py -- --mesh_name Model --output_path "./binaries/entity/humanoid/default"
 ERROR_CATEGORY = "SCRIPT_ERROR"
 
 # Prints an error message to the console which is formatted to be read by the build process
@@ -55,6 +54,9 @@ def run():
 	# to be uv-inclusive (which means duplicate vertex positions with different uvs). 
 	# 
 	# Eventually we will also have to export the bone data
+
+	# This is how binary data will be written such that rust can get access to it (instead of going through an intermediates directory/disk).
+	sys.stdout.buffer.write(b"some binary data\n")
 
 	uv_layer = mesh.uv_layers[0].data
 	for poly in mesh.polygons:

@@ -4,8 +4,14 @@ use engine::{graphics::chain::procedure::DefaultProcedure, Application};
 use anyhow::Result;
 pub mod block;
 
+mod blender_model;
+pub use blender_model::*;
+
 pub fn register_asset_types(manager: &mut editor::asset::Manager) {
-	manager.register::<crystal_sphinx::block::Block, block::BlockEditorMetadata>();
+	use crystal_sphinx::{block::Block, common::BlenderModel};
+	use crate::{block::BlockEditorMetadata, BlenderModelEditorMetadata};
+	manager.register::<Block, BlockEditorMetadata>();
+	manager.register::<BlenderModel, BlenderModelEditorMetadata>();
 }
 
 pub fn run(_config: plugin::Config) -> Result<()> {

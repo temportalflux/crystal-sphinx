@@ -64,6 +64,7 @@ impl Application for CrystalSphinx {
 pub fn register_asset_types() {
 	let mut type_reg = engine::asset::TypeRegistry::get().write().unwrap();
 	type_reg.register::<block::Block>();
+	type_reg.register::<common::BlenderModel>();
 }
 
 pub fn run(config: plugin::Config) -> Result<()> {
