@@ -8,8 +8,8 @@ mod blender_model;
 pub use blender_model::*;
 
 pub fn register_asset_types(manager: &mut editor::asset::Manager) {
-	use crystal_sphinx::{block::Block, common::BlenderModel};
 	use crate::{block::BlockEditorMetadata, BlenderModelEditorMetadata};
+	use crystal_sphinx::{block::Block, common::BlenderModel};
 	manager.register::<Block, BlockEditorMetadata>();
 	manager.register::<BlenderModel, BlenderModelEditorMetadata>();
 }

@@ -1,4 +1,4 @@
-use engine::math::nalgebra::{Vector3, Vector2};
+use engine::math::nalgebra::{Vector2, Vector3};
 use std::ops::Range;
 
 pub struct Mesh {
