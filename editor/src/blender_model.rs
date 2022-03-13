@@ -1,7 +1,10 @@
 use anyhow::Result;
 use crystal_sphinx::common::BlenderModel;
-use editor::asset::TypeEditorMetadata;
-use engine::asset::{AnyBox, AssetResult};
+use editor::asset::{BuildPath, TypeEditorMetadata};
+use engine::{
+	asset::{AnyBox, AssetResult},
+	task::PinFutureResultLifetime,
+};
 use std::{collections::HashMap, path::Path};
 
 static EXPORT_SCRIPT_PATH: &'static str = "./scripts/blender_model.py";
@@ -9,7 +12,7 @@ static EXPORT_SCRIPT: &'static str = std::include_str!("blender_model.py");
 
 pub struct BlenderModelEditorMetadata;
 impl TypeEditorMetadata for BlenderModelEditorMetadata {
-	fn boxed() -> Box<dyn TypeEditorMetadata> {
+	fn boxed() -> Box<dyn TypeEditorMetadata + 'static + Send + Sync> {
 		Box::new(BlenderModelEditorMetadata {})
 	}
 
@@ -17,113 +20,102 @@ impl TypeEditorMetadata for BlenderModelEditorMetadata {
 		editor::asset::deserialize::<BlenderModel>(&path, &content)
 	}
 
-	fn process_intermediate(
-		&self,
-		json_path: &Path,
-		relative_path: &Path,
-		asset: &mut AnyBox,
-	) -> Result<()> {
-		use std::io::Write;
-		use std::process::*;
+	fn compile<'a>(
+		&'a self,
+		build_path: &'a BuildPath,
+		asset: AnyBox,
+	) -> PinFutureResultLifetime<'a, Vec<u8>> {
+		Box::pin(async move {
+			let mut model = asset.downcast::<BlenderModel>().unwrap();
 
-		let model = asset.downcast_ref::<BlenderModel>().unwrap();
+			use std::process::*;
 
-		let cwd = std::env::current_dir()?;
-		let script_path = {
-			let mut path = cwd.clone();
-			path.push(EXPORT_SCRIPT_PATH);
-			path.canonicalize()?
-		};
-		std::fs::create_dir_all(script_path.parent().unwrap())?;
-		std::fs::write(&script_path, EXPORT_SCRIPT)?;
+			let cwd = std::env::current_dir()?;
+			let script_path = {
+				let mut path = cwd.clone();
+				path.push(EXPORT_SCRIPT_PATH);
+				path.canonicalize()?
+			};
+			std::fs::create_dir_all(script_path.parent().unwrap())?;
+			std::fs::write(&script_path, EXPORT_SCRIPT)?;
 
-		log::debug!("processing blender model: {}", json_path.display());
-		let blend_path = {
-			let mut path = json_path.parent().unwrap().to_owned();
-			path.push(json_path.file_stem().unwrap());
-			path.set_extension("blend");
-			path
-		};
+			log::debug!("processing blender model: {}", build_path.source.display());
+			let blend_path = build_path.source_with_ext("blend");
 
-		let output = Command::new("blender")
-			.arg(blend_path.to_str().unwrap())
-			.arg("--background")
-			.arg("--python")
-			.arg(script_path.to_str().unwrap())
-			.arg("--")
-			.arg("--mesh_name")
-			.arg("Model")
-			.arg("--output_mode")
-			.arg("BYTES")
-			.output()?;
+			let output = Command::new("blender")
+				.arg(blend_path.to_str().unwrap())
+				.arg("--background")
+				.arg("--python")
+				.arg(script_path.to_str().unwrap())
+				.arg("--")
+				.arg("--mesh_name")
+				.arg("Model")
+				.arg("--output_mode")
+				.arg("BYTES")
+				.output()?;
 
-		let errors = String::from_utf8(output.stderr)?;
-		if !errors.is_empty() {
-			use std::str::FromStr;
-			return Err(ExportError::from_str(&errors)?)?;
-		}
-
-		let mut stream = ExportStream::new(output.stdout);
-
-		while let Ok(byte) = stream.next_byte() {
-			if byte == 0b00 {
-				// Found start of data stream
-				break;
-			}
-		}
-
-		let vertex_count = stream.next_num::<u32>()? as usize;
-		let mut vertices = Vec::with_capacity(vertex_count);
-		for _ in 0..vertex_count {
-			let pos_x = stream.next_num::<f32>()?;
-			let pos_y = stream.next_num::<f32>()?;
-			let pos_z = stream.next_num::<f32>()?;
-
-			let group_count = stream.next_num::<u32>()? as usize;
-			let mut groups = Vec::with_capacity(group_count);
-			for _ in 0..group_count {
-				let group_id = stream.next_num::<u32>()? as usize;
-				let weight = stream.next_num::<f32>()?;
-				groups.push((group_id, weight));
+			let errors = String::from_utf8(output.stderr)?;
+			if !errors.is_empty() {
+				use std::str::FromStr;
+				return Err(ExportError::from_str(&errors)?)?;
 			}
 
-			vertices.push(((pos_x, pos_y, pos_z), groups));
-		}
+			let mut stream = ExportStream::new(output.stdout);
 
-		let polygon_count = stream.next_num::<u32>()? as usize;
-		for _ in 0..polygon_count {
-			let normal_x = stream.next_num::<f32>()?;
-			let normal_y = stream.next_num::<f32>()?;
-			let normal_z = stream.next_num::<f32>()?;
+			while let Ok(byte) = stream.next_byte() {
+				if byte == 0b00 {
+					// Found start of data stream
+					break;
+				}
+			}
 
-			let index_count = stream.next_num::<u32>()? as usize;
-			for _ in 0..index_count {
+			let vertex_count = stream.next_num::<u32>()? as usize;
+			let mut vertices = Vec::with_capacity(vertex_count);
+			for _ in 0..vertex_count {
+				let pos_x = stream.next_num::<f32>()?;
+				let pos_y = stream.next_num::<f32>()?;
+				let pos_z = stream.next_num::<f32>()?;
+
+				let group_count = stream.next_num::<u32>()? as usize;
+				let mut groups = Vec::with_capacity(group_count);
+				for _ in 0..group_count {
+					let group_id = stream.next_num::<u32>()? as usize;
+					let weight = stream.next_num::<f32>()?;
+					groups.push((group_id, weight));
+				}
+
+				vertices.push(((pos_x, pos_y, pos_z), groups));
+			}
+
+			let polygon_count = stream.next_num::<u32>()? as usize;
+			for _ in 0..polygon_count {
+				let normal_x = stream.next_num::<f32>()?;
+				let normal_y = stream.next_num::<f32>()?;
+				let normal_z = stream.next_num::<f32>()?;
+
+				let index_count = stream.next_num::<u32>()? as usize;
+				for _ in 0..index_count {
+					let vertex_index = stream.next_num::<u32>()? as usize;
+				}
+
+				let loop_idx_start = stream.next_num::<u32>()? as usize;
+				let loop_idx_end = stream.next_num::<u32>()? as usize;
+				let loop_range = loop_idx_start..loop_idx_end;
+			}
+
+			let loop_count = stream.next_num::<u32>()? as usize;
+			for idx in 0..loop_count {
 				let vertex_index = stream.next_num::<u32>()? as usize;
+				let uv_x = stream.next_num::<f32>()?;
+				let uv_y = stream.next_num::<f32>()?;
 			}
 
-			let loop_idx_start = stream.next_num::<u32>()? as usize;
-			let loop_idx_end = stream.next_num::<u32>()? as usize;
-			let loop_range = loop_idx_start..loop_idx_end;
-		}
+			assert_eq!(stream.next_byte().ok(), Some(0b00));
 
-		let loop_count = stream.next_num::<u32>()? as usize;
-		for idx in 0..loop_count {
-			let vertex_index = stream.next_num::<u32>()? as usize;
-			let uv_x = stream.next_num::<f32>()?;
-			let uv_y = stream.next_num::<f32>()?;
-		}
-
-		assert_eq!(stream.next_byte().ok(), Some(0b00));
-
-		// Temporily force the operation to "fail" so the binary is not created
-		return Err(FailedToParseExportError::Unknown)?;
-		//Ok(())
-	}
-
-	fn compile(&self, path: &Path, asset: AnyBox) -> Result<Vec<u8>> {
-		let mut model = asset.downcast::<BlenderModel>().unwrap();
-
-		Ok(rmp_serde::to_vec(&model)?)
+			// Temporily force the operation to "fail" so the binary is not created
+			return Err(FailedToParseExportError::Unknown)?;
+			//Ok(rmp_serde::to_vec(&model)?)
+		})
 	}
 }
 

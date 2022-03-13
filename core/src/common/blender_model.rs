@@ -1,5 +1,4 @@
 use engine::asset::{self, kdl, Asset, AssetResult, TypeId, TypeMetadata};
-use enumset::EnumSet;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

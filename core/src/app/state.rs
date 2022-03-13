@@ -1,5 +1,5 @@
 use anyhow::Result;
-use engine::{Engine, EngineSystem};
+use engine::EngineSystem;
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock},
@@ -140,7 +140,7 @@ pub struct Machine {
 }
 
 impl Machine {
-	fn new(state: State) -> Self {
+	pub fn new(state: State) -> Self {
 		Self {
 			state,
 			callbacks: HashMap::new(),
@@ -148,14 +148,8 @@ impl Machine {
 		}
 	}
 
-	fn arclocked(self) -> Arc<RwLock<Self>> {
+	pub fn arclocked(self) -> Arc<RwLock<Self>> {
 		Arc::new(RwLock::new(self))
-	}
-
-	pub fn create(state: State, engine: &mut Engine) -> Arc<RwLock<Self>> {
-		let machine = Self::new(state).arclocked();
-		engine.add_weak_system(Arc::downgrade(&machine));
-		machine
 	}
 
 	pub fn get(&self) -> State {
@@ -233,6 +227,10 @@ impl Machine {
 		for callback in relevant_callbacks {
 			callback(&operation);
 		}
+	}
+
+	pub fn clear_callbacks(&mut self) {
+		self.callbacks.clear();
 	}
 }
 

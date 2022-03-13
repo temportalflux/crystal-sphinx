@@ -30,8 +30,10 @@
 //! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
-use anyhow::Result;
-use engine::Application;
+use engine::{
+	asset, graphics::Chain, task::PinFutureResultLifetime, window::Window, Application, Engine,
+	EventLoop,
+};
 
 pub mod client;
 pub mod common;
@@ -47,9 +49,12 @@ pub mod input;
 pub mod plugin;
 pub mod ui;
 
-use std::sync::{Arc, RwLock};
+use std::{
+	path::PathBuf,
+	sync::{Arc, RwLock},
+};
 
-use crate::graphics::ChainConfig;
+use crate::{common::network::mode, graphics::ChainConfig};
 
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {
@@ -61,83 +66,115 @@ impl Application for CrystalSphinx {
 	}
 }
 
-pub fn register_asset_types() {
-	let mut type_reg = engine::asset::TypeRegistry::get().write().unwrap();
-	type_reg.register::<block::Block>();
-	type_reg.register::<common::BlenderModel>();
+pub struct Runtime {
+	config: plugin::Config,
+	app_mode: mode::Kind,
+
+	app_state: Arc<RwLock<app::state::Machine>>,
+	world: entity::ArcLockEntityWorld,
+	network_storage: Arc<RwLock<common::network::Storage>>,
+	window: Option<Window>,
 }
 
-pub fn run(config: plugin::Config) -> Result<()> {
-	let logid = std::env::args()
-		.find_map(|arg| arg.strip_prefix("-logid=").map(|s| s.to_owned()))
-		.unwrap();
-	let log_path = {
+impl Runtime {
+	fn get_network_mode() -> mode::Kind {
+		let is_client = std::env::args().any(|arg| arg == "-client");
+		let is_dedicated_server = std::env::args().any(|arg| arg == "-server");
+		assert_ne!(is_client, is_dedicated_server);
+		match (is_client, is_dedicated_server) {
+			(true, false) => mode::Kind::Client,
+			(false, true) => mode::Kind::Server,
+			_ => unimplemented!(),
+		}
+	}
+
+	pub fn new(config: plugin::Config) -> Self {
+		let app_mode = Self::get_network_mode();
+
+		let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+		let world = entity::ArcLockEntityWorld::default();
+		entity::add_state_listener(&app_state, Arc::downgrade(&world));
+
+		let network_storage = common::network::Storage::new(&app_state);
+		common::network::task::add_unloading_state_listener(&app_state);
+		entity::system::OwnedByConnection::add_state_listener(
+			&app_state,
+			Arc::downgrade(&network_storage),
+			Arc::downgrade(&world),
+		);
+		entity::system::Replicator::add_state_listener(
+			&app_state,
+			Arc::downgrade(&network_storage),
+			Arc::downgrade(&world),
+		);
+
+		Self {
+			config,
+			app_mode,
+			app_state,
+			world,
+			network_storage,
+			window: None,
+		}
+	}
+}
+impl engine::Runtime for Runtime {
+	fn logging_path() -> PathBuf {
+		let logid = std::env::args()
+			.find_map(|arg| arg.strip_prefix("-logid=").map(|s| s.to_owned()))
+			.unwrap();
 		let mut log_path = std::env::current_dir().unwrap().to_path_buf();
 		log_path.push(format!("{}_{}.log", CrystalSphinx::name(), logid));
 		log_path
-	};
-	engine::logging::init(&log_path)?;
-
-	// Load bundled plugins so they can be used throughout the instance
-	if let Ok(mut manager) = plugin::Manager::write() {
-		manager.load(config);
 	}
 
-	let mut engine = engine::Engine::new()?;
-	crate::register_asset_types();
-	engine.scan_paks()?;
-	block::Lookup::initialize();
+	fn register_asset_types() {
+		let mut registry = asset::TypeRegistry::get().write().unwrap();
+		engine::register_asset_types(&mut registry);
+		registry.register::<block::Block>();
+		registry.register::<common::BlenderModel>();
+	}
 
-	entity::component::register_types();
+	fn initialize<'a>(&'a self, engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
+		Box::pin(async move {
+			// Load bundled plugins so they can be used throughout the instance
+			if let Ok(mut manager) = plugin::Manager::write() {
+				manager.load(&self.config);
+			}
+			engine.write().unwrap().scan_paks()?;
+			block::Lookup::initialize();
+			entity::component::register_types();
 
-	let input_user: Option<input::ArcLockUser>;
-	let is_client = std::env::args().any(|arg| arg == "-client");
-	let is_server = std::env::args().any(|arg| arg == "-server");
-	assert_ne!(is_client, is_server);
+			if let Ok(mut engine) = engine.write() {
+				engine.add_weak_system(Arc::downgrade(&self.app_state));
 
-	let app_state = app::state::Machine::create(app::state::State::Launching, &mut engine);
-	let entity_world = entity::ArcLockEntityWorld::default();
-	entity::add_state_listener(&app_state, Arc::downgrade(&entity_world));
+				// Both clients and servers run the physics simulation.
+				// The server will broadcast authoritative values (via components marked as `Replicatable`),
+				// and clients will tell the server of the changes to the entities they own via TBD.
+				engine.add_system(entity::system::Physics::new(&self.world).arclocked());
+			}
 
-	let network_storage = common::network::Storage::new(&app_state);
-	common::network::task::add_unloading_state_listener(&app_state);
-	entity::system::OwnedByConnection::add_state_listener(
-		&app_state,
-		Arc::downgrade(&network_storage),
-		Arc::downgrade(&entity_world),
-	);
-	entity::system::Replicator::add_state_listener(
-		&app_state,
-		Arc::downgrade(&network_storage),
-		Arc::downgrade(&entity_world),
-	);
+			if self.app_mode == mode::Kind::Server {
+				common::network::task::load_dedicated_server(
+					self.app_state.clone(),
+					self.network_storage.clone(),
+					Arc::downgrade(&self.world),
+				)?;
+			}
 
-	// Both clients and servers run the physics simulation.
-	// The server will broadcast authoritative values (via components marked as `Replicatable`),
-	// and clients will tell the server of the changes to the entities they own via TBD.
-	engine.add_system(entity::system::Physics::new(&entity_world).arclocked());
+			log::info!(target: CrystalSphinx::name(), "Initialization finished");
+			Ok(true)
+		})
+	}
 
-	let engine = if is_server {
-		let engine = engine.into_arclock();
-		engine::Engine::set(engine.clone());
-
-		if let Err(error) = common::network::task::load_dedicated_server(
-			app_state.clone(),
-			network_storage.clone(),
-			Arc::downgrade(&entity_world),
-		) {
-			log::error!(target: "main", "{:?}", error);
+	fn create_display(
+		&mut self,
+		engine: &Arc<RwLock<Engine>>,
+		event_loop: &EventLoop<()>,
+	) -> anyhow::Result<()> {
+		if self.app_mode == mode::Kind::Server {
 			return Ok(());
 		}
-
-		engine
-	} else {
-		input_user = Some(input::init());
-		common::network::task::add_load_network_listener(
-			&app_state,
-			&network_storage,
-			&entity_world,
-		);
 
 		{
 			let mut manager = client::account::Manager::write().unwrap();
@@ -150,58 +187,71 @@ pub fn run(config: plugin::Config) -> Result<()> {
 			let user_id = manager.ensure_account(&user_name)?;
 			manager.login_as(&user_id)?;
 		};
-		entity::system::PlayerController::add_state_listener(
-			&app_state,
-			Arc::downgrade(&network_storage),
-			Arc::downgrade(&entity_world),
-			input_user.as_ref().unwrap().clone(),
+
+		let input_user = input::init();
+
+		common::network::task::add_load_network_listener(
+			&self.app_state,
+			&self.network_storage,
+			&self.world,
 		);
 
-		engine::window::Window::builder()
-			.with_title("Crystal Sphinx")
-			.with_size(1280.0, 720.0)
-			.with_resizable(true)
-			.with_application::<CrystalSphinx>()
-			.build(&mut engine)?;
+		entity::system::PlayerController::add_state_listener(
+			&self.app_state,
+			Arc::downgrade(&self.network_storage),
+			Arc::downgrade(&self.world),
+			input_user.clone(),
+		);
+
+		let graphics_chain = {
+			let window = Window::builder()
+				.with_title("Crystal Sphinx")
+				.with_size(1280.0, 720.0)
+				.with_resizable(true)
+				.with_application::<CrystalSphinx>()
+				.build(event_loop)?;
+			let graphics_chain = window.graphics_chain().clone();
+			self.window = Some(window);
+			graphics_chain
+		};
 
 		let render_phases = {
-			let arc = engine.display_chain().unwrap();
-			let mut chain = arc.write().unwrap();
+			let mut chain = graphics_chain.write().unwrap();
 			chain.apply_procedure::<ChainConfig>()?
 		};
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 		graphics::voxel::model::load_models(
-			&app_state,
-			Arc::downgrade(&network_storage),
-			engine.display_chain().unwrap(),
+			&self.app_state,
+			Arc::downgrade(&self.network_storage),
+			&graphics_chain,
 			&render_phases.world,
 			&arc_camera,
 		);
 
 		graphics::chunk_boundary::Render::add_state_listener(
-			&app_state,
-			&engine.display_chain().unwrap(),
+			&self.app_state,
+			&graphics_chain,
 			Arc::downgrade(&render_phases.debug),
 			&arc_camera,
-			input_user.as_ref().unwrap(),
+			&input_user,
 		);
-		engine.add_system(entity::system::UpdateCamera::new(&entity_world, arc_camera).arclocked());
+		if let Ok(mut engine) = engine.write() {
+			engine
+				.add_system(entity::system::UpdateCamera::new(&self.world, arc_camera).arclocked());
+		}
 
 		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
 			use engine::ui::egui::Ui;
-			let command_list = commands::create_list(&app_state);
-			let ui = Ui::create(&mut engine, &render_phases.egui)?;
+			let command_list = commands::create_list(&self.app_state);
+			let ui = Ui::create(self.window.as_ref().unwrap(), &render_phases.egui)?;
 			ui.write().unwrap().add_owned_element(
-				debug::Panel::new(input_user.as_ref().unwrap())
+				debug::Panel::new(&input_user)
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
-					.with_window(
-						"Entity Inspector",
-						debug::EntityInspector::new(&entity_world),
-					)
+					.with_window("Entity Inspector", debug::EntityInspector::new(&self.world))
 					.with_window("Chunk Inspector", debug::ChunkInspector::new()),
 			);
 			_egui_ui = Some(ui);
@@ -209,11 +259,11 @@ pub fn run(config: plugin::Config) -> Result<()> {
 
 		let viewport = ui::AppStateViewport::new().arclocked();
 		// initial UI is added when a callback matching the initial state is added to the app-state-machine
-		ui::AppStateViewport::add_state_listener(&viewport, &app_state);
+		ui::AppStateViewport::add_state_listener(&viewport, &self.app_state);
 
 		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
 		{
-			let thread_app_state = app_state.clone();
+			let thread_app_state = self.app_state.clone();
 			engine::task::spawn("temp".to_owned(), async move {
 				tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 				thread_app_state
@@ -227,68 +277,76 @@ pub fn run(config: plugin::Config) -> Result<()> {
 		{
 			let ui_system = {
 				use engine::ui::{oui::viewport, raui::make_widget};
-				engine::ui::System::new(engine.display_chain().unwrap())?
+				let mut engine = engine.write().unwrap();
+				engine::ui::System::new(&graphics_chain)?
 					.with_engine_shaders()?
 					.with_all_fonts()?
 					//.with_tree_root(engine::ui::raui::make_widget!(ui::root::root))
 					.with_tree_root(make_widget!(viewport::widget::<ui::AppStateViewport>))
 					.with_context(viewport.clone())
 					.with_texture(&CrystalSphinx::get_asset_id("textures/ui/title"))?
-					.attach_system(&mut engine, &render_phases.ui)?
+					.attach_system(&mut engine, &graphics_chain, &render_phases.ui)?
 			};
 			viewport.write().unwrap().set_system(&ui_system);
 		}
 
-		/*
-		let mut main_menu_music = engine::asset::WeightedIdList::default();
-		if let Ok(manager) = plugin::Manager::read() {
-			manager.register_main_menu_music(&mut main_menu_music);
+		Ok(())
+	}
+
+	fn get_display_chain(&self) -> Option<&Arc<RwLock<Chain>>> {
+		self.window.as_ref().map(|window| window.graphics_chain())
+	}
+
+	fn on_event_loop_complete(&self) {
+		// Make sure any app-state storages are cleared out before the window is destroyed (to ensure render objects are dropped in the correct order).
+		if let Ok(mut app_state) = self.app_state.write() {
+			app_state.clear_callbacks();
 		}
-
-		{
-			use engine::audio::source::Source;
-			main_menu_music
-				.iter()
-				.map(|(_, id)| id.clone())
-				.collect::<engine::audio::source::Sequence>()
-				.and_play(None)
-				.register_to(&mut engine);
-		}
-		*/
-
-		/*
-		let _source = {
-			use rand::Rng;
-			let mut rng = rand::thread_rng();
-			match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
-				Some(id) => {
-					let mut audio_system = engine::audio::System::write()?;
-					match audio_system.create_sound(id) {
-						Ok(mut source) => {
-							source.play(None);
-							Some(source)
-						}
-						Err(e) => {
-							log::error!("Failed to load sound {}: {}", id, e);
-							None
-						}
-					}
-				}
-				None => {
-					log::warn!("Failed to find any main menu music");
-					None
-				}
-			}
-		};
-		*/
-
-		engine.into_arclock()
-	};
-
-	log::info!(target: CrystalSphinx::name(), "Initialization finished");
-	engine::Engine::run(engine.clone(), || {
 		if let Ok(mut guard) = client::account::Manager::write() {
 			(*guard).logout();
 		}
-	})
+	}
 }
+
+/*
+let mut main_menu_music = engine::asset::WeightedIdList::default();
+if let Ok(manager) = plugin::Manager::read() {
+	manager.register_main_menu_music(&mut main_menu_music);
+}
+
+{
+	use engine::audio::source::Source;
+	main_menu_music
+		.iter()
+		.map(|(_, id)| id.clone())
+		.collect::<engine::audio::source::Sequence>()
+		.and_play(None)
+		.register_to(&mut engine);
+}
+*/
+
+/*
+let _source = {
+	use rand::Rng;
+	let mut rng = rand::thread_rng();
+	match main_menu_music.pick(rng.gen_range(0..main_menu_music.total_weight())) {
+		Some(id) => {
+			let mut audio_system = engine::audio::System::write()?;
+			match audio_system.create_sound(id) {
+				Ok(mut source) => {
+					source.play(None);
+					Some(source)
+				}
+				Err(e) => {
+					log::error!("Failed to load sound {}: {}", id, e);
+					None
+				}
+			}
+		}
+		None => {
+			log::warn!("Failed to find any main menu music");
+			None
+		}
+	}
+};
+*/

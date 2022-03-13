@@ -1,50 +1,105 @@
-use crystal_sphinx::{plugin, CrystalSphinx};
-use engine::{graphics::chain::procedure::DefaultProcedure, Application};
+use std::{
+	path::PathBuf,
+	sync::{Arc, RwLock},
+};
 
-use anyhow::Result;
+use crystal_sphinx::CrystalSphinx;
+use editor::{ui::Workspace, Editor};
+use engine::{
+	graphics::{chain::procedure::DefaultProcedure, Chain},
+	task::PinFutureResultLifetime,
+	window::Window,
+	Application, Engine, EventLoop,
+};
+
 pub mod block;
 
 mod blender_model;
 pub use blender_model::*;
 
-pub fn register_asset_types(manager: &mut editor::asset::Manager) {
-	use crate::{block::BlockEditorMetadata, BlenderModelEditorMetadata};
-	use crystal_sphinx::{block::Block, common::BlenderModel};
-	manager.register::<Block, BlockEditorMetadata>();
-	manager.register::<BlenderModel, BlenderModelEditorMetadata>();
+pub struct Runtime {
+	window: Option<Window>,
+	workspace: Option<Arc<RwLock<Workspace>>>,
 }
-
-pub fn run(_config: plugin::Config) -> Result<()> {
-	engine::logging::init(&engine::logging::default_path(
-		CrystalSphinx::name(),
-		Some("_editor"),
-	))?;
-	let mut engine = engine::Engine::new()?;
-	crystal_sphinx::register_asset_types();
-
-	editor::Editor::initialize::<CrystalSphinx>()?;
-	crate::register_asset_types(editor::Editor::write().asset_manager_mut());
-	if editor::Editor::read().run_commandlets()? {
-		return Ok(());
+impl Runtime {
+	pub fn new() -> Self {
+		Self {
+			window: None,
+			workspace: None,
+		}
+	}
+}
+impl engine::Runtime for Runtime {
+	fn logging_path() -> PathBuf {
+		engine::logging::default_path(CrystalSphinx::name(), Some("_editor"))
 	}
 
-	engine::window::Window::builder()
-		.with_title("Crystal Sphinx Editor")
-		.with_size(1280.0, 720.0)
-		.with_resizable(true)
-		.with_application::<CrystalSphinx>()
-		.build(&mut engine)?;
+	fn register_asset_types() {
+		crystal_sphinx::Runtime::register_asset_types();
+	}
 
-	let render_phase = {
-		let arc = engine.display_chain().unwrap();
-		let mut chain = arc.write().unwrap();
-		chain.apply_procedure::<DefaultProcedure>()?.into_inner()
-	};
-	let ui = engine::ui::egui::Ui::create(&mut engine, &render_phase)?;
+	fn initialize<'a>(&'a self, _engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
+		Box::pin(async move {
+			self.create_editor()?;
+			match editor::Editor::run_commandlets() {
+				Some(handle) => {
+					handle.await?;
+					Ok(false)
+				}
+				None => Ok(true),
+			}
+		})
+	}
 
-	let workspace = editor::ui::Workspace::new();
-	ui.write().unwrap().add_element(&workspace);
+	fn create_display(
+		&mut self,
+		engine: &Arc<RwLock<Engine>>,
+		event_loop: &EventLoop<()>,
+	) -> anyhow::Result<()> {
+		let window = engine::window::Window::builder()
+			.with_title("Crystal Sphinx Editor")
+			.with_size(1280.0, 720.0)
+			.with_resizable(true)
+			.with_application::<CrystalSphinx>()
+			.build(event_loop)?;
 
-	let engine = engine.into_arclock();
-	engine::Engine::run(engine.clone(), || {})
+		let render_phase = {
+			let arc = window.graphics_chain();
+			let mut chain = arc.write().unwrap();
+			chain.apply_procedure::<DefaultProcedure>()?.into_inner()
+		};
+
+		let ui = engine::ui::egui::Ui::create(&window, &render_phase)?;
+		if let Ok(mut engine) = engine.write() {
+			engine.add_winit_listener(&ui);
+		}
+
+		self.window = Some(window);
+
+		let workspace = Workspace::new();
+		ui.write().unwrap().add_element(&workspace);
+		self.workspace = Some(workspace);
+
+		Ok(())
+	}
+
+	fn get_display_chain(&self) -> Option<&Arc<RwLock<Chain>>> {
+		self.window.as_ref().map(|window| window.graphics_chain())
+	}
+}
+
+impl Runtime {
+	fn create_editor(&self) -> anyhow::Result<()> {
+		Editor::initialize::<CrystalSphinx>(self.create_asset_manager())
+	}
+
+	fn create_asset_manager(&self) -> editor::asset::Manager {
+		use crate::block::BlockEditorMetadata;
+		use crystal_sphinx::{block::Block, common::BlenderModel};
+		let mut manager = editor::asset::Manager::new();
+		editor::register_asset_types(&mut manager);
+		manager.register::<Block, BlockEditorMetadata>();
+		manager.register::<BlenderModel, BlenderModelEditorMetadata>();
+		manager
+	}
 }

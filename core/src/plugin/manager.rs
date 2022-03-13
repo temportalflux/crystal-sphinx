@@ -23,7 +23,7 @@ impl Manager {
 }
 
 impl Manager {
-	pub fn load(&mut self, config: Config) {
+	pub fn load(&mut self, config: &Config) {
 		for plugin_arc in config.plugins.iter() {
 			log::info!(target: LOG, "Using plugin {}", plugin_arc);
 			self.plugins.push(plugin_arc.clone());

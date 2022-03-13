@@ -1,12 +1,14 @@
-use anyhow::Result;
 use crystal_sphinx::block::Block;
-use editor::asset::TypeEditorMetadata;
-use engine::asset::{AnyBox, AssetResult};
+use editor::asset::{BuildPath, TypeEditorMetadata};
+use engine::{
+	asset::{AnyBox, AssetResult},
+	task::PinFutureResultLifetime,
+};
 use std::path::Path;
 
 pub struct BlockEditorMetadata;
 impl TypeEditorMetadata for BlockEditorMetadata {
-	fn boxed() -> Box<dyn TypeEditorMetadata> {
+	fn boxed() -> Box<dyn TypeEditorMetadata + 'static + Send + Sync> {
 		Box::new(BlockEditorMetadata {})
 	}
 
@@ -14,7 +16,11 @@ impl TypeEditorMetadata for BlockEditorMetadata {
 		editor::asset::deserialize::<Block>(&path, &content)
 	}
 
-	fn compile(&self, _: &Path, asset: AnyBox) -> Result<Vec<u8>> {
-		Ok(rmp_serde::to_vec(&asset.downcast::<Block>().unwrap())?)
+	fn compile<'a>(
+		&'a self,
+		build_path: &'a BuildPath,
+		asset: AnyBox,
+	) -> PinFutureResultLifetime<'a, Vec<u8>> {
+		Box::pin(async move { Ok(rmp_serde::to_vec(&asset.downcast::<Block>().unwrap())?) })
 	}
 }

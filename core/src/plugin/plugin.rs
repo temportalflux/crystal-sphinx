@@ -13,13 +13,13 @@ pub trait Plugin {
 	fn register_main_menu_music(&self, _list: &mut engine::asset::WeightedIdList) {}
 }
 
-impl std::fmt::Display for dyn Plugin {
+impl std::fmt::Display for dyn Plugin + 'static + Send + Sync {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "{}(v{})", self.name(), self.version())
 	}
 }
 
-impl std::fmt::Debug for dyn Plugin {
+impl std::fmt::Debug for dyn Plugin + 'static + Send + Sync {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(f, "{}(v{})", self.name(), self.version())
 	}
