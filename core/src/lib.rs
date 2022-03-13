@@ -31,6 +31,7 @@
 //!
 
 use engine::{
+	ui::egui,
 	asset, graphics::Chain, task::PinFutureResultLifetime, window::Window, Application, Engine,
 	EventLoop,
 };
@@ -73,6 +74,7 @@ pub struct Runtime {
 	app_state: Arc<RwLock<app::state::Machine>>,
 	world: entity::ArcLockEntityWorld,
 	network_storage: Arc<RwLock<common::network::Storage>>,
+	egui_ui: Option<Arc<RwLock<egui::Ui>>>,
 	window: Option<Window>,
 }
 
@@ -114,6 +116,7 @@ impl Runtime {
 			app_state,
 			world,
 			network_storage,
+			egui_ui: None,
 			window: None,
 		}
 	}
@@ -141,7 +144,8 @@ impl engine::Runtime for Runtime {
 			if let Ok(mut manager) = plugin::Manager::write() {
 				manager.load(&self.config);
 			}
-			engine.write().unwrap().scan_paks()?;
+
+			engine::asset::Library::scan_pak_directory().await?;
 			block::Lookup::initialize();
 			entity::component::register_types();
 
@@ -242,19 +246,20 @@ impl engine::Runtime for Runtime {
 				.add_system(entity::system::UpdateCamera::new(&self.world, arc_camera).arclocked());
 		}
 
-		let mut _egui_ui: Option<Arc<RwLock<engine::ui::egui::Ui>>> = None;
 		#[cfg(feature = "debug")]
 		{
-			use engine::ui::egui::Ui;
 			let command_list = commands::create_list(&self.app_state);
-			let ui = Ui::create(self.window.as_ref().unwrap(), &render_phases.egui)?;
+			let ui = egui::Ui::create(self.window.as_ref().unwrap(), &render_phases.egui)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(&input_user)
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
 					.with_window("Entity Inspector", debug::EntityInspector::new(&self.world))
 					.with_window("Chunk Inspector", debug::ChunkInspector::new()),
 			);
-			_egui_ui = Some(ui);
+			if let Ok(mut engine) = engine.write() {
+				engine.add_winit_listener(&ui);
+			}
+			self.egui_ui = Some(ui);
 		}
 
 		let viewport = ui::AppStateViewport::new().arclocked();

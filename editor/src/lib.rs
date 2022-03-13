@@ -40,7 +40,7 @@ impl engine::Runtime for Runtime {
 
 	fn initialize<'a>(&'a self, _engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
 		Box::pin(async move {
-			self.create_editor()?;
+			self.create_editor().await?;
 			match editor::Editor::run_commandlets() {
 				Some(handle) => {
 					handle.await?;
@@ -89,8 +89,9 @@ impl engine::Runtime for Runtime {
 }
 
 impl Runtime {
-	fn create_editor(&self) -> anyhow::Result<()> {
-		Editor::initialize::<CrystalSphinx>(self.create_asset_manager())
+	async fn create_editor(&self) -> anyhow::Result<()> {
+		let editor = Editor::new(self.create_asset_manager()).await?;
+		Editor::initialize(editor)
 	}
 
 	fn create_asset_manager(&self) -> editor::asset::Manager {
