@@ -30,7 +30,7 @@ impl Database {
 
 		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
 
-		let (load_request_sender, load_request_receiver) = crossbeam_channel::unbounded();
+		let (load_request_sender, load_request_receiver) = engine::channels::mpsc::unbounded();
 		let thread_handle = thread::start(root_path, load_request_receiver, &chunk_cache);
 
 		let load_request_sender = Arc::new(load_request_sender);

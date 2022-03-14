@@ -1,10 +1,11 @@
 use crate::entity::component::binary::SerializedEntity;
+use engine::channels::future::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 
 /// Async channel to send entity updates to be replicated to some client.
-pub type SendUpdate = async_channel::Sender<Update>;
+pub type SendUpdate = Sender<Update>;
 /// Async channel to receive entity updates to be replicated to some client.
-pub type RecvUpdate = async_channel::Receiver<Update>;
+pub type RecvUpdate = Receiver<Update>;
 
 /// An update to be replicated to some client.
 #[derive(Clone, Serialize, Deserialize)]

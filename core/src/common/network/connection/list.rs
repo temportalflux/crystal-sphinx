@@ -1,4 +1,4 @@
-use bus::{Bus, BusReader};
+use engine::channels::broadcast::{Bus, BusReader};
 use socknet::{
 	connection::{self, event, Active, Connection},
 	utility::JoinHandleList,

@@ -3,7 +3,7 @@ use crate::{
 	graphics::voxel::model::{Model, Vertex},
 };
 use anyhow::Result;
-use crossbeam_channel::Sender;
+use engine::channels::mpsc::Sender;
 use engine::graphics::{
 	buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
 	GpuOpContext, GpuOperationBuilder,

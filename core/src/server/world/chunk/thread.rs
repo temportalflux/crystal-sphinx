@@ -96,7 +96,7 @@ impl ThreadState {
 
 	#[profiling::function]
 	fn process_new_tickets(&mut self, incoming_requests: &ticket::Receiver) {
-		use crossbeam_channel::TryRecvError;
+		use engine::channels::mpsc::TryRecvError;
 		let mut has_emptied_requests = false;
 		while !self.disconnected_from_requests && !has_emptied_requests {
 			match incoming_requests.try_recv() {

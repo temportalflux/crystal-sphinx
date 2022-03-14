@@ -46,9 +46,9 @@ impl Handle {
 	}
 
 	pub fn new_remote(address: &SocketAddr, connection: &Weak<Connection>) -> anyhow::Result<Self> {
-		let (send_world_rel, recv_world_rel) = async_channel::unbounded();
-		let (send_entities, recv_entities) = async_channel::unbounded();
-		let (send_chunks, recv_chunks) = async_channel::unbounded();
+		let (send_world_rel, recv_world_rel) = engine::channels::future::unbounded();
+		let (send_entities, recv_entities) = engine::channels::future::unbounded();
+		let (send_chunks, recv_chunks) = engine::channels::future::unbounded();
 
 		replication::entity::spawn(connection.clone(), recv_entities)?;
 		replication::world::relevancy::spawn(connection.clone(), recv_world_rel, send_chunks)?;
@@ -96,7 +96,7 @@ impl Handle {
 	}
 
 	pub fn send_world_update(&mut self, update: relevancy::WorldUpdate) {
-		use async_channel::TrySendError;
+		use engine::channels::future::TrySendError;
 		match &self.channel {
 			UpdateChannel::Remote(send_world_rel, _) => {
 				if let Err(err) = send_world_rel.try_send(update) {
@@ -163,7 +163,7 @@ impl Handle {
 		operations: Vec<(EntityOperation, hecs::Entity)>,
 		serialized: &HashMap<hecs::Entity, binary::SerializedEntity>,
 	) {
-		use async_channel::TrySendError;
+		use engine::channels::future::TrySendError;
 		use replication::entity::Update;
 		if let UpdateChannel::Remote(_, send_entities) = &self.channel {
 			for (operation, entity) in operations.into_iter() {

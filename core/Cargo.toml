@@ -72,12 +72,6 @@ kdl = "3.0"
 # [serialization] kdl wrapper for enforcing schemas
 kdl-schema = { path = "../temportal-engine/crates/kdl-schema" }
 
-# [channel] [ sync] single-producer multi-consumer  multi-consumption
-bus = "2.2"
-# [channel] [ sync]  multi-producer multi-consumer single-consumption
-crossbeam-channel = "0.5"
-# [channel] [async]  multi-producer multi-consumer single-consumption
-async-channel = "1.6"
 
 # [utility] pseudo/generated randomness
 rand = "0.8"

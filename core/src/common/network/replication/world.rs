@@ -3,6 +3,7 @@
 //! See [`register`] for stream graph.
 use std::sync::{Arc, RwLock, Weak};
 
+use engine::channels::future::{Receiver, Sender};
 use socknet::stream::Registry;
 
 use crate::{
@@ -15,14 +16,14 @@ pub mod chunk;
 pub mod relevancy;
 
 /// Async channel for sending world updates to the world-relevancy async task.
-pub type SendUpdate = async_channel::Sender<WorldUpdate>;
+pub type SendUpdate = Sender<WorldUpdate>;
 /// Async channel for receiving world updates in the world-relevancy async task.
-pub type RecvUpdate = async_channel::Receiver<WorldUpdate>;
+pub type RecvUpdate = Receiver<WorldUpdate>;
 
 /// Async channel for sending chunks to one of the chunk replication async tasks.
-pub type SendChunks = async_channel::Sender<Weak<RwLock<Chunk>>>;
+pub type SendChunks = Sender<Weak<RwLock<Chunk>>>;
 /// Async channel for receiving chunks in one of the chunk replication async tasks.
-pub type RecvChunks = async_channel::Receiver<Weak<RwLock<Chunk>>>;
+pub type RecvChunks = Receiver<Weak<RwLock<Chunk>>>;
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// Client-Initiated stream which handles the authentication protocol.

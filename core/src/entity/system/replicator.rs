@@ -11,7 +11,7 @@ use crate::{
 	server::world::chunk::{self, Chunk},
 };
 use anyhow::Result;
-use bus::BusReader;
+use engine::channels::broadcast::BusReader;
 use engine::{math::nalgebra::Point3, Engine, EngineSystem};
 use multimap::MultiMap;
 use socknet::connection::Connection;

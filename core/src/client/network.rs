@@ -11,7 +11,7 @@ pub struct Storage {
 
 impl Default for Storage {
 	fn default() -> Self {
-		let (chunk_sender, chunk_receiver) = crossbeam_channel::unbounded();
+		let (chunk_sender, chunk_receiver) = engine::channels::mpsc::unbounded();
 		Self {
 			chunk_sender,
 			chunk_receiver,

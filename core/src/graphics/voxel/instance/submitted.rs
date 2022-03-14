@@ -1,6 +1,6 @@
 use crate::graphics::voxel::instance::{category::Category, local::IntegratedBuffer, Instance};
 use anyhow::Result;
-use crossbeam_channel::Sender;
+use engine::channels::mpsc::Sender;
 use engine::graphics::{
 	alloc, buffer::Buffer, command, flags, utility::NamedObject, GpuOpContext, GpuOperationBuilder,
 };

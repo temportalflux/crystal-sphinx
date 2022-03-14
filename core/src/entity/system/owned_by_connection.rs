@@ -4,7 +4,7 @@ use crate::{
 	common::network::Storage,
 	entity::{self},
 };
-use bus::BusReader;
+use engine::channels::broadcast::BusReader;
 use engine::{Engine, EngineSystem};
 use std::{
 	collections::HashSet,

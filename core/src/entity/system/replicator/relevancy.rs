@@ -1,4 +1,5 @@
 use crate::server::world::chunk::Chunk;
+use engine::channels::future::{Receiver, Sender};
 use engine::math::nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -678,15 +679,15 @@ mod axis_aligned_bounding_box {
 	}
 }
 
-pub type UpdateSender = async_channel::Sender<Update>;
-pub type UpdateReceiver = async_channel::Receiver<Update>;
+pub type UpdateSender = Sender<Update>;
+pub type UpdateReceiver = Receiver<Update>;
 pub enum Update {
 	Entity(Relevance),
 	World(WorldUpdate),
 }
 
-pub type WorldUpdateSender = async_channel::Sender<WorldUpdate>;
-pub type WorldUpdateReceiver = async_channel::Receiver<WorldUpdate>;
+pub type WorldUpdateSender = Sender<WorldUpdate>;
+pub type WorldUpdateReceiver = Receiver<WorldUpdate>;
 pub enum WorldUpdate {
 	Relevance(Relevance),
 	Chunks(Vec<Weak<RwLock<Chunk>>>),

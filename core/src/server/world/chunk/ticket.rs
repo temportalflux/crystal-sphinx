@@ -7,9 +7,9 @@ use engine::math::nalgebra::{Point3, Vector3};
 use std::sync::Arc;
 
 /// The channel through which chunk [tickets are sent](Ticket::submit).
-pub(crate) type Sender = crossbeam_channel::Sender<std::sync::Weak<Ticket>>;
+pub(crate) type Sender = engine::channels::mpsc::Sender<std::sync::Weak<Ticket>>;
 /// The channel through which chunk tickets are received by the [`chunk loading thread`](super::thread::start).
-pub(crate) type Receiver = crossbeam_channel::Receiver<std::sync::Weak<Ticket>>;
+pub(crate) type Receiver = engine::channels::mpsc::Receiver<std::sync::Weak<Ticket>>;
 
 /// A struct submitted at runtime to request that one or more chunks be loaded.
 ///

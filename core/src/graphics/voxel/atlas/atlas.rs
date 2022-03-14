@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossbeam_channel::Sender;
+use engine::channels::mpsc::Sender;
 use engine::{
 	asset,
 	graphics::{
