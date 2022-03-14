@@ -1,69 +1,82 @@
-use engine::task::JoinHandle;
-use futures_util::future::Future;
-use std::path::PathBuf;
+use crate::exporter::{ExportError, Model};
+use tokio::{io::AsyncReadExt, process::ChildStdout};
 
-use crate::exporter::Model;
-pub struct BlenderData;
+pub struct BlenderData {
+	stream: ChildStdout,
+}
 
-impl BlenderData {	
-	pub async fn from_stream(mut stream: tokio::process::ChildStdout) -> anyhow::Result<Self> {
-		use tokio::io::*;
+impl BlenderData {
+	pub fn new(stream: ChildStdout) -> Self {
+		Self { stream }
+	}
 
-		while let Ok(byte) = stream.read_u8().await {
-			if byte == 0b00 {
-				// Found start of data stream
-				break;
-			}
-		}
+	pub async fn process(mut self) -> anyhow::Result<Model> {
+		self.read_until_start().await?;
 
-		let vertex_count = stream.read_u32().await? as usize;
+		let vertex_count = self.stream.read_u32().await? as usize;
 		let mut vertices = Vec::with_capacity(vertex_count);
 		for _ in 0..vertex_count {
-			let pos_x = stream.read_f32().await?;
-			let pos_y = stream.read_f32().await?;
-			let pos_z = stream.read_f32().await?;
+			let pos_x = self.stream.read_f32().await?;
+			let pos_y = self.stream.read_f32().await?;
+			let pos_z = self.stream.read_f32().await?;
 
-			let group_count = stream.read_u32().await? as usize;
+			let group_count = self.stream.read_u32().await? as usize;
 			let mut groups = Vec::with_capacity(group_count);
 			for _ in 0..group_count {
-				let group_id = stream.read_u32().await? as usize;
-				let weight = stream.read_f32().await?;
+				let group_id = self.stream.read_u32().await? as usize;
+				let weight = self.stream.read_f32().await?;
 				groups.push((group_id, weight));
 			}
 
 			vertices.push(((pos_x, pos_y, pos_z), groups));
 		}
 
-		let polygon_count = stream.read_u32().await? as usize;
+		let polygon_count = self.stream.read_u32().await? as usize;
 		for _ in 0..polygon_count {
-			let normal_x = stream.read_f32().await?;
-			let normal_y = stream.read_f32().await?;
-			let normal_z = stream.read_f32().await?;
+			let normal_x = self.stream.read_f32().await?;
+			let normal_y = self.stream.read_f32().await?;
+			let normal_z = self.stream.read_f32().await?;
 
-			let index_count = stream.read_u32().await? as usize;
+			let index_count = self.stream.read_u32().await? as usize;
 			for _ in 0..index_count {
-				let vertex_index = stream.read_u32().await? as usize;
+				let vertex_index = self.stream.read_u32().await? as usize;
 			}
 
-			let loop_idx_start = stream.read_u32().await? as usize;
-			let loop_idx_end = stream.read_u32().await? as usize;
+			let loop_idx_start = self.stream.read_u32().await? as usize;
+			let loop_idx_end = self.stream.read_u32().await? as usize;
 			let loop_range = loop_idx_start..loop_idx_end;
 		}
 
-		let loop_count = stream.read_u32().await? as usize;
+		let loop_count = self.stream.read_u32().await? as usize;
 		for idx in 0..loop_count {
-			let vertex_index = stream.read_u32().await? as usize;
-			let uv_x = stream.read_f32().await?;
-			let uv_y = stream.read_f32().await?;
+			let vertex_index = self.stream.read_u32().await? as usize;
+			let uv_x = self.stream.read_f32().await?;
+			let uv_y = self.stream.read_f32().await?;
 		}
 
-		let end_byte = stream.read_u8().await;
-		assert_eq!(end_byte.ok(), Some(0b00));
+		self.read_end().await?;
 
-		Ok(Self)
+		self.into_model()
 	}
-	
-	pub fn into_model(self) -> anyhow::Result<Model> {
+
+	async fn read_until_start(&mut self) -> Result<(), ExportError> {
+		while let Ok(byte) = self.stream.read_u8().await {
+			if byte == 0b00 {
+				return Ok(());
+			}
+		}
+		Err(ExportError::StartMarkerMissing)
+	}
+
+	async fn read_end(&mut self) -> anyhow::Result<()> {
+		let end_byte = self.stream.read_u8().await?;
+		match end_byte == 0b00 {
+			true => Ok(()),
+			false => Err(ExportError::StopMarkerMissing)?,
+		}
+	}
+
+	fn into_model(self) -> anyhow::Result<Model> {
 		Ok(Model)
 	}
 }

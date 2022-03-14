@@ -1,10 +1,6 @@
-use anyhow::Result;
 use crystal_sphinx::common::BlenderModel;
 use editor::asset::{BuildPath, EditorOps};
-use engine::{
-	asset::AnyBox,
-	task::{JoinHandle, PinFutureResult},
-};
+use engine::{asset::AnyBox, task::PinFutureResult};
 use std::path::PathBuf;
 
 pub mod exporter;
@@ -24,8 +20,6 @@ impl EditorOps for BlenderModelEditorOps {
 
 	fn compile(build_path: BuildPath, asset: AnyBox) -> PinFutureResult<Vec<u8>> {
 		Box::pin(async move {
-			use tokio::{fs, io::*, process::*};
-
 			let mut model = asset.downcast::<BlenderModel>().unwrap();
 
 			log::debug!("processing blender model: {}", build_path.source.display());

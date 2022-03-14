@@ -1,5 +1,3 @@
-use engine::task::JoinHandle;
-use futures_util::future::Future;
 use std::path::PathBuf;
 
 static EXPORT_SCRIPT_PATH: &'static str = "./scripts/export_blender_model.py";

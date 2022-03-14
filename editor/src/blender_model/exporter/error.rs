@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExportError {
+	#[error("The marker for start-of-export was missing from the output stream.")]
+	StartMarkerMissing,
+	#[error("The marker for end-of-export was missing from the output stream.")]
+	StopMarkerMissing,
 	#[error("Blender export script was not provided an argument named \"{0}\".")]
 	MissingArgument(String),
 	#[error("Model mesh is not triangulated. Only triangle polygons are currently supported.")]

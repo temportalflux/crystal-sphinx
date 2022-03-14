@@ -1,6 +1,4 @@
-use crate::exporter::{BlenderData, Model, ExportError, ensure_export_script};
-use engine::task::JoinHandle;
-use futures_util::future::Future;
+use crate::exporter::{ensure_export_script, BlenderData, ExportError, Model};
 use std::path::PathBuf;
 
 pub struct Builder {
@@ -33,7 +31,7 @@ impl Builder {
 			.arg("--output_mode")
 			.arg("BYTES")
 			.spawn()?;
-		let mut out_stream = exporter.stdout.take().unwrap();
+		let out_stream = exporter.stdout.take().unwrap();
 		let mut err_stream = exporter.stderr.take().unwrap();
 		// Run the exporter until completion in a detached task so that
 		// it will run in parallel to the processing of its output.
@@ -42,12 +40,8 @@ impl Builder {
 		// This task parses the output stream of the export script to turn it into a struct the asset will accept.
 		// It is detached so that it can run while the current scope waits for the err stream to be complete.
 		// This way, the output is processed immediately as the script writes it.
-		let read_exported_data: JoinHandle<anyhow::Result<Model>> =
-			tokio::task::spawn(async move {
-				let data = BlenderData::from_stream(out_stream).await?;
-				let model = data.into_model()?;
-				Ok(model)
-			});
+		let read_exported_data =
+			tokio::task::spawn(async move { BlenderData::new(out_stream).process().await });
 		// Read until the EOF descriptor in the err stream.
 		// This will only occur once the process basically closes the stream
 		// (but that doesn't mean the process task has actually finished yet).
