@@ -4,7 +4,7 @@ use std::{
 };
 
 use crystal_sphinx::CrystalSphinx;
-use editor::{ui::Workspace, Editor};
+use editor::{asset, ui::Workspace, Editor};
 use engine::{
 	graphics::{chain::procedure::DefaultProcedure, Chain},
 	task::PinFutureResultLifetime,
@@ -89,13 +89,12 @@ impl Runtime {
 		Editor::initialize(editor)
 	}
 
-	fn create_asset_manager(&self) -> editor::asset::Manager {
-		use crate::block::BlockEditorMetadata;
-		use crystal_sphinx::{block::Block, common::BlenderModel};
-		let mut manager = editor::asset::Manager::new();
+	fn create_asset_manager(&self) -> asset::Manager {
+		use crate::block::BlockEditorOps;
+		let mut manager = asset::Manager::new();
 		editor::register_asset_types(&mut manager);
-		manager.register::<Block, BlockEditorMetadata>();
-		manager.register::<BlenderModel, BlenderModelEditorMetadata>();
+		manager.register::<BlockEditorOps>();
+		manager.register::<BlenderModelEditorOps>();
 		manager
 	}
 }

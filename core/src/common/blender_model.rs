@@ -1,4 +1,4 @@
-use engine::asset::{self, kdl, Asset, AssetResult, TypeId, TypeMetadata};
+use engine::asset::{self, kdl, AnyBox, Asset, TypeId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -8,21 +8,12 @@ pub struct BlenderModel {
 }
 
 impl Asset for BlenderModel {
-	fn metadata() -> Box<dyn TypeMetadata> {
-		Box::new(Metadata {})
-	}
-}
-
-/// The metadata about the [`BlenderModel`] asset type.
-struct Metadata {}
-
-impl TypeMetadata for Metadata {
-	fn name(&self) -> TypeId {
+	fn asset_type() -> TypeId {
 		"blender-model"
 	}
 
-	fn decompile(&self, bin: &Vec<u8>) -> AssetResult {
-		asset::decompile_asset::<BlenderModel>(bin)
+	fn decompile(bin: &Vec<u8>) -> anyhow::Result<AnyBox> {
+		asset::decompile_asset::<Self>(bin)
 	}
 }
 

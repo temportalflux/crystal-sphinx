@@ -1,30 +1,28 @@
 use anyhow::Result;
 use crystal_sphinx::common::BlenderModel;
-use editor::asset::{BuildPath, TypeEditorMetadata};
-use engine::{
-	asset::{AnyBox, AssetResult},
-	task::PinFutureResultLifetime,
-};
-use std::{collections::HashMap, path::Path};
+use editor::asset::{BuildPath, EditorOps};
+use engine::{asset::AnyBox, task::PinFutureResult};
+use std::{collections::HashMap, path::PathBuf};
 
 static EXPORT_SCRIPT_PATH: &'static str = "./scripts/blender_model.py";
 static EXPORT_SCRIPT: &'static str = std::include_str!("blender_model.py");
 
-pub struct BlenderModelEditorMetadata;
-impl TypeEditorMetadata for BlenderModelEditorMetadata {
-	fn boxed() -> Box<dyn TypeEditorMetadata + 'static + Send + Sync> {
-		Box::new(BlenderModelEditorMetadata {})
+pub struct BlenderModelEditorOps;
+impl EditorOps for BlenderModelEditorOps {
+	type Asset = BlenderModel;
+
+	fn get_related_paths(path: PathBuf) -> PinFutureResult<Option<Vec<PathBuf>>> {
+		let mut external = path.parent().unwrap().to_path_buf();
+		external.push(path.file_stem().unwrap());
+		external.set_extension("blend");
+		Box::pin(async move { Ok(Some(vec![external])) })
 	}
 
-	fn read(&self, path: &Path, content: &str) -> AssetResult {
-		editor::asset::deserialize::<BlenderModel>(&path, &content)
+	fn read(source: PathBuf, file_content: String) -> PinFutureResult<AnyBox> {
+		Box::pin(async move { editor::asset::deserialize::<BlenderModel>(&source, &file_content) })
 	}
 
-	fn compile<'a>(
-		&'a self,
-		build_path: &'a BuildPath,
-		asset: AnyBox,
-	) -> PinFutureResultLifetime<'a, Vec<u8>> {
+	fn compile(build_path: BuildPath, asset: AnyBox) -> PinFutureResult<Vec<u8>> {
 		Box::pin(async move {
 			let mut model = asset.downcast::<BlenderModel>().unwrap();
 

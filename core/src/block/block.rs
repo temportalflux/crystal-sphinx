@@ -1,6 +1,6 @@
 use super::Side;
 use crate::graphics::voxel::Face;
-use engine::asset::{self, AssetResult, TypeMetadata};
+use engine::asset::{self, AnyBox};
 use enumset::EnumSet;
 use serde::{Deserialize, Serialize};
 
@@ -35,8 +35,12 @@ impl Default for Block {
 }
 
 impl asset::Asset for Block {
-	fn metadata() -> Box<dyn TypeMetadata> {
-		Box::new(BlockMetadata {})
+	fn asset_type() -> asset::TypeId {
+		"block"
+	}
+
+	fn decompile(bin: &Vec<u8>) -> anyhow::Result<AnyBox> {
+		asset::decompile_asset::<Self>(bin)
 	}
 }
 
@@ -179,18 +183,5 @@ impl engine::asset::kdl::Asset<Block> for Block {
 			]),
 			..Default::default()
 		}
-	}
-}
-
-/// The metadata about the [`Block`] asset type.
-pub struct BlockMetadata {}
-
-impl TypeMetadata for BlockMetadata {
-	fn name(&self) -> asset::TypeId {
-		"block"
-	}
-
-	fn decompile(&self, bin: &Vec<u8>) -> AssetResult {
-		asset::decompile_asset::<Block>(bin)
 	}
 }
