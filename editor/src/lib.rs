@@ -41,13 +41,8 @@ impl engine::Runtime for Runtime {
 	fn initialize<'a>(&'a self, _engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
 		Box::pin(async move {
 			self.create_editor().await?;
-			match editor::Editor::run_commandlets() {
-				Some(handle) => {
-					handle.await?;
-					Ok(false)
-				}
-				None => Ok(true),
-			}
+			let ran_commandlets = editor::Editor::run_commandlets().await;
+			Ok(!ran_commandlets)
 		})
 	}
 

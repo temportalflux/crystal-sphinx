@@ -31,9 +31,8 @@
 //!
 
 use engine::{
-	ui::egui,
-	asset, graphics::Chain, task::PinFutureResultLifetime, window::Window, Application, Engine,
-	EventLoop,
+	asset, graphics::Chain, task::PinFutureResultLifetime, ui::egui, window::Window, Application,
+	Engine, EventLoop,
 };
 
 pub mod client;
