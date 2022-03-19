@@ -26,8 +26,6 @@ impl Builder {
 		let mut exporter = Command::new("blender")
 			.arg(self.blend_path.to_str().unwrap())
 			.arg("--background")
-			// Could in theory use `--python-text`
-			// https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html#python-options
 			.arg("--python")
 			.arg(script_path.to_str().unwrap())
 			.arg("--")
