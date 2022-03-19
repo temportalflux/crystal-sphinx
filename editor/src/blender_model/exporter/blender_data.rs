@@ -1,82 +1,103 @@
-use crate::exporter::{ExportError, Model};
+use crate::blender_model::{
+	exporter::{ExportError, Model, Vertex, VertexWeight},
+	Point, Polygon,
+};
+use anyhow::Context;
+use engine::math::nalgebra::{Vector2, Vector3};
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
 pub struct BlenderData {
 	stream: ChildStdout,
+	points: Vec<Point>,
+	polygons: Vec<Polygon>,
 }
 
 impl BlenderData {
 	pub fn new(stream: ChildStdout) -> Self {
-		Self { stream }
+		Self {
+			stream,
+			points: Vec::new(),
+			polygons: Vec::new(),
+		}
 	}
 
 	pub async fn process(mut self) -> anyhow::Result<Model> {
-		self.read_until_start().await?;
-
 		let vertex_count = self.stream.read_u32().await? as usize;
-		let mut vertices = Vec::with_capacity(vertex_count);
-		for _ in 0..vertex_count {
-			let pos_x = self.stream.read_f32().await?;
-			let pos_y = self.stream.read_f32().await?;
-			let pos_z = self.stream.read_f32().await?;
-
-			let group_count = self.stream.read_u32().await? as usize;
-			let mut groups = Vec::with_capacity(group_count);
-			for _ in 0..group_count {
-				let group_id = self.stream.read_u32().await? as usize;
-				let weight = self.stream.read_f32().await?;
-				groups.push((group_id, weight));
-			}
-
-			vertices.push(((pos_x, pos_y, pos_z), groups));
+		self.points = Vec::with_capacity(vertex_count);
+		for idx in 0..vertex_count {
+			let vertex = Point::read(&mut self.stream).await.context(format!(
+				"failed to read point idx={idx} of {vertex_count} points"
+			))?;
+			self.points.push(vertex);
 		}
 
 		let polygon_count = self.stream.read_u32().await? as usize;
+		self.polygons = Vec::with_capacity(polygon_count);
 		for _ in 0..polygon_count {
-			let normal_x = self.stream.read_f32().await?;
-			let normal_y = self.stream.read_f32().await?;
-			let normal_z = self.stream.read_f32().await?;
-
-			let index_count = self.stream.read_u32().await? as usize;
-			for _ in 0..index_count {
-				let vertex_index = self.stream.read_u32().await? as usize;
-			}
-
-			let loop_idx_start = self.stream.read_u32().await? as usize;
-			let loop_idx_end = self.stream.read_u32().await? as usize;
-			let loop_range = loop_idx_start..loop_idx_end;
+			let polygon = Polygon::read(&mut self.stream)
+				.await
+				.context("failed to read polygon")?;
+			self.polygons.push(polygon);
 		}
-
-		let loop_count = self.stream.read_u32().await? as usize;
-		for idx in 0..loop_count {
-			let vertex_index = self.stream.read_u32().await? as usize;
-			let uv_x = self.stream.read_f32().await?;
-			let uv_y = self.stream.read_f32().await?;
-		}
-
-		self.read_end().await?;
 
 		self.into_model()
 	}
 
-	async fn read_until_start(&mut self) -> Result<(), ExportError> {
-		while let Ok(byte) = self.stream.read_u8().await {
-			if byte == 0b00 {
-				return Ok(());
+	fn into_model(self) -> anyhow::Result<Model> {
+		let mut vertices = VertexSet::with_capacity(self.points.len());
+		let mut indices = Vec::new();
+		for polygon in self.polygons.iter() {
+			for (vertex_index, tex_coord) in polygon.vertices.iter() {
+				indices.push(vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord)));
 			}
 		}
-		Err(ExportError::StartMarkerMissing)
+		let (vertices, vertex_weights) = vertices
+			.into_inner().into_iter()
+			.map(|(vertex_index, normal, tex_coord)| {
+				let point = &self.points[vertex_index];
+				let vertex = Vertex {
+					position: point.position,
+					normal,
+					tex_coord,
+				};
+				let groups = point
+					.groups
+					.iter()
+					.map(|group| VertexWeight {
+						group_index: group.group_index,
+						weight: group.weight,
+					})
+					.collect::<Vec<_>>();
+				(vertex, groups)
+			})
+			.unzip();
+
+		Ok(Model {
+			vertices,
+			indices,
+			vertex_weights,
+		})
+	}
+}
+
+struct VertexSet(Vec<(usize, Vector3<f32>, Vector2<f32>)>);
+impl VertexSet {
+	fn with_capacity(size: usize) -> Self {
+		Self(Vec::with_capacity(size))
 	}
 
-	async fn read_end(&mut self) -> anyhow::Result<()> {
-		let end_byte = self.stream.read_u8().await?;
-		match end_byte == 0b00 {
-			true => Ok(()),
-			false => Err(ExportError::StopMarkerMissing)?,
+	fn get_or_insert(&mut self, vertex: (usize, Vector3<f32>, Vector2<f32>)) -> usize {
+		match self.0.iter().rev().position(|vert| *vert == vertex) {
+			Some(idx) => idx,
+			None => {
+				let idx = self.0.len();
+				self.0.push(vertex);
+				idx
+			}
 		}
 	}
 
-	fn into_model(self) -> anyhow::Result<Model> {
-		Ok(Model)
+	fn into_inner(self) -> Vec<(usize, Vector3<f32>, Vector2<f32>)> {
+		self.0
 	}
 }

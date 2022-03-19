@@ -1,9 +1,15 @@
+use anyhow::Context;
 use crystal_sphinx::common::BlenderModel;
 use editor::asset::{BuildPath, EditorOps};
 use engine::{asset::AnyBox, task::PinFutureResult};
 use std::path::PathBuf;
 
 pub mod exporter;
+
+mod polygon;
+pub use polygon::*;
+mod point;
+pub use point::*;
 
 pub struct BlenderModelEditorOps;
 impl EditorOps for BlenderModelEditorOps {
@@ -27,7 +33,8 @@ impl EditorOps for BlenderModelEditorOps {
 			let exported_data = exporter::Builder::new()
 				.with_blend(build_path.source_with_ext("blend"))
 				.build()
-				.await?;
+				.await
+				.context("exporting blender file")?;
 
 			// Temporily force the operation to "fail" so the binary is not created
 			return Err(exporter::FailedToParseExportError::Unknown)?;

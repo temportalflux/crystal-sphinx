@@ -12,10 +12,8 @@ use engine::{
 	Application, Engine, EventLoop,
 };
 
+pub mod blender_model;
 pub mod block;
-
-mod blender_model;
-pub use blender_model::*;
 
 pub struct Runtime {
 	window: Option<Window>,
@@ -90,7 +88,7 @@ impl Runtime {
 	}
 
 	fn create_asset_manager(&self) -> asset::Manager {
-		use crate::block::BlockEditorOps;
+		use crate::{blender_model::BlenderModelEditorOps, block::BlockEditorOps};
 		let mut manager = asset::Manager::new();
 		editor::register_asset_types(&mut manager);
 		manager.register::<BlockEditorOps>();

@@ -1,4 +1,5 @@
-use crate::exporter::{ensure_export_script, BlenderData, ExportError, Model};
+use crate::blender_model::exporter::{ensure_export_script, BlenderData, ExportError, Model};
+use anyhow::Context;
 use std::path::PathBuf;
 
 pub struct Builder {
@@ -19,10 +20,14 @@ impl Builder {
 
 	pub async fn build(self) -> anyhow::Result<Model> {
 		use tokio::{io::*, process::*};
-		let script_path = ensure_export_script().await?;
+		let script_path = ensure_export_script()
+			.await
+			.context("failed to ensure export script")?;
 		let mut exporter = Command::new("blender")
 			.arg(self.blend_path.to_str().unwrap())
 			.arg("--background")
+			// Could in theory use `--python-text`
+			// https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html#python-options
 			.arg("--python")
 			.arg(script_path.to_str().unwrap())
 			.arg("--")
@@ -30,7 +35,11 @@ impl Builder {
 			.arg("Model")
 			.arg("--output_mode")
 			.arg("BYTES")
-			.spawn()?;
+			.stdin(std::process::Stdio::null())
+			.stdout(std::process::Stdio::piped())
+			.stderr(std::process::Stdio::piped())
+			.spawn()
+			.context("failed to spawn exporter")?;
 		let out_stream = exporter.stdout.take().unwrap();
 		let mut err_stream = exporter.stderr.take().unwrap();
 		// Run the exporter until completion in a detached task so that

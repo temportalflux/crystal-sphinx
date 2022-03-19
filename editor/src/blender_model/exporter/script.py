@@ -6,11 +6,13 @@ bl_info = {
 
 import time
 import sys
+import os
 import argparse
 import struct
 from enum import IntFlag
 
 import bpy
+import bmesh
 from mathutils import Vector
 
 ERROR_CATEGORY = "SCRIPT_ERROR"
@@ -48,54 +50,44 @@ def run():
 	mesh = find_mesh(args.mesh_name)
 	if mesh is None:
 		return
+
+	# Triangulate the found mesh, but don't save it back to file
+	bm = bmesh.new()
+	bm.from_mesh(mesh)
+	bmesh.ops.triangulate(bm, faces=bm.faces[:])
+	mesh = bpy.data.meshes.new("triangulated")
+	bm.to_mesh(mesh)
+	bm.free()
 	
-	# Breakdown of TODOs and notes:
-	# Each polygon refers to a set of verticies. These vertices are the minimal/paired down
-	# version of all of the vertices that will be needed to render the model. They do NOT contain
-	# the UV coordinates (so space can be saved in the blend file).
-	# The polygon also refers to the set of loops, which is how vertices can be mapped to uv coordinates.
-	# For a default humanoid, the specs look like:
-	# 6 cubes, 36 rectangles, 72 tris, 48 non-uv vertices, 144 unique uv'd vertices, 216 vertex->uv loops
-	# 
-	# The next step will be to export all non-uv vertices, the polygons (we only support triangles), and vertex->uv loops.
-	# Rust will then process that data, removing duplicate uv loops, and then expanding the vertices
-	# to be uv-inclusive (which means duplicate vertex positions with different uvs). 
-	# 
-	# Eventually we will also have to export the bone data
-
-	# This is how binary data will be written such that rust can get access to it (instead of going through an intermediates directory/disk).
-
-	# Indicate to Rust that the stream has started
-	write(mode, OutputMode.BYTES, b'\x00')
-
 	write(mode, OutputMode.TEXT, 'vertex_count=')
-	write(mode, OutputMode.ALL, len(mesh.vertices), '<I')
+	write(mode, OutputMode.ALL, len(mesh.vertices), '>I')
 	write(mode, OutputMode.TEXT, '\n')
 	for idx,vertex in enumerate(mesh.vertices):
 		write(mode, OutputMode.TEXT, f'{idx:03d}: ')
 
 		write(mode, OutputMode.TEXT, 'pos=<')
-		write(mode, OutputMode.ALL, vertex.co[0], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, vertex.co[0], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, ', ')
-		write(mode, OutputMode.ALL, vertex.co[1], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, vertex.co[1], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, ', ')
-		write(mode, OutputMode.ALL, vertex.co[2], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, vertex.co[2], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, '> ')
 
 		write(mode, OutputMode.TEXT, 'groups:')
-		write(mode, OutputMode.ALL, len(vertex.groups), '<I')
+		write(mode, OutputMode.ALL, len(vertex.groups), '>I')
 		write(mode, OutputMode.TEXT, '=[')
 		for vertex_group in vertex.groups:
 			write(mode, OutputMode.TEXT, '(')
-			write(mode, OutputMode.ALL, vertex_group.group, '<I')
+			write(mode, OutputMode.ALL, vertex_group.group, '>I')
 			write(mode, OutputMode.TEXT, ', ')
-			write(mode, OutputMode.ALL, vertex_group.weight, '<f', '{:.2f}')
+			write(mode, OutputMode.ALL, vertex_group.weight, '>f', '{:.2f}')
 			write(mode, OutputMode.TEXT, '),')
 		write(mode, OutputMode.TEXT, ']\n')
 	write(mode, OutputMode.TEXT, '\n')
 
+	uv_layer = mesh.uv_layers[0].data
 	write(mode, OutputMode.TEXT, 'polygon_count=')
-	write(mode, OutputMode.ALL, len(mesh.polygons), '<I')
+	write(mode, OutputMode.ALL, len(mesh.polygons), '>I')
 	write(mode, OutputMode.TEXT, '\n')
 	for idx,poly in enumerate(mesh.polygons):
 		if len(poly.vertices) != 3:
@@ -105,45 +97,35 @@ def run():
 		write(mode, OutputMode.TEXT, f'{idx:03d}: ')
 
 		write(mode, OutputMode.TEXT, 'normal=<')
-		write(mode, OutputMode.ALL, poly.normal[0], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, poly.normal[0], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, ', ')
-		write(mode, OutputMode.ALL, poly.normal[1], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, poly.normal[1], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, ', ')
-		write(mode, OutputMode.ALL, poly.normal[2], '<f', '{:+.4f}')
+		write(mode, OutputMode.ALL, poly.normal[2], '>f', '{:+.4f}')
 		write(mode, OutputMode.TEXT, '> ')
+		
+		vert_loops = {}
+		loop_start = poly.loop_start
+		loop_end = poly.loop_start + poly.loop_total
+		for loop_idx in range(loop_start, loop_end):
+			vertex_index = mesh.loops[loop_idx].vertex_index
+			vert_loops[vertex_index] = uv_layer[loop_idx].uv
 
-		write(mode, OutputMode.TEXT, 'indices:')
-		write(mode, OutputMode.ALL, len(poly.vertices), '<I')
-		write(mode, OutputMode.TEXT, '=[')
+		write(mode, OutputMode.TEXT, 'vertices:')
+		write(mode, OutputMode.ALL, len(poly.vertices), '>I')
+		write(mode, OutputMode.TEXT, '=[\n')
 		for index in poly.vertices:
-			write(mode, OutputMode.ALL, index, '<I')
-			write(mode, OutputMode.TEXT, ',')
-		write(mode, OutputMode.TEXT, '] ')
+			write(mode, OutputMode.TEXT, '\tidx=')
+			write(mode, OutputMode.ALL, index, '>I')
 
-		write(mode, OutputMode.TEXT, 'loop_range=')
-		write(mode, OutputMode.ALL, poly.loop_start, '<I')
-		write(mode, OutputMode.TEXT, '..')
-		write(mode, OutputMode.ALL, poly.loop_start + poly.loop_total, '<I')
-		write(mode, OutputMode.TEXT, '\n')
+			uv = vert_loops[index]
+			write(mode, OutputMode.TEXT, ' uv=<')
+			write(mode, OutputMode.ALL, uv[0], '>f', '{:+.4f}')
+			write(mode, OutputMode.TEXT, ', ')
+			write(mode, OutputMode.ALL, uv[1], '>f', '{:+.4f}')
+			write(mode, OutputMode.TEXT, '>,\n')
+		write(mode, OutputMode.TEXT, ']\n')
 	write(mode, OutputMode.TEXT, '\n')
-
-	write(mode, OutputMode.TEXT, 'loop_count=')
-	write(mode, OutputMode.ALL, len(mesh.loops), '<I')
-	write(mode, OutputMode.TEXT, '\n')
-	uv_layer = mesh.uv_layers[0].data
-	for idx,loop in enumerate(mesh.loops):
-		write(mode, OutputMode.TEXT, f'{idx:03d}: ')
-
-		write(mode, OutputMode.TEXT, 'vertex_idx=')
-		write(mode, OutputMode.ALL, loop.vertex_index, '<I')
-
-		write(mode, OutputMode.TEXT, ' uv_coord=<')
-		write(mode, OutputMode.ALL, uv_layer[idx].uv[0], '<f', '{:+.4f}')
-		write(mode, OutputMode.TEXT, ', ')
-		write(mode, OutputMode.ALL, uv_layer[idx].uv[1], '<f', '{:+.4f}')
-		write(mode, OutputMode.TEXT, '>\n')
-
-	write(mode, OutputMode.BYTES, b'\x00')
 
 # NOTES:
 # The association of vertices to bones happens with vertex groups.
