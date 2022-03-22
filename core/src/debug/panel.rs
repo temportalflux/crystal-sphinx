@@ -31,7 +31,7 @@ impl Panel {
 }
 
 impl Element for Panel {
-	fn render(&mut self, ctx: &egui::CtxRef) {
+	fn render(&mut self, ctx: &egui::Context) {
 		if let Some(arc_state) = self.weak_action.upgrade() {
 			let action = arc_state.read().unwrap();
 			if action.on_button_pressed() {
@@ -44,9 +44,9 @@ impl Element for Panel {
 
 		egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
 			egui::menu::bar(ui, |ui| {
-				egui::menu::menu(ui, "Windows", |ui| {
+				ui.menu_button("Windows", |ui| {
 					for (id, window) in self.windows.iter() {
-						let _ = ui.checkbox(window.borrow_mut().is_open_mut(), &id);
+						let _ = ui.checkbox(window.borrow_mut().is_open_mut(), id.clone());
 					}
 				});
 			});

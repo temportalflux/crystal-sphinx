@@ -36,7 +36,7 @@ futures-util = "0.3"
 tokio = { version = "1.15", features = ["full"] }
 
 # [ui] debug immediate-mode UI
-egui = "0.15"
+egui = "0.17"
 # [ecs]
 hecs = { version = "0.7", features = ["serde", "macros"] }
 

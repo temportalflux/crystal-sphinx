@@ -35,7 +35,7 @@ impl Selector {
 		T: ToString + std::hash::Hash + Clone,
 	{
 		let mut has_changed = false;
-		ui.label(label.clone());
+		ui.label(label.to_string());
 		egui::ComboBox::from_id_source(label)
 			.selected_text(format!("{}", self))
 			.show_ui(ui, |ui| {
@@ -113,7 +113,7 @@ impl super::PanelWindow for EntityInspector {
 }
 
 impl Element for EntityInspector {
-	fn render(&mut self, ctx: &egui::CtxRef) {
+	fn render(&mut self, ctx: &egui::Context) {
 		if !self.is_open {
 			return;
 		}

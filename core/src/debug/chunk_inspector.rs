@@ -18,7 +18,7 @@ impl super::PanelWindow for ChunkInspector {
 }
 
 impl Element for ChunkInspector {
-	fn render(&mut self, ctx: &egui::CtxRef) {
+	fn render(&mut self, ctx: &egui::Context) {
 		if !self.is_open {
 			return;
 		}

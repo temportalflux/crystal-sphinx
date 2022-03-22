@@ -52,7 +52,8 @@ impl BlenderData {
 			}
 		}
 		let (vertices, vertex_weights) = vertices
-			.into_inner().into_iter()
+			.into_inner()
+			.into_iter()
 			.map(|(vertex_index, normal, tex_coord)| {
 				let point = &self.points[vertex_index];
 				let vertex = Vertex {

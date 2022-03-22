@@ -74,10 +74,14 @@ impl Command for LoadNetwork {
 	fn render(&mut self, ui: &mut egui::Ui) {
 		ui.horizontal(|ui| {
 			egui::ComboBox::from_label("Select a world")
-				.selected_text(&self.selected_world)
+				.selected_text(format!("{}", self.selected_world))
 				.show_ui(ui, |ui| {
 					for option in self.options.iter() {
-						ui.selectable_value(&mut self.selected_world, option.clone(), option);
+						ui.selectable_value(
+							&mut self.selected_world,
+							option.clone(),
+							format!("{}", option),
+						);
 					}
 				});
 			if ui.button("Load World").clicked() {

@@ -22,7 +22,7 @@ impl super::PanelWindow for CommandWindow {
 }
 
 impl Element for CommandWindow {
-	fn render(&mut self, ctx: &egui::CtxRef) {
+	fn render(&mut self, ctx: &egui::Context) {
 		if !self.is_open {
 			return;
 		}
