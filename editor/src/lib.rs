@@ -63,6 +63,7 @@ impl engine::Runtime for Runtime {
 		};
 
 		let ui = engine::ui::egui::Ui::create(&window, &render_phase)?;
+		editor::ui::icons::Icon::load_all(ui.clone());
 		if let Ok(mut engine) = engine.write() {
 			engine.add_winit_listener(&ui);
 		}

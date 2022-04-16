@@ -73,6 +73,7 @@ pub struct Runtime {
 	app_state: Arc<RwLock<app::state::Machine>>,
 	world: entity::ArcLockEntityWorld,
 	network_storage: Arc<RwLock<common::network::Storage>>,
+	#[allow(dead_code)]
 	egui_ui: Option<Arc<RwLock<egui::Ui>>>,
 	window: Option<Window>,
 }

@@ -1,5 +1,5 @@
 use crate::blender_model::{
-	exporter::{ExportError, Model, Vertex, VertexWeight},
+	exporter::{Model, Vertex, VertexWeight},
 	Point, Polygon,
 };
 use anyhow::Context;

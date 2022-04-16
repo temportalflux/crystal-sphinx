@@ -1,5 +1,4 @@
 use engine::math::nalgebra::{Vector2, Vector3};
-use std::ops::Range;
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
 pub struct Polygon {
