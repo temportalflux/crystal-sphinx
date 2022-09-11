@@ -238,6 +238,9 @@ impl<'c> GatherEntity<'c> {
 		};
 
 		let relevance = relevance.get_or_insert_mut(owner.address());
+		// TODO: relevancy areas or the cuboid diff use radius inclusive to the
+		// current chunk (e.g. from the point 0,0,0) instead of from the boundaries of the chunk.
+		// This means that the radius is always 1 below its intended value on the positive parts of each axis.
 		relevance
 			.chunk
 			.push(relevancy::Area::new(self.chunk(), relevancy.radius()));
