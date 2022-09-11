@@ -1,11 +1,13 @@
 use engine::math::nalgebra::Vector3;
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
+#[derive(Debug)]
 pub struct Point {
 	pub position: Vector3<f32>,
 	pub groups: Vec<WeightedGroup>,
 }
 
+#[derive(Debug)]
 pub struct WeightedGroup {
 	pub group_index: usize,
 	pub weight: f32,

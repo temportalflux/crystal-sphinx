@@ -30,9 +30,14 @@
 //! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
+use crate::{common::network::mode, graphics::ChainConfig};
 use engine::{
 	asset, graphics::Chain, task::PinFutureResultLifetime, ui::egui, window::Window, Application,
 	Engine, EventLoop,
+};
+use std::{
+	path::PathBuf,
+	sync::{Arc, RwLock},
 };
 
 pub mod client;
@@ -48,13 +53,6 @@ pub mod graphics;
 pub mod input;
 pub mod plugin;
 pub mod ui;
-
-use std::{
-	path::PathBuf,
-	sync::{Arc, RwLock},
-};
-
-use crate::{common::network::mode, graphics::ChainConfig};
 
 pub struct CrystalSphinx();
 impl Application for CrystalSphinx {

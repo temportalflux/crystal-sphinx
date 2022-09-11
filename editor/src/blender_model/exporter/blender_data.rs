@@ -1,8 +1,6 @@
-use crate::blender_model::{
-	exporter::{Model, Vertex, VertexWeight},
-	Point, Polygon,
-};
+use crate::blender_model::{Point, Polygon};
 use anyhow::Context;
+use crystal_sphinx::common::blender_model::{Model, Vertex, VertexWeight};
 use engine::math::nalgebra::{Vector2, Vector3};
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
@@ -22,6 +20,7 @@ impl BlenderData {
 	}
 
 	pub async fn process(mut self) -> anyhow::Result<Model> {
+		// Read each vertex from the export script.
 		let vertex_count = self.stream.read_u32().await? as usize;
 		self.points = Vec::with_capacity(vertex_count);
 		for idx in 0..vertex_count {
@@ -31,6 +30,7 @@ impl BlenderData {
 			self.points.push(vertex);
 		}
 
+		// Read each face/polygon from the export script.
 		let polygon_count = self.stream.read_u32().await? as usize;
 		self.polygons = Vec::with_capacity(polygon_count);
 		for _ in 0..polygon_count {
@@ -40,10 +40,19 @@ impl BlenderData {
 			self.polygons.push(polygon);
 		}
 
+		// NOTE: This may increase or decrease the size of the model binary.
+		// In the future, there is room for optimization here where we do a
+		// only-save-unique-data pass (because blender data may have duplicate polygon entries),
+		// and save the conversion into shader model data for runtime.
+		// This is also noted in `CORE/src/common/blender_model.rs/Vertex`.
+
+		// Convert exported data into structures that the engine can use.
 		self.into_model()
 	}
 
 	fn into_model(self) -> anyhow::Result<Model> {
+		// Iterate through all faces/polygons, and cache the references to all the vertices, ensuring we only keep the unique ones.
+		// The indices are saved for later as these are the literal draw order.
 		let mut vertices = VertexSet::with_capacity(self.points.len());
 		let mut indices = Vec::new();
 		for polygon in self.polygons.iter() {
@@ -51,6 +60,10 @@ impl BlenderData {
 				indices.push(vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord)));
 			}
 		}
+		// Iterate over the unique polygon orders (vert index, normal, tex coord), and
+		// create actual vertex objects by combining the vertex position (as determined by vert index)
+		// and the polygon normal + tex coord.
+		// Create a set of weight groups for each vertex along side each entry.
 		let (vertices, vertex_weights) = vertices
 			.into_inner()
 			.into_iter()
@@ -81,6 +94,7 @@ impl BlenderData {
 	}
 }
 
+// Unique cache for discarding duplicate polygon vertex references.
 struct VertexSet(Vec<(usize, Vector3<f32>, Vector2<f32>)>);
 impl VertexSet {
 	fn with_capacity(size: usize) -> Self {

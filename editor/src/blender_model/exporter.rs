@@ -10,31 +10,7 @@ mod blender_data;
 pub use blender_data::*;
 
 mod error;
-use engine::math::nalgebra::{Vector2, Vector3};
 pub use error::*;
-
-/// Temporary editor-only empty struct.
-/// This needs to be moved to engine/game layer when I am ready to embed data in the BlenderModel asset
-#[derive(Debug)]
-pub struct Model {
-	pub vertices: Vec<Vertex>,
-	// each value refers to an entry in vertices
-	pub indices: Vec<usize>,
-	// length matches vertices
-	// contains the weight of each group for a given vertex
-	pub vertex_weights: Vec<Vec<VertexWeight>>,
-}
-#[derive(Debug, PartialEq)]
-pub struct Vertex {
-	pub position: Vector3<f32>,
-	pub normal: Vector3<f32>,
-	pub tex_coord: Vector2<f32>,
-}
-#[derive(Debug)]
-pub struct VertexWeight {
-	pub group_index: usize,
-	pub weight: f32,
-}
 
 fn create_script_path() -> anyhow::Result<PathBuf> {
 	let cwd = std::env::current_dir()?;

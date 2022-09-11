@@ -28,17 +28,15 @@ impl EditorOps for BlenderModelEditorOps {
 		Box::pin(async move {
 			let mut model = asset.downcast::<BlenderModel>().unwrap();
 
-			log::debug!("processing blender model: {}", build_path.source.display());
-
 			let exported_data = exporter::Builder::new()
 				.with_blend(build_path.source_with_ext("blend"))
 				.build()
 				.await
 				.context("exporting blender file")?;
 
-			// Temporily force the operation to "fail" so the binary is not created
-			return Err(exporter::FailedToParseExportError::Unknown)?;
-			//Ok(rmp_serde::to_vec(&model)?)
+			model.set_compiled(exported_data);
+
+			Ok(rmp_serde::to_vec(&model)?)
 		})
 	}
 }

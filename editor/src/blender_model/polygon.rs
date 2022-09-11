@@ -1,6 +1,7 @@
 use engine::math::nalgebra::{Vector2, Vector3};
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
+#[derive(Debug)]
 pub struct Polygon {
 	pub normal: Vector3<f32>,
 	pub vertices: Vec<(usize, Vector2<f32>)>,

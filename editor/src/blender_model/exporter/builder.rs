@@ -1,5 +1,6 @@
-use crate::blender_model::exporter::{ensure_export_script, BlenderData, ExportError, Model};
+use crate::blender_model::exporter::{ensure_export_script, BlenderData, ExportError};
 use anyhow::Context;
+use crystal_sphinx::common::blender_model::Model;
 use std::path::PathBuf;
 
 pub struct Builder {
