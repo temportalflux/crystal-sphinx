@@ -80,13 +80,17 @@ impl Handle {
 		for update in updates.into_iter() {
 			match update {
 				relevancy::Update::World(update) => {
+					let mut relevance_change = None;
 					if let relevancy::WorldUpdate::Relevance(relevance) = &update {
 						if *relevance == self.chunk_relevance {
 							continue;
 						}
-						self.chunk_relevance = relevance.clone();
+						relevance_change = Some(relevance.clone());
 					}
 					self.send_world_update(update);
+					if let Some(relevance) = relevance_change {
+						self.chunk_relevance = relevance;
+					}
 				}
 				relevancy::Update::Entity(relevance) => {
 					self.entity_relevance = relevance;
@@ -95,7 +99,7 @@ impl Handle {
 		}
 	}
 
-	pub fn send_world_update(&mut self, update: relevancy::WorldUpdate) {
+	fn send_world_update(&mut self, update: relevancy::WorldUpdate) {
 		use engine::channels::future::TrySendError;
 		match &self.channel {
 			UpdateChannel::Remote(send_world_rel, _) => {
