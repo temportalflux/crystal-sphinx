@@ -36,4 +36,5 @@ pub fn register_types() {
 	registry.register::<OwnedByConnection>();
 	registry.register::<physics::linear::Position>();
 	registry.register::<physics::linear::Velocity>();
+	registry.register::<crate::client::model::blender::Component>();
 }

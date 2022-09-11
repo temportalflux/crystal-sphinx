@@ -133,7 +133,7 @@ impl engine::Runtime for Runtime {
 		let mut registry = asset::TypeRegistry::get().write().unwrap();
 		engine::register_asset_types(&mut registry);
 		registry.register::<block::Block>();
-		registry.register::<common::BlenderModel>();
+		registry.register::<client::model::blender::Asset>();
 	}
 
 	fn initialize<'a>(&'a self, engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {

@@ -1,4 +1,5 @@
 use crate::{
+	client,
 	common::account,
 	entity::component::{
 		chunk,
@@ -7,6 +8,7 @@ use crate::{
 		Camera, Orientation, OwnedByAccount, OwnedByConnection,
 	},
 };
+use engine::asset;
 use std::net::SocketAddr;
 
 pub struct Server(hecs::EntityBuilder);
@@ -48,6 +50,12 @@ impl Client {
 	pub fn new(builder: hecs::EntityBuilder) -> Self {
 		let mut client = Self(builder, false);
 		client.add_opt::<Camera>();
+		client.add_opt_fn(|| {
+			client::model::blender::Component::new(asset::Id::new(
+				"crystal-sphinx",
+				"entity/humanoid/default",
+			))
+		});
 		client
 	}
 
@@ -66,8 +74,15 @@ impl Client {
 	where
 		T: hecs::Component + Default,
 	{
+		self.add_opt_fn(|| T::default());
+	}
+
+	fn add_opt_fn<T>(&mut self, constructor: impl FnOnce() -> T)
+	where
+		T: hecs::Component,
+	{
 		if !self.has::<T>() {
-			self.0.add(T::default());
+			self.0.add(constructor());
 			self.1 = true;
 		}
 	}

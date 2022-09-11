@@ -1,6 +1,6 @@
 use crate::blender_model::{Point, Polygon};
 use anyhow::Context;
-use crystal_sphinx::common::blender_model::{Model, Vertex, VertexWeight};
+use crystal_sphinx::client::model::blender::{Model, Vertex, VertexWeight};
 use engine::math::nalgebra::{Vector2, Vector3};
 use tokio::{io::AsyncReadExt, process::ChildStdout};
 
