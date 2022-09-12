@@ -60,9 +60,12 @@ impl Relevance {
 		for area in self.0.iter() {
 			let radius = area.1 as i64;
 			let radius_vec = Vector3::new(radius, radius, radius);
+			let one = Vector3::new(1, 1, 1);
 			cuboids.insert(AxisAlignedBoundingBox {
+				// inclusive min bound
 				min: area.0 - radius_vec,
-				max: area.0 + radius_vec,
+				// exclusive max bound (radius is inclusive, so we must increment by 1)
+				max: area.0 + radius_vec + one,
 			});
 		}
 		cuboids
