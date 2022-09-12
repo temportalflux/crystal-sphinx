@@ -1,6 +1,7 @@
 use crate::{
 	app::state::ArcLockMachine,
 	block::{self, Block},
+	client::model::blender,
 	common::network::Storage,
 	graphics::voxel::{atlas, camera, model, RenderVoxel},
 };
@@ -49,6 +50,7 @@ pub fn load_models(
 		log::debug!(target: LOG, "Loading {} block assets", block_ids.len());
 		let mut blocks = Vec::with_capacity(block_ids.len());
 		let mut texture_ids = HashSet::with_capacity(blocks.len());
+		// TODO: This should load all of the block assets at once so we aren't constantly opening the zip archive
 		for asset_id in block_ids.into_iter() {
 			let any_box = asset::Loader::load_sync(&asset_id)?;
 			let block = match any_box.downcast::<Block>() {
@@ -253,14 +255,55 @@ pub fn load_models(
 			model_cache
 		};
 
+		// Gather asset ids for all model assets
+		let blender_models = match asset::Library::read()
+			.get_ids_of_type::<blender::Asset>()
+			.cloned()
+		{
+			Some(model_ids) => {
+				let mut models = HashMap::with_capacity(model_ids.len());
+				// TODO: This should load all of the model assets at once so we aren't constantly opening the zip archive
+				for asset_id in model_ids.into_iter() {
+					let any_box = asset::Loader::load_sync(&asset_id)?;
+					let model = match any_box.downcast::<blender::Asset>() {
+						Ok(model) => model,
+						_ => {
+							log::error!(
+								target: LOG,
+								"Failed to interpret model asset {}",
+								asset_id
+							);
+							return Ok(());
+						}
+					};
+					models.insert(asset_id, model.compiled().clone());
+				}
+				models
+			}
+			None => HashMap::new(),
+		};
+		let blender_model_buffer = {
+			let mut buffer = blender::render::ModelBuffer::new();
+			buffer.add_models(blender_models);
+			Arc::new(RwLock::new(buffer))
+		};
+
 		log::debug!(target: LOG, "Registering block renderer");
 		RenderVoxel::add_state_listener(
 			&thread_app_state,
-			thread_storage,
+			thread_storage.clone(),
 			Arc::downgrade(&thread_chain),
-			thread_phase,
+			thread_phase.clone(),
 			Arc::downgrade(&thread_camera),
 			Arc::new(model_cache),
+		);
+		blender::render::RenderModel::add_state_listener(
+			&thread_app_state,
+			thread_storage.clone(),
+			Arc::downgrade(&thread_chain),
+			thread_phase.clone(),
+			Arc::downgrade(&thread_camera),
+			blender_model_buffer,
 		);
 
 		Ok(())

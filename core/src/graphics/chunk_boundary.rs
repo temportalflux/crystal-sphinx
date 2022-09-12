@@ -272,7 +272,7 @@ impl Render {
 		log::info!(target: ID, "Initializing");
 		let mut chain = chain.write().unwrap();
 		let render_chunks = Self::new(&chain, camera, weak_action)?.arclocked();
-		chain.add_operation(phase, Arc::downgrade(&render_chunks))?;
+		chain.add_operation(phase, Arc::downgrade(&render_chunks), None)?;
 		Ok(render_chunks)
 	}
 

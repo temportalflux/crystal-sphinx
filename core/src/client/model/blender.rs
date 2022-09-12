@@ -6,3 +6,5 @@ pub use component::*;
 
 mod model;
 pub use model::*;
+
+pub mod render;
