@@ -26,6 +26,9 @@ static ID: &'static str = "render-model";
 mod buffer;
 pub use buffer::*;
 
+/// Management of non-block models and executing draw-calls for entities during frame render.
+/// Exists only as long as the user is in a world
+/// (it is saved to session storage, created when entering a game and destroyed upon leaving).
 pub struct RenderModel {
 	drawable: Drawable,
 	camera_uniform: Uniform,

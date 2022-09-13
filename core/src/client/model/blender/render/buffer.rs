@@ -6,6 +6,12 @@ use std::collections::HashMap;
 // The cache should map the asset id to the vertex/index start offsets,
 // and could in the future support updating models by id for hot-reloading.
 
+// TODO: This is basically identical to voxel::model::cache (both the builder and the cache itself).
+// 1. duplicate and adjust types/properties
+// 2. abstract and unify pieces of it
+
+/// Data manager and Vertex + Index buffer data for drawing static and rigged/unrigged models.
+/// Exists for the lifetime of the application, not just during a gameplay session.
 pub struct ModelBuffer {}
 
 impl ModelBuffer {
