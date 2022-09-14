@@ -230,6 +230,7 @@ impl engine::Runtime for Runtime {
 			&graphics_chain,
 			&render_phases.world,
 			&arc_camera,
+			&self.world,
 		);
 
 		graphics::chunk_boundary::Render::add_state_listener(

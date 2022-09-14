@@ -1,25 +1,14 @@
-use crate::{
-	app::state::{self, ArcLockMachine},
-	block,
-	client::{model::blender::model, world::chunk},
-	common::network::Storage,
-	graphics::voxel::camera,
-	CrystalSphinx,
-};
+use crate::{client::model::blender::model, graphics::voxel::camera};
 use anyhow::Result;
-use engine::{
-	asset,
-	graphics::{
-		self,
-		chain::{operation::RequiresRecording, Operation},
-		command, flags,
-		procedure::Phase,
-		resource::ColorBuffer,
-		Chain, Drawable, Uniform,
-	},
-	Application,
+use engine::graphics::{
+	self,
+	chain::{operation::RequiresRecording, Operation},
+	command,
+	procedure::Phase,
+	resource::ColorBuffer,
+	Chain, Drawable, Uniform,
 };
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, RwLock};
 
 static ID: &'static str = "render-entity";
 
@@ -34,55 +23,7 @@ pub struct RenderModel {
 }
 
 impl RenderModel {
-	pub fn add_state_listener(
-		app_state: &ArcLockMachine,
-		storage: Weak<RwLock<Storage>>,
-		chain: Weak<RwLock<Chain>>,
-		phase: Weak<Phase>,
-		camera: Weak<RwLock<camera::Camera>>,
-		model_cache: Arc<model::Cache>,
-	) {
-		use state::{
-			storage::{Event::*, Storage},
-			State::*,
-			Transition::*,
-			*,
-		};
-
-		let callback_chain = chain;
-		let callback_phase = phase;
-		let callback_storage = storage;
-		let callback_camera = camera;
-		// This arc will be kept around as long as the storage callback exists,
-		// which is fine because we want the models to always exist
-		// as long as the game is running (even if not present in the world).
-		let callback_model_cache = model_cache;
-		Storage::<Arc<RwLock<Self>>>::default()
-			// On Enter InGame => create Self and hold ownership in `storage`
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
-				profiling::scope!("init-render", ID);
-				log::trace!(target: ID, "Received Enter(InGame) transition");
-				let chain = callback_chain.upgrade().unwrap();
-				let phase = callback_phase.upgrade().unwrap();
-				let arc_camera = callback_camera.upgrade().unwrap();
-				let model_cache = callback_model_cache.clone();
-
-				Ok(
-					match Self::create(&chain, &phase, arc_camera, model_cache) {
-						Ok(arclocked) => Some(arclocked),
-						Err(err) => {
-							log::error!(target: ID, "{}", err);
-							None
-						}
-					},
-				)
-			});
-	}
-
-	fn create(
+	pub fn create(
 		chain: &Arc<RwLock<Chain>>,
 		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,

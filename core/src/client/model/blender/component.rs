@@ -15,6 +15,14 @@ impl Component {
 			texture_id,
 		}
 	}
+
+	pub fn model(&self) -> &asset::Id {
+		&self.model_id
+	}
+
+	pub fn texture(&self) -> &asset::Id {
+		&self.texture_id
+	}
 }
 
 impl ecs::Component for Component {

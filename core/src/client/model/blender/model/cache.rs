@@ -4,8 +4,7 @@ use engine::{
 	asset,
 	channels::mpsc::Sender,
 	graphics::{
-		buffer, command::Semaphore, descriptor, flags, utility::NamedObject, DescriptorCache,
-		GpuOpContext, GpuOperationBuilder,
+		buffer, command::Semaphore, flags, utility::NamedObject, GpuOpContext, GpuOperationBuilder,
 	},
 };
 use std::{collections::HashMap, sync::Arc};

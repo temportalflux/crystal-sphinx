@@ -31,12 +31,14 @@ pub fn load_models(
 	chain: &Arc<RwLock<Chain>>,
 	phase: &Arc<Phase>,
 	camera: &Arc<RwLock<camera::Camera>>,
+	world: &Arc<RwLock<crate::entity::World>>,
 ) {
 	let thread_app_state = app_state.clone();
 	let thread_storage = storage.clone();
 	let thread_chain = chain.clone();
 	let thread_phase = Arc::downgrade(&phase);
 	let thread_camera = camera.clone();
+	let thread_world = Arc::downgrade(&world);
 	task::spawn(LOG.to_string(), async move {
 		profiling::scope!("load_models");
 
@@ -294,7 +296,6 @@ pub fn load_models(
 			Arc::new(model_cache)
 		};
 
-		log::debug!(target: LOG, "Registering block renderer");
 		RenderVoxel::add_state_listener(
 			&thread_app_state,
 			thread_storage.clone(),
@@ -303,14 +304,15 @@ pub fn load_models(
 			Arc::downgrade(&thread_camera),
 			Arc::new(model_cache),
 		);
-		blender::render::RenderModel::add_state_listener(
-			&thread_app_state,
-			thread_storage.clone(),
-			Arc::downgrade(&thread_chain),
-			thread_phase.clone(),
-			Arc::downgrade(&thread_camera),
+		let dependencies = crate::client::model::SystemDependencies {
+			storage: thread_storage.clone(),
+			render_chain: Arc::downgrade(&thread_chain),
+			render_phase: thread_phase.clone(),
+			camera: Arc::downgrade(&thread_camera),
+			world: thread_world.clone(),
 			blender_model_cache,
-		);
+		};
+		dependencies.add_state_listener(&thread_app_state);
 
 		Ok(())
 	});
