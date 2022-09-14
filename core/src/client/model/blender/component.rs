@@ -4,12 +4,16 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Component {
-	asset_id: asset::Id,
+	model_id: asset::Id,
+	texture_id: asset::Id,
 }
 
 impl Component {
-	pub fn new(id: asset::Id) -> Self {
-		Self { asset_id: id }
+	pub fn new(model_id: asset::Id, texture_id: asset::Id) -> Self {
+		Self {
+			model_id,
+			texture_id,
+		}
 	}
 }
 
@@ -37,12 +41,17 @@ impl component::Component for Component {
 
 impl std::fmt::Display for Component {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "blender::Component(asset={})", self.asset_id)
+		write!(
+			f,
+			"blender::Component(model={}, texture={})",
+			self.model_id, self.texture_id
+		)
 	}
 }
 
 impl debug::EguiInformation for Component {
 	fn render(&self, ui: &mut egui::Ui) {
-		ui.label(format!("Asset Id: {}", self.asset_id));
+		ui.label(format!("Model Id: {}", self.model_id));
+		ui.label(format!("Texture Id: {}", self.texture_id));
 	}
 }

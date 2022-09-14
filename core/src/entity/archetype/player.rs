@@ -48,13 +48,14 @@ impl Server {
 pub struct Client(hecs::EntityBuilder, bool);
 impl Client {
 	pub fn new(builder: hecs::EntityBuilder) -> Self {
+		use engine::Application;
 		let mut client = Self(builder, false);
 		client.add_opt::<Camera>();
 		client.add_opt_fn(|| {
-			client::model::blender::Component::new(asset::Id::new(
-				"crystal-sphinx",
-				"entity/humanoid/default",
-			))
+			client::model::blender::Component::new(
+				crate::CrystalSphinx::get_asset_id("entity/humanoid/default"),
+				crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/skin"),
+			)
 		});
 		client
 	}
