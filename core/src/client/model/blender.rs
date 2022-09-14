@@ -4,7 +4,7 @@ pub use asset::*;
 mod component;
 pub use component::*;
 
-mod model;
-pub use model::*;
+pub mod model;
+pub use model::{Model, Vertex, VertexWeight};
 
 pub mod render;

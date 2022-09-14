@@ -177,7 +177,9 @@ pub fn load_models(
 			use descriptor::update::*;
 			let chain = thread_chain.read().unwrap();
 			let descriptor_set = atlas_descriptor_cache.insert(
-				(0, 0), // NOTE: This should be the id of the atlas and sampler in their respective caches
+				// NOTE: This should be the id of the atlas and sampler in their respective caches,
+				// but right now there is only 1 atlas and 1 sampler
+				(0, 0),
 				Some(format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0)),
 				chain.persistent_descriptor_pool(),
 			)?;
@@ -282,10 +284,14 @@ pub fn load_models(
 			}
 			None => HashMap::new(),
 		};
-		let blender_model_buffer = {
-			let mut buffer = blender::render::ModelBuffer::new();
-			buffer.add_models(blender_models);
-			Arc::new(RwLock::new(buffer))
+		let blender_model_cache = {
+			let mut builder = blender::model::CacheBuilder::with_capacity(blender_models.len());
+			for (id, model) in blender_models.into_iter() {
+				builder.insert(id, model);
+			}
+			let chain = thread_chain.read().unwrap();
+			let model_cache = builder.build(&*chain, "RenderEntity", chain.signal_sender())?;
+			Arc::new(model_cache)
 		};
 
 		log::debug!(target: LOG, "Registering block renderer");
@@ -303,7 +309,7 @@ pub fn load_models(
 			Arc::downgrade(&thread_chain),
 			thread_phase.clone(),
 			Arc::downgrade(&thread_camera),
-			blender_model_buffer,
+			blender_model_cache,
 		);
 
 		Ok(())

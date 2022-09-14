@@ -1,15 +1,32 @@
+use crate::graphics::model::Model as ModelTrait;
 use engine::math::nalgebra::{Vector2, Vector3};
 use serde::{Deserialize, Serialize};
+
+mod cache;
+pub use cache::*;
 
 /// Model data representing an exported Blender file.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Model {
 	pub vertices: Vec<Vertex>,
 	// each value refers to an entry in vertices
-	pub indices: Vec<usize>,
+	pub indices: Vec<u32>,
 	// length matches vertices
 	// contains the weight of each group for a given vertex
 	pub vertex_weights: Vec<Vec<VertexWeight>>,
+}
+
+impl ModelTrait for Model {
+	type Vertex = Vertex;
+	type Index = u32;
+
+	fn vertices(&self) -> &Vec<Self::Vertex> {
+		&self.vertices
+	}
+
+	fn indices(&self) -> &Vec<Self::Index> {
+		&self.indices
+	}
 }
 
 /// Vertex data of an exported Blender file.

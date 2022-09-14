@@ -57,7 +57,7 @@ impl BlenderData {
 		let mut indices = Vec::new();
 		for polygon in self.polygons.iter() {
 			for (vertex_index, tex_coord) in polygon.vertices.iter() {
-				indices.push(vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord)));
+				indices.push(vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord)) as u32);
 			}
 		}
 		// Iterate over the unique polygon orders (vert index, normal, tex coord), and

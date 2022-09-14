@@ -1,7 +1,7 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
 	block,
-	client::{world::chunk},
+	client::{model::blender::model, world::chunk},
 	common::network::Storage,
 	graphics::voxel::camera,
 	CrystalSphinx,
@@ -21,10 +21,7 @@ use engine::{
 };
 use std::sync::{Arc, RwLock, Weak};
 
-static ID: &'static str = "render-model";
-
-mod buffer;
-pub use buffer::*;
+static ID: &'static str = "render-entity";
 
 /// Management of non-block models and executing draw-calls for entities during frame render.
 /// Exists only as long as the user is in a world
@@ -33,7 +30,7 @@ pub struct RenderModel {
 	drawable: Drawable,
 	camera_uniform: Uniform,
 	camera: Arc<RwLock<camera::Camera>>,
-	model_cache: Arc<RwLock<ModelBuffer>>,
+	model_cache: Arc<model::Cache>,
 }
 
 impl RenderModel {
@@ -43,7 +40,7 @@ impl RenderModel {
 		chain: Weak<RwLock<Chain>>,
 		phase: Weak<Phase>,
 		camera: Weak<RwLock<camera::Camera>>,
-		model_cache: Arc<RwLock<ModelBuffer>>,
+		model_cache: Arc<model::Cache>,
 	) {
 		use state::{
 			storage::{Event::*, Storage},
@@ -89,7 +86,7 @@ impl RenderModel {
 		chain: &Arc<RwLock<Chain>>,
 		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,
-		model_cache: Arc<RwLock<ModelBuffer>>,
+		model_cache: Arc<model::Cache>,
 	) -> Result<Arc<RwLock<Self>>> {
 		log::info!(target: ID, "Initializing");
 		let instance = Self::new(&chain.read().unwrap(), camera, model_cache)?.arclocked();
@@ -105,7 +102,7 @@ impl RenderModel {
 	fn new(
 		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
-		model_cache: Arc<RwLock<ModelBuffer>>,
+		model_cache: Arc<model::Cache>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
