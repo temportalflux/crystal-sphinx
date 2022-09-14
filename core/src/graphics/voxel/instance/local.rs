@@ -109,7 +109,7 @@ impl IntegratedBuffer {
 				.with_context(|| format!("insert chunk <{}, {}, {}>", chunk.x, chunk.y, chunk.z))?;
 			points.insert(point);
 		}
-		self.update_faces(points);
+		self.update_faces(points)?;
 
 		Ok(())
 	}
@@ -176,7 +176,7 @@ impl IntegratedBuffer {
 		use anyhow::Context;
 		self.insert_inactive(&point, next_id, Instance::from(&point, EnumSet::empty()))
 			.with_context(|| format!("insert {next_id} at {point}"))?;
-		self.update_faces(HashSet::from([*point]));
+		self.update_faces(HashSet::from([*point]))?;
 		Ok(())
 	}
 
@@ -372,8 +372,8 @@ impl IntegratedBuffer {
 	}
 
 	#[profiling::function]
-	fn update_faces(&mut self, points: HashSet<block::Point>) {
-		let model_cache = self.model_cache.upgrade().unwrap();
+	fn update_faces(&mut self, points: HashSet<block::Point>) -> Result<(), Error> {
+		let model_cache = self.model_cache.upgrade().ok_or(Error::InvalidModelCache)?;
 
 		let mut changes = Vec::new();
 
@@ -442,6 +442,8 @@ impl IntegratedBuffer {
 				}
 			}
 		}
+
+		Ok(())
 	}
 
 	fn recalculate_faces(
@@ -604,4 +606,7 @@ pub enum Error {
 
 	#[error("Instance index {0} is out of bounds of [0..{1}).")]
 	NoSuchInstance(usize, usize),
+
+	#[error("Model cache was dropped.")]
+	InvalidModelCache,
 }
