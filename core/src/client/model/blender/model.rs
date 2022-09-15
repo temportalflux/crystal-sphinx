@@ -1,5 +1,12 @@
 use crate::graphics::model::Model as ModelTrait;
-use engine::math::nalgebra::{Vector2, Vector3};
+use engine::{
+	graphics::{
+		flags, pipeline,
+		types::{Vec2, Vec3},
+		vertex_object,
+	},
+	math::nalgebra::{Vector2, Vector3},
+};
 use serde::{Deserialize, Serialize};
 
 mod cache;
@@ -36,11 +43,15 @@ impl ModelTrait for Model {
 /// While the asset compilation does ignore duplicate entries, it also create duplicate vertices which have different
 /// normal and uv data. There is room for optimation here where we only convert to engine-specific structures at runtime.
 /// This is also noted in `EDITOR/src/blender_model/exporter/blender_data.rs/BlenderData::process()`.
+#[vertex_object]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Vertex {
-	pub position: Vector3<f32>,
-	pub normal: Vector3<f32>,
-	pub tex_coord: Vector2<f32>,
+	#[vertex_attribute([R, G, B], Bit32, SFloat)]
+	pub position: Vec3,
+	#[vertex_attribute([R, G, B], Bit32, SFloat)]
+	pub normal: Vec3,
+	#[vertex_attribute([R, G], Bit32, SFloat)]
+	pub tex_coord: Vec2,
 }
 
 /// The group-weight association for a given vertex of an exported Blender file.

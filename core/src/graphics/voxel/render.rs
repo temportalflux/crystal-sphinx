@@ -253,7 +253,9 @@ impl Operation for RenderVoxel {
 			.as_uniform_data(&chain.resolution());
 		self.camera_uniform.write_data(frame_image, &data)?;
 
-		// If the instances change, we need to re-record the render
+		// TODO: There should probably be separate instance buffers for each frame (ring of 3),
+		// so that updating one buffer doesn't wait for the previous from to be complete.
+		// If the instances change, we need to re-record the render.
 		let was_changed = self.instance_buffer.submit_pending_changes(&chain)?;
 		Ok(match was_changed {
 			true => RequiresRecording::CurrentFrame,

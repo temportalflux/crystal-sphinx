@@ -1,9 +1,15 @@
-use crate::{client::model::blender::model, graphics::voxel::camera};
+use crate::{
+	client::model::{
+		blender::model,
+		instance::{self, Instance},
+	},
+	graphics::voxel::camera,
+};
 use anyhow::Result;
 use engine::graphics::{
 	self,
 	chain::{operation::RequiresRecording, Operation},
-	command,
+	command, flags,
 	procedure::Phase,
 	resource::ColorBuffer,
 	Chain, Drawable, Uniform,
@@ -20,6 +26,7 @@ pub struct RenderModel {
 	camera_uniform: Uniform,
 	camera: Arc<RwLock<camera::Camera>>,
 	model_cache: Arc<model::Cache>,
+	instance_buffer: Arc<RwLock<instance::Buffer>>,
 }
 
 impl RenderModel {
@@ -28,9 +35,11 @@ impl RenderModel {
 		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
+		instance_buffer: Arc<RwLock<instance::Buffer>>,
 	) -> Result<Arc<RwLock<Self>>> {
 		log::info!(target: ID, "Initializing");
-		let instance = Self::new(&chain.read().unwrap(), camera, model_cache)?.arclocked();
+		let instance =
+			Self::new(&chain.read().unwrap(), camera, model_cache, instance_buffer)?.arclocked();
 
 		log::trace!(target: ID, "Adding to render chain");
 		let mut chain = chain.write().unwrap();
@@ -44,6 +53,7 @@ impl RenderModel {
 		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
+		instance_buffer: Arc<RwLock<instance::Buffer>>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
@@ -65,6 +75,7 @@ impl RenderModel {
 			camera_uniform,
 			camera,
 			model_cache,
+			instance_buffer,
 		})
 	}
 
@@ -90,12 +101,11 @@ impl Operation for RenderModel {
 			color_buffer.sample_count()
 		};
 
-		/*
 		self.drawable.create_pipeline(
 			&chain.logical()?,
 			vec![
 				self.camera_uniform.layout(),
-				self.model_cache.descriptor_layout(),
+				//self.model_cache.descriptor_layout(),
 			],
 			Pipeline::builder()
 				.with_vertex_layout(
@@ -123,7 +133,6 @@ impl Operation for RenderModel {
 			chain.render_pass(),
 			subpass_index,
 		)?;
-		*/
 		Ok(())
 	}
 
@@ -147,7 +156,18 @@ impl Operation for RenderModel {
 			.unwrap()
 			.as_uniform_data(&chain.resolution());
 		self.camera_uniform.write_data(frame_image, &data)?;
-		Ok(RequiresRecording::NotRequired)
+
+		// TODO: There should probably be separate instance buffers for each frame (ring of 3),
+		// so that updating one buffer doesn't wait for the previous from to be complete.
+		// If the instances change, we need to re-record the render.
+		let was_changed = match self.instance_buffer.write() {
+			Ok(mut buffer) => buffer.submit(chain, chain.signal_sender())?,
+			Err(_) => false,
+		};
+		Ok(match was_changed {
+			true => RequiresRecording::CurrentFrame,
+			false => RequiresRecording::NotRequired,
+		})
 	}
 
 	fn record(&mut self, buffer: &mut command::Buffer, buffer_index: usize) -> anyhow::Result<()> {

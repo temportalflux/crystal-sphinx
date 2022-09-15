@@ -72,9 +72,9 @@ impl BlenderData {
 			.map(|(vertex_index, normal, tex_coord)| {
 				let point = &self.points[vertex_index];
 				let vertex = Vertex {
-					position: point.position,
-					normal,
-					tex_coord,
+					position: point.position.into(),
+					normal: normal.into(),
+					tex_coord: tex_coord.into(),
 				};
 				let groups = point
 					.groups

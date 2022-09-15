@@ -8,11 +8,7 @@ use std::sync::{Arc, RwLock, Weak};
 pub mod blender;
 mod gather_entities_to_render;
 pub use gather_entities_to_render::*;
-pub mod mesh;
-
-pub struct Model {
-	mesh: mesh::Mesh,
-}
+pub mod instance;
 
 #[derive(Clone)]
 pub struct SystemDependencies {
@@ -68,8 +64,21 @@ impl SystemDependencies {
 				let phase = render_phase.upgrade().unwrap();
 				let camera = camera.upgrade().unwrap();
 
-				let render = RenderModel::create(&chain, &phase, camera, blender_model_cache)?;
-				let system = GatherEntitiesToRender::create(world.clone());
+				let instance_buffer = Arc::new(RwLock::new(instance::Buffer::new(
+					&chain.read().unwrap().allocator()?,
+					std::mem::size_of::<instance::Instance>() * 30, // magic number, entity count will be way higher than 30
+				)?));
+
+				// TODO: Need descriptor set
+
+				let render = RenderModel::create(
+					&chain,
+					&phase,
+					camera,
+					blender_model_cache,
+					instance_buffer.clone(),
+				)?;
+				let system = GatherEntitiesToRender::create(world.clone(), &instance_buffer);
 
 				return Ok(Some(RenderSystemObjects { render, system }));
 			});
