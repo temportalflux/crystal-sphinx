@@ -5,7 +5,6 @@ use engine::{
 		types::{Vec2, Vec3},
 		vertex_object,
 	},
-	math::nalgebra::{Vector2, Vector3},
 };
 use serde::{Deserialize, Serialize};
 

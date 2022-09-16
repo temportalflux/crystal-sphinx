@@ -8,7 +8,6 @@ use crate::{
 		Camera, Orientation, OwnedByAccount, OwnedByConnection,
 	},
 };
-use engine::asset;
 use std::net::SocketAddr;
 
 pub struct Server(hecs::EntityBuilder);

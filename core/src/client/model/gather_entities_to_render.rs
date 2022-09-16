@@ -1,14 +1,15 @@
 use crate::{
-	client::model::instance::{self, Instance},
-	entity::{self, component, ArcLockEntityWorld},
-	graphics::voxel::camera,
+	client::model::{
+		instance::{self, Instance},
+		texture,
+	},
+	entity::{self, component},
 };
 use engine::{
 	asset,
-	math::nalgebra::{Point3, UnitQuaternion},
 	Engine, EngineSystem,
 };
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use super::blender;
 
@@ -23,16 +24,19 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 pub struct GatherEntitiesToRender {
 	world: Weak<RwLock<entity::World>>,
 	instance_buffer: Weak<RwLock<instance::Buffer>>,
+	texture_cache: Weak<Mutex<texture::Cache>>,
 }
 
 impl GatherEntitiesToRender {
 	pub fn create(
 		world: Weak<RwLock<entity::World>>,
 		instance_buffer: &Arc<RwLock<instance::Buffer>>,
+		texture_cache: &Arc<Mutex<texture::Cache>>,
 	) -> Arc<RwLock<Self>> {
 		let arclocked = Arc::new(RwLock::new(Self {
 			world,
 			instance_buffer: Arc::downgrade(&instance_buffer),
+			texture_cache: Arc::downgrade(&texture_cache),
 		}));
 
 		if let Ok(mut engine) = Engine::get().write() {
@@ -55,13 +59,14 @@ impl EngineSystem for GatherEntitiesToRender {
 			Some(arc) => arc,
 			None => return,
 		};
+		let texture_cache = self.texture_cache.upgrade();
 
 		let mut instances = Vec::new();
 		let mut entities = Vec::new();
 
 		let world = arc_world.read().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (entity, (position, orientation, presentation)) in query_bundle.query(&world).iter() {
+		for (_entity, (position, orientation, presentation)) in query_bundle.query(&world).iter() {
 			let descriptor_id = DescriptorId {
 				model_id: presentation.model().clone(),
 				texture_id: presentation.texture().clone(),
@@ -73,6 +78,11 @@ impl EngineSystem for GatherEntitiesToRender {
 					.with_orientation(*orientation.orientation())
 					.build(),
 			);
+			if let Some(arctex) = &texture_cache {
+				if let Ok(mut cache) = arctex.lock() {
+					cache.mark_required(&descriptor_id.texture_id);
+				}
+			}
 			entities.push(descriptor_id);
 		}
 
@@ -82,7 +92,8 @@ impl EngineSystem for GatherEntitiesToRender {
 	}
 }
 
+#[derive(Clone)]
 pub struct DescriptorId {
-	model_id: asset::Id,
-	texture_id: asset::Id,
+	pub model_id: asset::Id,
+	pub texture_id: asset::Id,
 }

@@ -4,6 +4,7 @@ use crate::{
 	client::model::blender,
 	common::network::Storage,
 	graphics::voxel::{atlas, camera, model, RenderVoxel},
+	CrystalSphinx,
 };
 use engine::{
 	asset,
@@ -14,11 +15,11 @@ use engine::{
 		utility::{BuildFromDevice, NameableBuilder},
 		Chain, DescriptorCache, Texture,
 	},
-	task,
+	task, Application,
 };
 use std::{
 	collections::{HashMap, HashSet},
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, Mutex, RwLock, Weak},
 };
 
 static LOG: &'static str = "model::loader";
@@ -40,7 +41,7 @@ pub fn load_models(
 	let thread_camera = camera.clone();
 	let thread_world = Arc::downgrade(&world);
 	task::spawn(LOG.to_string(), async move {
-		profiling::scope!("load_models");
+		//profiling::scope!("load_models");
 
 		// Gather asset ids for all block assets
 		let block_ids = match asset::Library::read().get_ids_of_type::<Block>() {
@@ -286,15 +287,24 @@ pub fn load_models(
 			}
 			None => HashMap::new(),
 		};
-		let blender_model_cache = {
+		let (blender_model_cache, mut texture_cache) = {
 			let mut builder = blender::model::CacheBuilder::with_capacity(blender_models.len());
 			for (id, model) in blender_models.into_iter() {
 				builder.insert(id, model);
 			}
 			let chain = thread_chain.read().unwrap();
-			let model_cache = builder.build(&*chain, "RenderEntity", chain.signal_sender())?;
-			Arc::new(model_cache)
+			let model_cache =
+				Arc::new(builder.build(&*chain, "RenderEntity", chain.signal_sender())?);
+			let texture_cache = crate::client::model::texture::Cache::new(&*chain, atlas_sampler)?;
+			(model_cache, texture_cache)
 		};
+		texture_cache
+			.load_default(
+				CrystalSphinx::get_asset_id("entity/humanoid/textures/default"),
+				thread_chain.clone(),
+			)
+			.await?;
+		let texture_cache = Arc::new(Mutex::new(texture_cache));
 
 		RenderVoxel::add_state_listener(
 			&thread_app_state,
@@ -311,6 +321,7 @@ pub fn load_models(
 			camera: Arc::downgrade(&thread_camera),
 			world: thread_world.clone(),
 			blender_model_cache,
+			texture_cache,
 		};
 		dependencies.add_state_listener(&thread_app_state);
 

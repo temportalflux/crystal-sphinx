@@ -2,13 +2,16 @@ use crate::{
 	app::state, client::model::blender::render::RenderModel, common, entity,
 	graphics::voxel::camera::Camera,
 };
-use engine::graphics;
-use std::sync::{Arc, RwLock, Weak};
+use engine::{
+	graphics,
+};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 pub mod blender;
 mod gather_entities_to_render;
 pub use gather_entities_to_render::*;
 pub mod instance;
+pub mod texture;
 
 #[derive(Clone)]
 pub struct SystemDependencies {
@@ -21,9 +24,12 @@ pub struct SystemDependencies {
 	pub world: Weak<RwLock<entity::World>>,
 
 	pub blender_model_cache: Arc<blender::model::Cache>,
+	pub texture_cache: Arc<Mutex<texture::Cache>>,
 }
 struct RenderSystemObjects {
+	#[allow(dead_code)]
 	render: Arc<RwLock<RenderModel>>,
+	#[allow(dead_code)]
 	system: Arc<RwLock<GatherEntitiesToRender>>,
 }
 impl SystemDependencies {
@@ -53,12 +59,13 @@ impl SystemDependencies {
 				}
 
 				let Self {
-					storage,
+					storage: _,
 					render_chain,
 					render_phase,
 					camera,
 					world,
 					blender_model_cache,
+					texture_cache,
 				} = callback_deps.clone();
 				let chain = render_chain.upgrade().unwrap();
 				let phase = render_phase.upgrade().unwrap();
@@ -69,16 +76,16 @@ impl SystemDependencies {
 					std::mem::size_of::<instance::Instance>() * 30, // magic number, entity count will be way higher than 30
 				)?));
 
-				// TODO: Need descriptor set
-
 				let render = RenderModel::create(
 					&chain,
 					&phase,
 					camera,
 					blender_model_cache,
 					instance_buffer.clone(),
+					texture_cache.clone(),
 				)?;
-				let system = GatherEntitiesToRender::create(world.clone(), &instance_buffer);
+				let system =
+					GatherEntitiesToRender::create(world.clone(), &instance_buffer, &texture_cache);
 
 				return Ok(Some(RenderSystemObjects { render, system }));
 			});

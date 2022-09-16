@@ -2,8 +2,9 @@ use crate::{
 	client::model::{
 		blender::model,
 		instance::{self, Instance},
+		texture, DescriptorId,
 	},
-	graphics::voxel::camera,
+	graphics::{model::Model as ModelTrait, voxel::camera},
 };
 use anyhow::Result;
 use engine::graphics::{
@@ -14,7 +15,7 @@ use engine::graphics::{
 	resource::ColorBuffer,
 	Chain, Drawable, Uniform,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 static ID: &'static str = "render-entity";
 
@@ -27,6 +28,7 @@ pub struct RenderModel {
 	camera: Arc<RwLock<camera::Camera>>,
 	model_cache: Arc<model::Cache>,
 	instance_buffer: Arc<RwLock<instance::Buffer>>,
+	texture_cache: Arc<Mutex<texture::Cache>>,
 }
 
 impl RenderModel {
@@ -36,10 +38,17 @@ impl RenderModel {
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
 		instance_buffer: Arc<RwLock<instance::Buffer>>,
+		texture_cache: Arc<Mutex<texture::Cache>>,
 	) -> Result<Arc<RwLock<Self>>> {
 		log::info!(target: ID, "Initializing");
-		let instance =
-			Self::new(&chain.read().unwrap(), camera, model_cache, instance_buffer)?.arclocked();
+		let instance = Self::new(
+			&chain.read().unwrap(),
+			camera,
+			model_cache,
+			instance_buffer,
+			texture_cache,
+		)?
+		.arclocked();
 
 		log::trace!(target: ID, "Adding to render chain");
 		let mut chain = chain.write().unwrap();
@@ -54,6 +63,7 @@ impl RenderModel {
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
 		instance_buffer: Arc<RwLock<instance::Buffer>>,
+		texture_cache: Arc<Mutex<texture::Cache>>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
@@ -76,6 +86,7 @@ impl RenderModel {
 			camera,
 			model_cache,
 			instance_buffer,
+			texture_cache,
 		})
 	}
 
@@ -101,11 +112,13 @@ impl Operation for RenderModel {
 			color_buffer.sample_count()
 		};
 
+		let tex_desc_layout = self.texture_cache.lock().unwrap().descriptor_layout().clone();
+
 		self.drawable.create_pipeline(
 			&chain.logical()?,
 			vec![
 				self.camera_uniform.layout(),
-				//self.model_cache.descriptor_layout(),
+				&tex_desc_layout,
 			],
 			Pipeline::builder()
 				.with_vertex_layout(
@@ -157,6 +170,10 @@ impl Operation for RenderModel {
 			.as_uniform_data(&chain.resolution());
 		self.camera_uniform.write_data(frame_image, &data)?;
 
+		if let Ok(mut cache) = self.texture_cache.lock() {
+			cache.load_pending(chain)?;
+		}
+
 		// TODO: There should probably be separate instance buffers for each frame (ring of 3),
 		// so that updating one buffer doesn't wait for the previous from to be complete.
 		// If the instances change, we need to re-record the render.
@@ -173,6 +190,80 @@ impl Operation for RenderModel {
 	fn record(&mut self, buffer: &mut command::Buffer, buffer_index: usize) -> anyhow::Result<()> {
 		use graphics::debug;
 		profiling::scope!("record:RenderModel");
+
+		buffer.begin_label("Draw:Model", debug::LABEL_COLOR_DRAW);
+		{
+			self.drawable.bind_pipeline(buffer);
+
+			// TODO: This is highly inefficient. Draw calls should be grouped by model and then texture.
+			let (instance_buffer, instance_ids) = {
+				let instances = self.instance_buffer.read().unwrap();
+				let buffer = instances.buffer().clone();
+				let ids = instances.submitted().clone();
+				(buffer, ids)
+			};
+
+			buffer.bind_vertex_buffers(0, vec![&self.model_cache.vertex_buffer], vec![0]);
+			buffer.bind_vertex_buffers(1, vec![&instance_buffer], vec![0]);
+			buffer.bind_index_buffer(&self.model_cache.index_buffer, 0);
+
+			let mut bindings = Vec::with_capacity(instance_ids.len());
+			for (
+				instance_idx,
+				DescriptorId {
+					model_id,
+					texture_id,
+				},
+			) in instance_ids.into_iter().enumerate()
+			{
+				let (model, index_start, vertex_offset) = match self.model_cache.get(&model_id) {
+					Some(entry) => entry,
+					None => continue,
+				};
+				let texture_descriptor_set = {
+					let texture_cache = self.texture_cache.lock().unwrap();
+					texture_cache.get_or_default(&texture_id).cloned()
+				};
+				let tex_desc = match texture_descriptor_set {
+					Some(set) => set.upgrade().unwrap(),
+					None => continue,
+				};
+				let label = format!("Draw:Model({model_id}, {texture_id})");
+				bindings.push((
+					label,
+					model.indices().len(),
+					*index_start,
+					*vertex_offset,
+					instance_idx,
+					tex_desc,
+				));
+			}
+
+			for (label, index_count, index_start, vertex_offset, instance_idx, tex_desc_set) in
+				bindings.into_iter()
+			{
+				buffer.begin_label(label, debug::LABEL_COLOR_DRAW);
+
+				// Bind the texture-atlas and camera descriptors
+				self.drawable.bind_descriptors(
+					buffer,
+					vec![
+						// Descriptor set=0 is the camera uniform.
+						// layout(set = 0, binding = 0) uniform CameraUniform ...
+						&self.camera_uniform.get_set(buffer_index).unwrap(),
+						// Descriptor set=1 is the texture sampler.
+						// The binding number is defined when creating the descriptor cache.
+						// layout(set = 1, binding = 0) uniform sampler2D texSampler;
+						&tex_desc_set,
+					],
+				);
+
+				buffer.draw(index_count, index_start, 1, instance_idx, vertex_offset);
+
+				buffer.end_label();
+			}
+		}
+		buffer.end_label();
 
 		Ok(())
 	}

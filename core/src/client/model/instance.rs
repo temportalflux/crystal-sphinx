@@ -4,13 +4,13 @@ use engine::{
 	graphics::{
 		alloc::{self, Object},
 		buffer, command, flags, pipeline,
-		types::{Mat4, Vec3, Vec4},
+		types::{Mat4, Vec3},
 		utility::NamedObject,
 		vertex_object, GpuOpContext, GpuOperationBuilder,
 	},
-	math::nalgebra::{Isometry3, Point3, Rotation3, Translation3, UnitQuaternion},
+	math::nalgebra::{Isometry3, Point3, Translation3, UnitQuaternion},
 };
-use std::{collections::HashSet, sync::Arc};
+use std::{sync::Arc};
 
 pub struct InstanceBuilder {
 	chunk: Point3<i64>,
@@ -124,6 +124,14 @@ impl Buffer {
 	/// This is EXTREMELY inefficient and causes every frame to reupload the entity instance buffer.
 	pub fn set_pending(&mut self, descriptors: Vec<DescriptorId>, instances: Vec<Instance>) {
 		self.pending = Some((descriptors, instances));
+	}
+
+	pub fn buffer(&self) -> &Arc<buffer::Buffer> {
+		&self.buffer
+	}
+
+	pub fn submitted(&self) -> &Vec<DescriptorId> {
+		&self.submitted
 	}
 
 	pub fn submit(
