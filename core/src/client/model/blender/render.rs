@@ -4,17 +4,17 @@ use crate::{
 		instance::{self, Instance},
 		texture, DescriptorId,
 	},
-	graphics::{model::Model as ModelTrait, voxel::camera},
+	graphics::{model::Model as ModelTrait, voxel::camera}, CrystalSphinx,
 };
 use anyhow::Result;
-use engine::graphics::{
+use engine::{graphics::{
 	self,
 	chain::{operation::RequiresRecording, Operation},
 	command, flags,
 	procedure::Phase,
 	resource::ColorBuffer,
 	Chain, Drawable, Uniform,
-};
+}, Application};
 use std::sync::{Arc, Mutex, RwLock};
 
 static ID: &'static str = "render-entity";
@@ -67,10 +67,9 @@ impl RenderModel {
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
-		// TODO: Load shaders in async process before renderer is created
 		let mut drawable = Drawable::default().with_name(ID);
-		//drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/vertex"))?;
-		//drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/fragment"))?;
+		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/vertex"))?;
+		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/fragment"))?;
 
 		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
 			"RenderEntity.Camera",
