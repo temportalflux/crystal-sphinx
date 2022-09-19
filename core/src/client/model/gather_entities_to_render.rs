@@ -5,10 +5,7 @@ use crate::{
 	},
 	entity::{self, component},
 };
-use engine::{
-	asset,
-	Engine, EngineSystem,
-};
+use engine::{asset, Engine, EngineSystem};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use super::blender;

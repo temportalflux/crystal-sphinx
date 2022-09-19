@@ -10,7 +10,7 @@ use engine::{
 	},
 	math::nalgebra::{Isometry3, Point3, Translation3, UnitQuaternion},
 };
-use std::{sync::Arc};
+use std::sync::Arc;
 
 pub struct InstanceBuilder {
 	chunk: Point3<i64>,

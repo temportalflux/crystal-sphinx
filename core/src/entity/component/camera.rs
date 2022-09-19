@@ -1,19 +1,20 @@
 use super::Registration;
 use engine::{
 	graphics::camera::{PerspectiveProjection, Projection},
-	math::nalgebra::Vector3,
+	math::nalgebra::{UnitQuaternion, Vector3},
+	world,
 };
 
 #[derive(Clone, Copy)]
 pub struct Camera {
-	view_offset: Vector3<f32>,
+	view: CameraView,
 	format: Projection,
 }
 
 impl Default for Camera {
 	fn default() -> Self {
 		Self {
-			view_offset: Vector3::new(0.0, 1.6, 0.0),
+			view: CameraView::FirstPerson,
 			format: Projection::Perspective(PerspectiveProjection {
 				vertical_fov: 43.0,
 				near_plane: 0.1,
@@ -42,17 +43,17 @@ impl super::Component for Camera {
 
 impl std::fmt::Display for Camera {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(
-			f,
-			"Camera(offset=<{}, {}, {}> format={})",
-			self.view_offset[0], self.view_offset[1], self.view_offset[2], self.format
-		)
+		write!(f, "Camera(view={:?} format={})", self.view, self.format)
 	}
 }
 
 impl Camera {
-	pub fn offset(&self) -> &Vector3<f32> {
-		&self.view_offset
+	pub fn view(&self) -> &CameraView {
+		&self.view
+	}
+
+	pub fn set_view(&mut self, view: CameraView) {
+		self.view = view;
 	}
 
 	pub fn projection(&self) -> &Projection {
@@ -60,12 +61,44 @@ impl Camera {
 	}
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum CameraView {
+	FirstPerson,
+	ThirdPersonBack,
+	ThirdPersonFront,
+}
+
+impl CameraView {
+	pub fn offset(&self) -> Vector3<f32> {
+		match self {
+			Self::FirstPerson => Vector3::new(0.0, 1.6, 0.0),
+			Self::ThirdPersonBack => Vector3::new(0.0, 1.6, 5.0),
+			Self::ThirdPersonFront => Vector3::new(0.0, 1.6, -5.0),
+		}
+	}
+
+	pub fn orientation(&self) -> UnitQuaternion<f32> {
+		match self {
+			Self::FirstPerson => UnitQuaternion::identity(),
+			Self::ThirdPersonBack => UnitQuaternion::identity(),
+			Self::ThirdPersonFront => {
+				UnitQuaternion::from_axis_angle(&world::global_up(), std::f32::consts::PI)
+			}
+		}
+	}
+
+	pub fn next(&self) -> Self {
+		match self {
+			Self::FirstPerson => Self::ThirdPersonBack,
+			Self::ThirdPersonBack => Self::ThirdPersonFront,
+			Self::ThirdPersonFront => Self::FirstPerson,
+		}
+	}
+}
+
 impl super::debug::EguiInformation for Camera {
 	fn render(&self, ui: &mut egui::Ui) {
-		ui.label(format!(
-			"Offset: <{:.2}, {:.2}, {:.2}>",
-			self.view_offset[0], self.view_offset[1], self.view_offset[2]
-		));
+		ui.label(format!("View: {:?}", self.view));
 		match &self.format {
 			Projection::Orthographic(ortho) => {
 				ui.label("Projection: Orthographic");

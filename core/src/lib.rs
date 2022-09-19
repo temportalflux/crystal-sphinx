@@ -30,7 +30,7 @@
 //! `<https://grafana.com/>` could be neat for monitoring server usage
 //!
 
-use crate::{common::network::mode, graphics::ChainConfig};
+use crate::{app::state::State::InGame, common::network::mode, graphics::ChainConfig};
 use engine::{
 	asset, graphics::Chain, task::PinFutureResultLifetime, ui::egui, window::Window, Application,
 	Engine, EventLoop,
@@ -198,12 +198,19 @@ impl engine::Runtime for Runtime {
 			&self.world,
 		);
 
+		let weak_world = Arc::downgrade(&self.world);
 		entity::system::PlayerController::add_state_listener(
 			&self.app_state,
 			Arc::downgrade(&self.network_storage),
-			Arc::downgrade(&self.world),
+			weak_world.clone(),
 			input_user.clone(),
 		);
+
+		let fn_view_world = weak_world.clone();
+		let fn_view_input = input_user.clone();
+		app::store_during(&self.app_state, InGame, move || {
+			client::UpdateCameraView::create(fn_view_world.clone(), &fn_view_input)
+		});
 
 		let graphics_chain = {
 			let window = Window::builder()

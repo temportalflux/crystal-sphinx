@@ -2,9 +2,7 @@ use crate::{
 	app::state, client::model::blender::render::RenderModel, common, entity,
 	graphics::voxel::camera::Camera,
 };
-use engine::{
-	graphics,
-};
+use engine::graphics;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
 pub mod blender;

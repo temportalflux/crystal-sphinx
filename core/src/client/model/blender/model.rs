@@ -1,10 +1,8 @@
 use crate::graphics::model::Model as ModelTrait;
-use engine::{
-	graphics::{
-		flags, pipeline,
-		types::{Vec2, Vec3},
-		vertex_object,
-	},
+use engine::graphics::{
+	flags, pipeline,
+	types::{Vec2, Vec3},
+	vertex_object,
 };
 use serde::{Deserialize, Serialize};
 

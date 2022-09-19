@@ -46,8 +46,13 @@ impl EngineSystem for UpdateCamera {
 			let chunk = position.chunk();
 			result.chunk_coordinate =
 				Point3::new(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32);
-			result.position = *position.offset() + *camera.offset();
+			result.position = *position.offset();
 			result.orientation = **orientation;
+
+			let camera_offset = result.orientation * camera.view().offset();
+			result.position += camera_offset;
+			//result.orientation = camera.view().orientation() * result.orientation;
+
 			result.projection = *camera.projection();
 
 			// TODO: support multiple camera components but only 1 active at a time

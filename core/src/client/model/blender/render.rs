@@ -4,17 +4,21 @@ use crate::{
 		instance::{self, Instance},
 		texture, DescriptorId,
 	},
-	graphics::{model::Model as ModelTrait, voxel::camera}, CrystalSphinx,
+	graphics::{model::Model as ModelTrait, voxel::camera},
+	CrystalSphinx,
 };
 use anyhow::Result;
-use engine::{graphics::{
-	self,
-	chain::{operation::RequiresRecording, Operation},
-	command, flags,
-	procedure::Phase,
-	resource::ColorBuffer,
-	Chain, Drawable, Uniform,
-}, Application};
+use engine::{
+	graphics::{
+		self,
+		chain::{operation::RequiresRecording, Operation},
+		command, flags,
+		procedure::Phase,
+		resource::ColorBuffer,
+		Chain, Drawable, Uniform,
+	},
+	Application,
+};
 use std::sync::{Arc, Mutex, RwLock};
 
 static ID: &'static str = "render-entity";
@@ -111,14 +115,16 @@ impl Operation for RenderModel {
 			color_buffer.sample_count()
 		};
 
-		let tex_desc_layout = self.texture_cache.lock().unwrap().descriptor_layout().clone();
+		let tex_desc_layout = self
+			.texture_cache
+			.lock()
+			.unwrap()
+			.descriptor_layout()
+			.clone();
 
 		self.drawable.create_pipeline(
 			&chain.logical()?,
-			vec![
-				self.camera_uniform.layout(),
-				&tex_desc_layout,
-			],
+			vec![self.camera_uniform.layout(), &tex_desc_layout],
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
