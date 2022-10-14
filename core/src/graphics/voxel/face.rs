@@ -79,10 +79,10 @@ impl Face {
 	/// Returns a vector representing what is considered the "left" direction for determining the face's vertex positions.
 	fn left(&self) -> Vector3<f32> {
 		match self {
-			// Reads -Z to +Z (front to back)
-			Self::Right => Default::default(), // zero
 			// Reads +Z to -Z (back to front)
-			Self::Left => -*global_forward(),
+			Self::Right => -*global_forward(),
+			// Reads -Z to +Z (front to back)
+			Self::Left => Default::default(), // zero
 			// Reads -X to +X (left to right)
 			Self::Front => Default::default(), // zero
 			// Reads +X to -X (right to left)
@@ -95,10 +95,10 @@ impl Face {
 	/// Returns a vector representing what is considered the "right" direction for determining the face's vertex positions.
 	fn right(&self) -> Vector3<f32> {
 		match self {
-			// Reads -Z to Z (front to back)
-			Self::Right => -*global_forward(),
 			// Reads +Z to -Z (back to front)
-			Self::Left => Default::default(), // zero
+			Self::Right => Default::default(), // zero
+			// Reads -Z to Z (front to back)
+			Self::Left => -*global_forward(),
 			// Reads -X to +X (left to right)
 			Self::Front => *global_right(),
 			// Reads +X to -X (right to left)
