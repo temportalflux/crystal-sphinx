@@ -14,9 +14,9 @@ layout(set = 0, binding = 0) uniform CameraUniform {
 } camera;
 
 // Model attributes - changes based on the entity model being drawn
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 tex_coord;
+layout(location = 0) in vec4 position;
+layout(location = 1) in vec4 normal;
+layout(location = 2) in vec4 tex_coord;
 
 // Instance attributes - changes based on the specific entity being drawn
 layout(location = 3) in vec3 chunk_coordinate;
@@ -31,7 +31,7 @@ void main()
 	// Convert the chunk distance into a number of blocks
 	vec3 blockPosRelativeToCameraChunk = chunk_offset * CHUNK_SIZE;
 	// Now add the position of the block inside the chunk to the number of blocks from the camera's chunk
-	vec3 vertPos = blockPosRelativeToCameraChunk + position;
+	vec3 vertPos = blockPosRelativeToCameraChunk + position.xyz;
 	// Integrate the vertex model matrix with its block-offset position
 	// and the camera's view (which includes the camera's offset in its chunk) and projection.
 	// This results in the virtual position of the block, on the screen,

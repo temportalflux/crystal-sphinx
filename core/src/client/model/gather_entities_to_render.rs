@@ -72,7 +72,7 @@ impl EngineSystem for GatherEntitiesToRender {
 				Instance::builder()
 					.with_chunk(*position.chunk())
 					.with_offset(*position.offset())
-					.with_orientation(*orientation.orientation())
+					//.with_orientation(*orientation.orientation())
 					.build(),
 			);
 			if let Some(arctex) = &texture_cache {

@@ -9,7 +9,7 @@ use engine::{
 };
 use std::{collections::HashMap, sync::Arc};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CacheBuilder {
 	models: HashMap<
 		asset::Id,

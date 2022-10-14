@@ -14,7 +14,7 @@ pub struct Camera {
 impl Default for Camera {
 	fn default() -> Self {
 		Self {
-			view: CameraView::FirstPerson,
+			view: CameraView::ThirdPersonBack,
 			format: Projection::Perspective(PerspectiveProjection {
 				vertical_fov: 43.0,
 				near_plane: 0.1,
