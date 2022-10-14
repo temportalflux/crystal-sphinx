@@ -1,10 +1,9 @@
+pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 use engine::{
 	graphics::camera,
 	math::nalgebra::{self, point, Matrix4, Point3, UnitQuaternion, Vector2},
 };
 use std::sync::{Arc, RwLock};
-
-pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 
 pub type ArcLockCamera = Arc<RwLock<Camera>>;
 #[derive(Clone)]

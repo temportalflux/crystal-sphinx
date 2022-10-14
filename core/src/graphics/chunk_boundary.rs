@@ -19,7 +19,7 @@ use engine::{
 	},
 	input,
 	math::nalgebra::{Point3, Vector4},
-	Application, Engine, EngineSystem,
+	world, Application, Engine, EngineSystem,
 };
 use enumset::{EnumSet, EnumSetType};
 use std::{
@@ -33,6 +33,7 @@ struct LineSegment {
 	pos1: Point3<f32>,
 	pos2: Point3<f32>,
 	color: Vector4<f32>,
+	flags: Vector4<f32>,
 }
 impl From<((f32, f32, f32), (f32, f32, f32), Vector4<f32>)> for LineSegment {
 	fn from(params: ((f32, f32, f32), (f32, f32, f32), Vector4<f32>)) -> Self {
@@ -40,6 +41,17 @@ impl From<((f32, f32, f32), (f32, f32, f32), Vector4<f32>)> for LineSegment {
 			pos1: Point3::new(params.0 .0, params.0 .1, params.0 .2),
 			pos2: Point3::new(params.1 .0, params.1 .1, params.1 .2),
 			color: params.2,
+			flags: Vector4::default(),
+		}
+	}
+}
+impl From<((f32, f32, f32), (f32, f32, f32), Vector4<f32>, Vector4<f32>)> for LineSegment {
+	fn from(params: ((f32, f32, f32), (f32, f32, f32), Vector4<f32>, Vector4<f32>)) -> Self {
+		Self {
+			pos1: Point3::new(params.0 .0, params.0 .1, params.0 .2),
+			pos2: Point3::new(params.1 .0, params.1 .1, params.1 .2),
+			color: params.2,
+			flags: params.3,
 		}
 	}
 }
@@ -80,6 +92,9 @@ impl Type {
 		let h_y = chunk::SIZE.y;
 		let l_z = chunk::SIZE.z;
 		let bound_h = [0.0, h_y];
+		let red = Vector4::new(1.0, 0.0, 0.0, 1.0);
+		let green = Vector4::new(0.0, 1.0, 0.0, 1.0);
+		let blue = Vector4::new(0.0, 0.0, 1.0, 1.0);
 		let mut segments = Vec::new();
 		match self {
 			Self::None => {}
@@ -87,23 +102,20 @@ impl Type {
 				let line_height = /*16 chunks*/ 16.0 * chunk::SIZE[1];
 				let h1 = line_height / 2.0 * -1.0;
 				let h2 = line_height / 2.0;
-				let color = Vector4::new(0.0, 1.0, 0.0, 1.0);
-				segments.push(((0.0, h1, 0.0), (0.0, h2, 0.0), color).into());
-				segments.push(((w_x, h1, 0.0), (w_x, h2, 0.0), color).into());
-				segments.push(((w_x, h1, l_z), (w_x, h2, l_z), color).into());
-				segments.push(((0.0, h1, l_z), (0.0, h2, l_z), color).into());
+				segments.push(((0.0, h1, 0.0), (0.0, h2, 0.0), green).into());
+				segments.push(((w_x, h1, 0.0), (w_x, h2, 0.0), green).into());
+				segments.push(((w_x, h1, l_z), (w_x, h2, l_z), green).into());
+				segments.push(((0.0, h1, l_z), (0.0, h2, l_z), green).into());
 			}
 			Self::Cube => {
-				let color = Vector4::new(1.0, 0.0, 0.0, 1.0);
 				for &y in bound_h.iter() {
-					segments.push(((0.0, y, 0.0), (w_x, y, 0.0), color).into());
-					segments.push(((w_x, y, 0.0), (w_x, y, l_z), color).into());
-					segments.push(((0.0, y, 0.0), (0.0, y, l_z), color).into());
-					segments.push(((0.0, y, l_z), (w_x, y, l_z), color).into());
+					segments.push(((0.0, y, 0.0), (w_x, y, 0.0), red).into());
+					segments.push(((w_x, y, 0.0), (w_x, y, l_z), red).into());
+					segments.push(((0.0, y, 0.0), (0.0, y, l_z), red).into());
+					segments.push(((0.0, y, l_z), (w_x, y, l_z), red).into());
 				}
 			}
 			Self::FaceGrid => {
-				let color = Vector4::new(0.0, 0.0, 1.0, 1.0);
 				let bound_w = [0.0, w_x];
 				let bound_l = [0.0, l_z];
 				let inner_w = (1..chunk::SIZE_I[0]).into_iter().map(|i| i as f32);
@@ -113,28 +125,28 @@ impl Type {
 				// Y-Faces (Up/Down)
 				for &y in bound_h.iter() {
 					for x in inner_w.clone() {
-						segments.push(((x, y, 0.0), (x, y, l_z), color).into());
+						segments.push(((x, y, 0.0), (x, y, l_z), blue).into());
 					}
 					for z in inner_l.clone() {
-						segments.push(((0.0, y, z), (w_x, y, z), color).into());
+						segments.push(((0.0, y, z), (w_x, y, z), blue).into());
 					}
 				}
 				// Z-Faces (Back/Front)
 				for &z in bound_l.iter() {
 					for x in inner_w.clone() {
-						segments.push(((x, 0.0, z), (x, h_y, z), color).into());
+						segments.push(((x, 0.0, z), (x, h_y, z), blue).into());
 					}
 					for y in inner_h.clone() {
-						segments.push(((0.0, y, z), (w_x, y, z), color).into());
+						segments.push(((0.0, y, z), (w_x, y, z), blue).into());
 					}
 				}
 				// X-Faces (Left/Right)
 				for &x in bound_w.iter() {
 					for y in inner_h.clone() {
-						segments.push(((x, y, 0.0), (x, y, l_z), color).into());
+						segments.push(((x, y, 0.0), (x, y, l_z), blue).into());
 					}
 					for z in inner_l.clone() {
-						segments.push(((x, 0.0, z), (x, h_y, z), color).into());
+						segments.push(((x, 0.0, z), (x, h_y, z), blue).into());
 					}
 				}
 			}
@@ -169,10 +181,8 @@ pub struct Vertex {
 	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
 	pub color: Vec4,
 
-	// If a given dimension is 0, the vertex is rendered in world space.
-	// If it is 1, the vertex is rendered in chunk space.
-	#[vertex_attribute([R, G, B], Bit32, SFloat)]
-	pub chunk_space_mask: Vec3,
+	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
+	pub flags: Vec4,
 }
 
 struct Segments(Vec<LineSegment>);
@@ -186,12 +196,66 @@ impl Segments {
 				vertices.push(Vertex {
 					position: (*pos).into(),
 					color: segment.color.into(),
-					chunk_space_mask: Vec3::default(), // segment.chunkSpaceMask
+					flags: segment.flags.into(),
 				});
 				indices.push(i);
 			}
 		}
 		(vertices, indices)
+	}
+}
+
+#[derive(Debug, Hash, Eq, PartialEq)]
+enum RenderType {
+	ChunkBoundary(Type),
+	OrientationGadget,
+}
+impl From<Type> for RenderType {
+	fn from(kind: Type) -> Self {
+		Self::ChunkBoundary(kind)
+	}
+}
+impl RenderType {
+	fn all() -> Vec<Self> {
+		let mut all = Vec::new();
+		all.push(Self::OrientationGadget);
+		for boundary in EnumSet::<Type>::all().into_iter() {
+			all.push(Self::ChunkBoundary(boundary));
+		}
+		all
+	}
+
+	fn line_segments(&self) -> Vec<LineSegment> {
+		match self {
+			Self::ChunkBoundary(boundary) => boundary.line_segments(),
+			Self::OrientationGadget => {
+				let red = Vector4::new(1.0, 0.0, 0.0, 1.0);
+				let green = Vector4::new(0.0, 1.0, 0.0, 1.0);
+				let blue = Vector4::new(0.0, 0.0, 1.0, 1.0);
+				let flags = Vector4::new(0.0, 0.0, 0.0, 0.0);
+
+				let mut segments = Vec::new();
+				segments.push(LineSegment {
+					pos1: Point3::origin(),
+					pos2: Point3::<f32>::from(world::global_right().into_inner()),
+					color: red,
+					flags,
+				});
+				segments.push(LineSegment {
+					pos1: Point3::origin(),
+					pos2: Point3::<f32>::from(world::global_up().into_inner()),
+					color: green,
+					flags,
+				});
+				segments.push(LineSegment {
+					pos1: Point3::origin(),
+					pos2: Point3::<f32>::from(world::global_forward().into_inner()),
+					color: blue,
+					flags,
+				});
+				segments
+			}
+		}
 	}
 }
 
@@ -207,7 +271,7 @@ pub struct Render {
 
 	control: Arc<RwLock<BoundaryControl>>,
 	recorded_kind: Vec<Type>,
-	type_settings: HashMap<Type, TypeSettings>,
+	type_settings: HashMap<RenderType, TypeSettings>,
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
 
@@ -295,10 +359,11 @@ impl Render {
 		let mut type_settings = HashMap::new();
 		let mut vertices = Vec::new();
 		let mut indices = Vec::new();
-		for kind in EnumSet::<Type>::all().into_iter() {
-			let (mut kind_vertices, mut kind_indices) = Segments(kind.line_segments()).prepare();
+		for render_type in RenderType::all().into_iter() {
+			let (mut kind_vertices, mut kind_indices) =
+				Segments(render_type.line_segments()).prepare();
 			type_settings.insert(
-				kind,
+				render_type,
 				TypeSettings {
 					index_start: indices.len(),
 					index_count: kind_indices.len(),
@@ -467,11 +532,14 @@ impl Operation for Render {
 			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
-			for kind in self.recorded_kind[buffer_index]
+			let mut render_types = self.recorded_kind[buffer_index]
 				.rendered_kinds()
 				.into_iter()
-			{
-				if let Some(settings) = self.type_settings.get(&kind) {
+				.map(RenderType::from)
+				.collect::<Vec<_>>();
+			render_types.push(RenderType::OrientationGadget);
+			for render_type in render_types.into_iter() {
+				if let Some(settings) = self.type_settings.get(&render_type) {
 					buffer.draw(
 						settings.index_count,
 						settings.index_start,

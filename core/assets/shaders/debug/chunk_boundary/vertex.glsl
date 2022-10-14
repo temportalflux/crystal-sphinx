@@ -14,7 +14,7 @@ layout(set = 0, binding = 0) uniform CameraUniform {
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec4 color;
-layout(location = 2) in vec3 chunkSpaceMask;
+layout(location = 2) in vec4 flags;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -25,8 +25,7 @@ vec4 lerp(vec4 a, vec4 b, float delta) { return (a * (1 - delta)) + (b * delta);
 void main()
 {
 	// This is the vertex position shifted out of the camera's chunk and into world space
-	vec3 pos_wrt_rootChunk = position + ((vec3(0, 0, 0) - camera.posOfCurrentChunk) * CHUNK_SIZE);
-	vec3 vertPos = position;//lerp(pos_wrt_rootChunk, position, chunkSpaceMask);
-	gl_Position = camera.proj * camera.view * vec4(vertPos, 1.0);
+	//vec3 pos_wrt_rootChunk = position + ((vec3(0, 0, 0) - camera.posOfCurrentChunk) * CHUNK_SIZE);
+	gl_Position = camera.proj * camera.view * vec4(position, 1.0);
 	fragColor = color;
 }
