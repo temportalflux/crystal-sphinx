@@ -51,7 +51,7 @@ pub fn init() -> ArcLockUser {
 						)
 						.bind(
 							AXIS_STRAFE,
-							((Keyboard(A) + Multiplier(1.0)) + (Keyboard(D) + Multiplier(-1.0)))
+							((Keyboard(A) + Multiplier(-1.0)) + (Keyboard(D) + Multiplier(1.0)))
 								.with_behavior(Average)
 								.with_behavior(Multiplier(2.0)),
 						)
