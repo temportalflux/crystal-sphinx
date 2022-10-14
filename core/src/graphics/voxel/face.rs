@@ -83,12 +83,12 @@ impl Face {
 			Self::Right => -*global_forward(),
 			// Reads -Z to +Z (front to back)
 			Self::Left => Default::default(), // zero
-			// Reads -X to +X (left to right)
-			Self::Front => Default::default(), // zero
 			// Reads +X to -X (right to left)
-			Self::Back => *global_right(),
-			Self::Down => Default::default(), // zero
-			Self::Up => *global_right(),
+			Self::Front => *global_right(),
+			// Reads -X to +X (left to right)
+			Self::Back => Default::default(), // zero
+			Self::Down => *global_right(),
+			Self::Up => Default::default(), // zero
 		}
 	}
 
@@ -99,12 +99,12 @@ impl Face {
 			Self::Right => Default::default(), // zero
 			// Reads -Z to Z (front to back)
 			Self::Left => -*global_forward(),
-			// Reads -X to +X (left to right)
-			Self::Front => *global_right(),
 			// Reads +X to -X (right to left)
-			Self::Back => Default::default(), // zero
-			Self::Down => *global_right(),
-			Self::Up => Default::default(), // zero
+			Self::Front => Default::default(), // zero
+			// Reads -X to +X (left to right)
+			Self::Back => *global_right(),
+			Self::Down => Default::default(), // zero
+			Self::Up => *global_right(),
 		}
 	}
 
