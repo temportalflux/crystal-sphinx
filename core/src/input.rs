@@ -67,12 +67,12 @@ pub fn init() -> ArcLockUser {
 								(
 									device::Kind::Mouse,
 									Source::Mouse(Mouse::Move(MouseX))
-										+ ScreenPositionDelta + Multiplier(3.0),
+										+ ScreenPositionDelta + Multiplier(-3.0),
 								),
 								(
 									device::Kind::Keyboard,
-									((Keyboard(Numpad4) + Multiplier(-1.0))
-										+ (Keyboard(Numpad6) + Multiplier(1.0)))
+									((Keyboard(Numpad4) + Multiplier(1.0))
+										+ (Keyboard(Numpad6) + Multiplier(-1.0)))
 									.with_behavior(Average)
 									.with_behavior(Multiplier(2.0))
 									.with_behavior(Multiplier(0.05)),

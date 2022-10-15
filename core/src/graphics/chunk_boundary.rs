@@ -242,7 +242,7 @@ impl RenderType {
 				let blue = Vector4::new(0.0, 0.1, 1.0, 1.0);
 				let flags = Vector4::new(1.0, 0.0, 0.0, 0.0);
 				let start = Point3::<f32>::new(0.0, 0.0, 0.0);
-				let axis_length = 0.025f32;
+				let axis_length = 0.01f32;
 
 				let mut segments = Vec::new();
 				segments.push(LineSegment {
