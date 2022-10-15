@@ -1,10 +1,11 @@
+pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 use engine::{
 	graphics::camera,
-	math::nalgebra::{self, point, Matrix4, Point3, UnitQuaternion, Vector2},
+	math::nalgebra::{
+		self, point, Isometry3, Matrix4, Point3, Translation3, UnitQuaternion, Vector2,
+	},
 };
 use std::sync::{Arc, RwLock};
-
-pub use camera::{OrthographicBounds, PerspectiveProjection, Projection};
 
 pub type ArcLockCamera = Arc<RwLock<Camera>>;
 #[derive(Clone)]
@@ -45,10 +46,17 @@ impl camera::Camera for Camera {
 impl Camera {
 	pub fn as_uniform_data(&self, resolution: &Vector2<f32>) -> UniformData {
 		use camera::Camera;
+		let inv_rotation = {
+			let no_offset = Translation3::new(0.0, 0.0, 0.0);
+			let rot_camera_to_world = self.orientation.inverse();
+			let iso = Isometry3::from_parts(no_offset, rot_camera_to_world);
+			iso.to_homogeneous()
+		};
 		UniformData {
 			view: self.view_matrix(),
 			projection: self.projection_matrix(resolution),
 			chunk_coordinate: self.chunk_coordinate,
+			inv_rotation,
 		}
 	}
 }
@@ -58,6 +66,7 @@ impl Camera {
 pub struct UniformData {
 	view: Matrix4<f32>,
 	projection: Matrix4<f32>,
+	inv_rotation: Matrix4<f32>,
 	chunk_coordinate: Point3<f32>,
 }
 
@@ -67,6 +76,7 @@ impl Default for UniformData {
 			view: Matrix4::identity(),
 			projection: Matrix4::identity(),
 			chunk_coordinate: point![0.0, 0.0, 0.0],
+			inv_rotation: Matrix4::identity(),
 		}
 	}
 }

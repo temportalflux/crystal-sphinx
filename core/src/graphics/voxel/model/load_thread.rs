@@ -113,7 +113,14 @@ pub fn load_models(
 			let mut texture_map = HashMap::new();
 			for (entry, _faces) in block.textures().iter() {
 				for texture_id in entry.texture_ids().iter() {
-					texture_map.insert(texture_id, textures.get(&texture_id).unwrap());
+					if let Some(texture) = textures.get(&texture_id) {
+						texture_map.insert(texture_id, texture);
+					} else {
+						log::error!(
+							target: LOG,
+							"Failed to load texture {texture_id} for block {block_id}"
+						);
+					}
 				}
 			}
 			if !atlas.contains_or_fits_all(&texture_map) {
@@ -221,7 +228,10 @@ pub fn load_models(
 				log::warn!(target: LOG, "Block {} has no texture entries", block_id);
 			}
 			for (entry, faces) in block.textures() {
-				let main_tex = atlas.get(&entry.texture_id).unwrap();
+				let main_tex = match atlas.get(&entry.texture_id) {
+					Some(tex) => tex,
+					None => continue,
+				};
 				let biome_color_tex = entry
 					.biome_color
 					.1

@@ -1,0 +1,12 @@
+asset-type "block"
+is_opaque true
+textures {
+	sides {
+		Front "crystal-sphinx:textures/blocks/debug/front"
+		Back "crystal-sphinx:textures/blocks/debug/back"
+		Right "crystal-sphinx:textures/blocks/debug/right"
+		Left "crystal-sphinx:textures/blocks/debug/left"
+		Top "crystal-sphinx:textures/blocks/debug/top"
+		Bottom "crystal-sphinx:textures/blocks/debug/bottom"
+	}
+}
