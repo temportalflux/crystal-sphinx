@@ -13,12 +13,12 @@ use engine::{
 		command, flags, pipeline,
 		procedure::Phase,
 		resource::ColorBuffer,
-		types::{Vec3, Vec4},
+		types::{Mat4, Vec3, Vec4},
 		utility::NamedObject,
 		vertex_object, Drawable, GpuOperationBuilder, Uniform,
 	},
 	input,
-	math::nalgebra::{Point3, Vector4},
+	math::nalgebra::{Matrix4, Point3, Translation3, Vector4},
 	world, Application, Engine, EngineSystem,
 };
 use enumset::{EnumSet, EnumSetType};
@@ -185,6 +185,14 @@ pub struct Vertex {
 	pub flags: Vec4,
 }
 
+#[vertex_object]
+#[derive(Clone, Debug, Default)]
+pub struct Instance {
+	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
+	#[vertex_span(4)]
+	pub model_matrix: Mat4,
+}
+
 struct Segments(Vec<LineSegment>);
 impl Segments {
 	fn prepare(self) -> (Vec<Vertex>, Vec<u32>) {
@@ -231,29 +239,45 @@ impl RenderType {
 			Self::OrientationGadget => {
 				let red = Vector4::new(1.0, 0.0, 0.0, 1.0);
 				let green = Vector4::new(0.0, 1.0, 0.0, 1.0);
-				let blue = Vector4::new(0.0, 0.0, 1.0, 1.0);
-				let flags = Vector4::new(0.0, 0.0, 0.0, 0.0);
+				let blue = Vector4::new(0.0, 0.1, 1.0, 1.0);
+				let flags = Vector4::new(1.0, 0.0, 0.0, 0.0);
+				let start = Point3::<f32>::new(0.0, 0.0, 0.0);
+				let axis_length = 0.025f32;
 
 				let mut segments = Vec::new();
 				segments.push(LineSegment {
-					pos1: Point3::origin(),
-					pos2: Point3::<f32>::from(world::global_right().into_inner()),
+					pos1: start,
+					pos2: start + (*world::global_right() * axis_length),
 					color: red,
 					flags,
 				});
 				segments.push(LineSegment {
-					pos1: Point3::origin(),
-					pos2: Point3::<f32>::from(world::global_up().into_inner()),
+					pos1: start,
+					pos2: start + (*world::global_up() * axis_length),
 					color: green,
 					flags,
 				});
 				segments.push(LineSegment {
-					pos1: Point3::origin(),
-					pos2: Point3::<f32>::from(world::global_forward().into_inner()),
+					pos1: start,
+					pos2: start + (*world::global_forward() * axis_length),
 					color: blue,
 					flags,
 				});
 				segments
+			}
+		}
+	}
+
+	fn instance(&self) -> Instance {
+		match self {
+			Self::ChunkBoundary(_) => Instance {
+				model_matrix: Matrix4::identity().into(),
+			},
+			Self::OrientationGadget => {
+				let transform = Translation3::<f32>::new(0.0, 0.0, -0.25);
+				Instance {
+					model_matrix: transform.to_homogeneous().into(),
+				}
 			}
 		}
 	}
@@ -263,6 +287,8 @@ struct TypeSettings {
 	index_start: usize,
 	index_count: usize,
 	vertex_start: usize,
+	instance_start: usize,
+	instance_count: usize,
 }
 
 pub type ArcLockRender = Arc<RwLock<Render>>;
@@ -274,6 +300,7 @@ pub struct Render {
 	type_settings: HashMap<RenderType, TypeSettings>,
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
+	instance_buffer: Arc<buffer::Buffer>,
 
 	camera: Arc<RwLock<camera::Camera>>,
 	camera_uniform: Uniform,
@@ -359,15 +386,26 @@ impl Render {
 		let mut type_settings = HashMap::new();
 		let mut vertices = Vec::new();
 		let mut indices = Vec::new();
+		let mut instances = vec![RenderType::ChunkBoundary(Type::None).instance()];
 		for render_type in RenderType::all().into_iter() {
 			let (mut kind_vertices, mut kind_indices) =
 				Segments(render_type.line_segments()).prepare();
+			let (instance_start, instance_count) = match render_type {
+				RenderType::OrientationGadget => {
+					let start = instances.len();
+					instances.push(render_type.instance());
+					(start, instances.len() - start)
+				}
+				RenderType::ChunkBoundary(_) => (0, 1), // use the identity matrix, first instance
+			};
 			type_settings.insert(
 				render_type,
 				TypeSettings {
 					index_start: indices.len(),
 					index_count: kind_indices.len(),
 					vertex_start: vertices.len(),
+					instance_start,
+					instance_count,
 				},
 			);
 			vertices.append(&mut kind_vertices);
@@ -406,6 +444,24 @@ impl Render {
 			.send_signal_to(chain.signal_sender())?
 			.end()?;
 
+		let instance_buffer = buffer::Buffer::create_gpu(
+			Some(format!("ChunkBoundary.InstanceBuffer")),
+			&chain.allocator()?,
+			flags::BufferUsage::VERTEX_BUFFER,
+			instances.len() * std::mem::size_of::<Instance>(),
+			None,
+		)?;
+
+		GpuOperationBuilder::new(
+			instance_buffer.wrap_name(|v| format!("Write({})", v)),
+			chain,
+		)?
+		.begin()?
+		.stage(&instances[..])?
+		.copy_stage_to_buffer(&instance_buffer)
+		.send_signal_to(chain.signal_sender())?
+		.end()?;
+
 		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
 			"ChunkBoundary.Camera",
 			&chain.logical()?,
@@ -424,6 +480,7 @@ impl Render {
 			type_settings,
 			vertex_buffer,
 			index_buffer,
+			instance_buffer,
 			camera_uniform,
 			camera,
 		})
@@ -468,7 +525,8 @@ impl Operation for Render {
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
-						.with_object::<Vertex>(0, flags::VertexInputRate::VERTEX),
+						.with_object::<Vertex>(0, flags::VertexInputRate::VERTEX)
+						.with_object::<Instance>(1, flags::VertexInputRate::INSTANCE),
 				)
 				.set_viewport_state(Viewport::from(*chain.extent()))
 				.with_topology(
@@ -530,6 +588,7 @@ impl Operation for Render {
 			);
 
 			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
+			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
 			let mut render_types = self.recorded_kind[buffer_index]
@@ -543,8 +602,8 @@ impl Operation for Render {
 					buffer.draw(
 						settings.index_count,
 						settings.index_start,
-						1,
-						0,
+						settings.instance_count,
+						settings.instance_start,
 						settings.vertex_start,
 					);
 				}

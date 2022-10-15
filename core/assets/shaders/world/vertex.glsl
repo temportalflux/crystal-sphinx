@@ -9,6 +9,7 @@ vec3 CHUNK_SIZE = vec3(16.0, 16.0, 16.0);
 layout(set = 0, binding = 0) uniform CameraUniform {
 	mat4 view;
 	mat4 proj;
+	mat4 inv_rotation;
 	vec3 posOfCurrentChunk;
 } camera;
 

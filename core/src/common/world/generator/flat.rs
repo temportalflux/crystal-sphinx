@@ -55,7 +55,7 @@ impl Flat {
 		use rand::prelude::*;
 		let mut rng = rand::thread_rng();
 		let mut chunk = Chunk::new(coordinate);
-		
+
 		if let Some(layers) = self.layers.get(&coordinate.y) {
 			for y in 0..chunk::SIZE_I.y {
 				if let Some(&block_id) = layers.get(&y) {
@@ -75,7 +75,7 @@ impl Flat {
 				}
 			}
 		}
-		
+
 		if coordinate == Point3::origin() {
 			chunk.set_block_id(Point3::new(8, 10, 8), Some(self.debug_id));
 		}

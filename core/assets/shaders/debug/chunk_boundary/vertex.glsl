@@ -9,12 +9,17 @@ vec3 CHUNK_SIZE = vec3(16.0, 16.0, 16.0);
 layout(set = 0, binding = 0) uniform CameraUniform {
 	mat4 view;
 	mat4 proj;
+	mat4 inv_rotation;
 	vec3 posOfCurrentChunk;
 } camera;
 
+// Model attributes
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec4 color;
 layout(location = 2) in vec4 flags;
+
+// Instance attributes
+layout(location = 3) in mat4 model_matrix; // slots [3,7)
 
 layout(location = 0) out vec4 fragColor;
 
@@ -26,6 +31,14 @@ void main()
 {
 	// This is the vertex position shifted out of the camera's chunk and into world space
 	//vec3 pos_wrt_rootChunk = position + ((vec3(0, 0, 0) - camera.posOfCurrentChunk) * CHUNK_SIZE);
-	gl_Position = camera.proj * camera.view * vec4(position, 1.0);
+	vec4 pos_v4 = vec4(position, 1.0);
+	vec4 pos_in_camera_space = lerp(
+		// Exists in world space, apply transforms: model->world, then world->camera
+		camera.view * model_matrix * pos_v4,
+		// Exists in camera space, apply transforms: inverse camera rotation, then model->camera
+		model_matrix * (camera.inv_rotation * pos_v4),
+		flags.x
+	);
+	gl_Position = camera.proj * pos_in_camera_space;
 	fragColor = color;
 }

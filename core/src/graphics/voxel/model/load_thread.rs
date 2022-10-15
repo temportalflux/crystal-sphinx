@@ -115,9 +115,11 @@ pub fn load_models(
 				for texture_id in entry.texture_ids().iter() {
 					if let Some(texture) = textures.get(&texture_id) {
 						texture_map.insert(texture_id, texture);
-					}
-					else {
-						log::error!(target: LOG, "Failed to load texture {texture_id} for block {block_id}");
+					} else {
+						log::error!(
+							target: LOG,
+							"Failed to load texture {texture_id} for block {block_id}"
+						);
 					}
 				}
 			}
