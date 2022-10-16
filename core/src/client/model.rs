@@ -9,6 +9,8 @@ pub mod blender;
 mod gather_entities_to_render;
 pub use gather_entities_to_render::*;
 pub mod instance;
+mod player_model;
+pub use player_model::*;
 pub mod texture;
 
 #[derive(Clone)]

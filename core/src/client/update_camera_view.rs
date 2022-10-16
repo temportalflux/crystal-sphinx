@@ -1,3 +1,4 @@
+use super::model::PlayerModel;
 use crate::{
 	common::account,
 	entity::{self, component},
@@ -5,8 +6,11 @@ use crate::{
 use engine::{input, Engine, EngineSystem};
 use std::sync::{Arc, RwLock, Weak};
 
-type QueryBundle<'c> =
-	hecs::PreparedQuery<(&'c component::OwnedByAccount, &'c mut component::Camera)>;
+type QueryBundle<'c> = hecs::PreparedQuery<(
+	&'c component::OwnedByAccount,
+	&'c mut component::Camera,
+	&'c mut PlayerModel,
+)>;
 
 pub struct UpdateCameraView {
 	world: Weak<RwLock<entity::World>>,
@@ -58,12 +62,14 @@ impl EngineSystem for UpdateCameraView {
 		};
 		let world = arc_world.read().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (_entity, (entity_user, camera)) in query_bundle.query(&world).iter() {
+		for (_entity, (entity_user, camera, model)) in query_bundle.query(&world).iter() {
 			// Only control the entity which is owned by the local player
 			if *entity_user.id() != self.account_id {
 				continue;
 			}
-			camera.set_view(camera.view().next());
+			let next_point_of_view = camera.view().next();
+			camera.set_view(next_point_of_view);
+			model.set_perspective(next_point_of_view.perspective());
 		}
 	}
 }

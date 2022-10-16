@@ -214,12 +214,13 @@ impl Operation for RenderModel {
 
 			let mut bindings = Vec::with_capacity(instance_ids.len());
 			for (
-				instance_idx,
+				_entity,
 				DescriptorId {
 					model_id,
 					texture_id,
 				},
-			) in instance_ids.into_iter().enumerate()
+				instance_idx,
+			) in instance_ids.into_iter()
 			{
 				let (model, index_start, vertex_offset) = match self.model_cache.get(&model_id) {
 					Some(entry) => entry,

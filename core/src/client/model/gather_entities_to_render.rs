@@ -1,21 +1,22 @@
 use crate::{
 	client::model::{
+		blender,
 		instance::{self, Instance},
-		texture,
+		texture, PlayerModel,
 	},
 	entity::{self, component},
 };
 use engine::{asset, Engine, EngineSystem};
+use serde::{Serialize, Deserialize};
 use std::sync::{Arc, Mutex, RwLock, Weak};
-
-use super::blender;
 
 static LOG: &'static str = "subsystem:GatherEntitiesToRender";
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c component::physics::linear::Position,
 	&'c component::Orientation,
-	&'c blender::Component,
+	Option<&'c blender::Component>,
+	Option<&'c PlayerModel>,
 )>;
 
 pub struct GatherEntitiesToRender {
@@ -58,38 +59,48 @@ impl EngineSystem for GatherEntitiesToRender {
 		};
 		let texture_cache = self.texture_cache.upgrade();
 
-		let mut instances = Vec::new();
 		let mut entities = Vec::new();
+		let mut active_textures = Vec::new();
 
 		let world = arc_world.read().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (_entity, (position, orientation, presentation)) in query_bundle.query(&world).iter() {
-			let descriptor_id = DescriptorId {
-				model_id: presentation.model().clone(),
-				texture_id: presentation.texture().clone(),
+		for (entity, (position, orientation, basic_model, player_model)) in
+			query_bundle.query(&world).iter()
+		{
+			let instance = Instance::builder()
+				.with_chunk(*position.chunk())
+				.with_offset(*position.offset())
+				//.with_orientation(*orientation.orientation())
+				.build();
+
+			let descriptor_id = match (basic_model, player_model) {
+				(Some(presentation), None) => presentation.descriptor().clone(),
+				(None, Some(presentation)) => presentation.active_model().clone(),
+				_ => continue,
 			};
-			instances.push(
-				Instance::builder()
-					.with_chunk(*position.chunk())
-					.with_offset(*position.offset())
-					//.with_orientation(*orientation.orientation())
-					.build(),
-			);
-			if let Some(arctex) = &texture_cache {
-				if let Ok(mut cache) = arctex.lock() {
-					cache.mark_required(&descriptor_id.texture_id);
-				}
-			}
-			entities.push(descriptor_id);
+
+			active_textures.push(descriptor_id.texture_id.clone());
+			entities.push((entity, descriptor_id, instance));
 		}
 
+		if !active_textures.is_empty() {
+			if let Some(arctex) = &texture_cache {
+				if let Ok(mut cache) = arctex.lock() {
+					for texture_id in active_textures.into_iter() {
+						cache.mark_required(&texture_id);
+					}
+				}
+			}
+		}
+
+		// TODO: This is EXTREMELY inefficient and causes every frame to reupload the entity instance buffer.
 		if let Ok(mut buffer) = instance_buffer.write() {
-			buffer.set_pending(entities, instances);
+			buffer.set_pending(entities);
 		}; // semi-colon here drops the `buffer` guard
 	}
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DescriptorId {
 	pub model_id: asset::Id,
 	pub texture_id: asset::Id,

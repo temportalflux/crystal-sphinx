@@ -4,6 +4,7 @@ use engine::{
 	math::nalgebra::{UnitQuaternion, Vector3},
 	world,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy)]
 pub struct Camera {
@@ -68,6 +69,12 @@ pub enum CameraView {
 	ThirdPersonFront,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum Perspective {
+	FirstPerson,
+	ThirdPerson,
+}
+
 impl CameraView {
 	pub fn offset(&self) -> Vector3<f32> {
 		match self {
@@ -92,6 +99,13 @@ impl CameraView {
 			Self::FirstPerson => Self::ThirdPersonBack,
 			Self::ThirdPersonBack => Self::ThirdPersonFront,
 			Self::ThirdPersonFront => Self::FirstPerson,
+		}
+	}
+
+	pub fn perspective(&self) -> Perspective {
+		match self {
+			Self::FirstPerson => Perspective::FirstPerson,
+			Self::ThirdPersonBack | Self::ThirdPersonFront => Perspective::ThirdPerson,
 		}
 	}
 }
