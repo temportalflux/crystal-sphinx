@@ -19,7 +19,7 @@ impl Point {
 			let x = stream.read_f32().await?;
 			let y = stream.read_f32().await?;
 			let z = stream.read_f32().await?;
-			Vector3::new(y, z, x)
+			Vector3::new(y, z, -x)
 		};
 
 		let group_count = stream.read_u32().await? as usize;
