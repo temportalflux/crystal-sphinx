@@ -54,11 +54,11 @@ impl Client {
 			client::model::PlayerModel::new(
 				DescriptorId {
 					model_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/first_person"),
-					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/skin"),
+					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/default"),
 				},
 				DescriptorId {
 					model_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/default"),
-					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/skin"),
+					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/default"),
 				},
 			)
 		});
