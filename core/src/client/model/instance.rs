@@ -97,8 +97,8 @@ Any mutations to the category slices or data itself must be marked and mutated d
 */
 
 pub struct Buffer {
-	pending: Option<(Vec<DescriptorId>, Vec<Instance>)>,
-	submitted: Vec<DescriptorId>,
+	pending: Option<Vec<(hecs::Entity, DescriptorId, Instance)>>,
+	submitted: Vec<(hecs::Entity, DescriptorId, usize)>,
 	buffer: Arc<buffer::Buffer>,
 }
 
@@ -121,16 +121,15 @@ impl Buffer {
 		})
 	}
 
-	/// This is EXTREMELY inefficient and causes every frame to reupload the entity instance buffer.
-	pub fn set_pending(&mut self, descriptors: Vec<DescriptorId>, instances: Vec<Instance>) {
-		self.pending = Some((descriptors, instances));
+	pub fn set_pending(&mut self, entities: Vec<(hecs::Entity, DescriptorId, Instance)>) {
+		self.pending = Some(entities);
 	}
 
 	pub fn buffer(&self) -> &Arc<buffer::Buffer> {
 		&self.buffer
 	}
 
-	pub fn submitted(&self) -> &Vec<DescriptorId> {
+	pub fn submitted(&self) -> &Vec<(hecs::Entity, DescriptorId, usize)> {
 		&self.submitted
 	}
 
@@ -139,10 +138,17 @@ impl Buffer {
 		context: &impl GpuOpContext,
 		signal_sender: &Sender<Arc<command::Semaphore>>,
 	) -> anyhow::Result<bool> {
-		let (descriptors, instances) = match self.pending.take() {
-			Some(changes) => changes,
-			None => return Ok(false),
-		};
+		let (descriptors, instances): (Vec<(hecs::Entity, DescriptorId, usize)>, Vec<Instance>) =
+			match self.pending.take() {
+				Some(entities) => entities
+					.into_iter()
+					.enumerate()
+					.map(|(idx, (entity, descriptor, instance))| {
+						((entity, descriptor, idx), instance)
+					})
+					.unzip(),
+				None => return Ok(false),
+			};
 
 		let mut ranges = Vec::with_capacity(1);
 

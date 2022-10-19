@@ -1,5 +1,5 @@
 use crate::{
-	client,
+	client::{self, model::DescriptorId},
 	common::account,
 	entity::component::{
 		chunk,
@@ -51,9 +51,15 @@ impl Client {
 		let mut client = Self(builder, false);
 		client.add_opt::<Camera>();
 		client.add_opt_fn(|| {
-			client::model::blender::Component::new(
-				crate::CrystalSphinx::get_asset_id("entity/humanoid/default"),
-				crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/skin"),
+			client::model::PlayerModel::new(
+				DescriptorId {
+					model_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/first_person"),
+					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/default"),
+				},
+				DescriptorId {
+					model_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/default"),
+					texture_id: crate::CrystalSphinx::get_asset_id("entity/humanoid/textures/default"),
+				},
 			)
 		});
 		client

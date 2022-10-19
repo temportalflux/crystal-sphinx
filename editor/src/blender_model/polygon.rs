@@ -13,7 +13,7 @@ impl Polygon {
 			let x = stream.read_f32().await?;
 			let y = stream.read_f32().await?;
 			let z = stream.read_f32().await?;
-			Vector3::new(x, y, z)
+			Vector3::new(y, z, -x)
 		};
 
 		let index_count = stream.read_u32().await? as usize;
@@ -24,7 +24,9 @@ impl Polygon {
 			let uv = {
 				let x = stream.read_f32().await?;
 				let y = stream.read_f32().await?;
-				Vector2::new(x, y)
+				// Blender uv origin is bottom-left, not top-left.
+				// We need to flip the y coordinate b/c engine uses top-left.
+				Vector2::new(x, 1.0 - y)
 			};
 
 			vertices.push((vertex_index, uv));

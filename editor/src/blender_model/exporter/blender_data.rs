@@ -50,6 +50,9 @@ impl BlenderData {
 		self.into_model()
 	}
 
+	// TODO: There are 2 problems right now.
+	// 1: There is only 1 triangle per face in RenderDoc (converstion of polys into tris might be wonked?)
+	// 2: The up axis for the model is not y-axis (need to swizzle the axes in some way)
 	fn into_model(self) -> anyhow::Result<Model> {
 		// Iterate through all faces/polygons, and cache the references to all the vertices, ensuring we only keep the unique ones.
 		// The indices are saved for later as these are the literal draw order.
@@ -57,9 +60,9 @@ impl BlenderData {
 		let mut indices = Vec::new();
 		for polygon in self.polygons.iter() {
 			for (vertex_index, tex_coord) in polygon.vertices.iter() {
-				indices.push(
-					vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord)) as u32,
-				);
+				let unique_vertex_idx =
+					vertices.get_or_insert((*vertex_index, polygon.normal, *tex_coord));
+				indices.push(unique_vertex_idx as u32);
 			}
 		}
 		// Iterate over the unique polygon orders (vert index, normal, tex coord), and
@@ -104,7 +107,7 @@ impl VertexSet {
 	}
 
 	fn get_or_insert(&mut self, vertex: (usize, Vector3<f32>, Vector2<f32>)) -> usize {
-		match self.0.iter().rev().position(|vert| *vert == vertex) {
+		match self.0.iter().position(|&vert| vert == vertex) {
 			Some(idx) => idx,
 			None => {
 				let idx = self.0.len();

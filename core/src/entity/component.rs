@@ -37,4 +37,5 @@ pub fn register_types() {
 	registry.register::<physics::linear::Position>();
 	registry.register::<physics::linear::Velocity>();
 	registry.register::<crate::client::model::blender::Component>();
+	registry.register::<crate::client::model::PlayerModel>();
 }
