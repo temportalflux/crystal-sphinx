@@ -1,5 +1,5 @@
 use anyhow::Result;
-use engine::math::nalgebra::UnitQuaternion;
+use engine::{math::nalgebra::{UnitQuaternion, Vector3, Unit}, world};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -57,6 +57,10 @@ impl std::fmt::Display for Orientation {
 impl Orientation {
 	pub fn orientation(&self) -> &UnitQuaternion<f32> {
 		&self.0
+	}
+
+	pub fn forward(&self) -> Unit<Vector3<f32>> {
+		self.orientation() * world::global_forward()
 	}
 }
 

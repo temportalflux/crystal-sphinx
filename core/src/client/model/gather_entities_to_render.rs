@@ -6,7 +6,7 @@ use crate::{
 	},
 	entity::{self, component},
 };
-use engine::{asset, Engine, EngineSystem};
+use engine::{asset, Engine, EngineSystem, math::nalgebra::UnitQuaternion, world};
 use serde::{Serialize, Deserialize};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
@@ -67,10 +67,21 @@ impl EngineSystem for GatherEntitiesToRender {
 		for (entity, (position, orientation, basic_model, player_model)) in
 			query_bundle.query(&world).iter()
 		{
+			let forward_xz = {
+				let mut forward = *orientation.forward();
+				// Flatten so the rotation is only around the y-axis, never tilting the body forwards/backwards.
+				forward.y = 0.0;
+				// UnitQuaternion::face_towards uses +z as forward
+				forward.x *= -1.0;
+				forward.z *= -1.0;
+				forward
+			};
+			let body_rotation = UnitQuaternion::face_towards(&forward_xz, &*world::global_up());
+
 			let instance = Instance::builder()
 				.with_chunk(*position.chunk())
 				.with_offset(*position.offset())
-				//.with_orientation(*orientation.orientation())
+				.with_orientation(body_rotation)
 				.build();
 
 			let descriptor_id = match (basic_model, player_model) {
