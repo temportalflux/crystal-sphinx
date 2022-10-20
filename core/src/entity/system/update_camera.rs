@@ -41,17 +41,16 @@ impl EngineSystem for UpdateCamera {
 		let mut query_bundle = QueryBundle::new();
 		let mut result = self.camera.read().unwrap().clone();
 		for (_entity, (position, orientation, camera)) in query_bundle.query(&world).iter() {
-			// WARN: Casting i64 to f32 will result in data loss...
-			// I'll find a way to address this on another day...
-			let chunk = position.chunk();
-			result.chunk_coordinate =
-				Point3::new(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32);
-			result.position = *position.offset();
-			result.orientation = **orientation;
+			result.chunk_coordinate = {
+				// WARN: Casting i64 to f32 will result in data loss...
+				// I'll find a way to address this on another day...
+				let chunk = position.chunk();
+				Point3::new(chunk[0] as f32, chunk[1] as f32, chunk[2] as f32)
+			};
 
-			let camera_offset = result.orientation * camera.view().offset();
-			result.position += camera_offset;
-			//result.orientation = camera.view().orientation() * result.orientation;
+			let isometry = camera.view().get_isometry(orientation.orientation());
+			result.position = *position.offset() + isometry.translation.vector;
+			result.orientation = isometry.rotation;
 
 			result.projection = *camera.projection();
 

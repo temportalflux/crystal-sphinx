@@ -1,5 +1,8 @@
 use anyhow::Result;
-use engine::{math::nalgebra::{UnitQuaternion, Vector3, Unit}, world};
+use engine::{
+	math::nalgebra::{Unit, UnitQuaternion, Vector3},
+	world,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

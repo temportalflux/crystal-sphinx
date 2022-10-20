@@ -1,7 +1,10 @@
 use super::Registration;
 use engine::{
 	graphics::camera::{PerspectiveProjection, Projection},
-	math::nalgebra::{UnitQuaternion, Vector3},
+	math::{
+		self,
+		nalgebra::{Isometry3, UnitQuaternion, Vector3},
+	},
 	world,
 };
 use serde::{Deserialize, Serialize};
@@ -76,20 +79,26 @@ pub enum Perspective {
 }
 
 impl CameraView {
-	pub fn offset(&self) -> Vector3<f32> {
+	/// Return the camera perspective's translation and rotation for a given player orientation.
+	pub fn get_isometry(&self, orientation: &UnitQuaternion<f32>) -> Isometry3<f32> {
+		let eye_offset = Vector3::<f32>::new(0.0, 1.6, 0.0);
+		let third_person_offset = 5.0;
 		match self {
-			Self::FirstPerson => Vector3::new(0.0, 1.6, 0.0),
-			Self::ThirdPersonBack => Vector3::new(0.0, 1.6, 5.0),
-			Self::ThirdPersonFront => Vector3::new(0.0, 1.6, -5.0),
-		}
-	}
-
-	pub fn orientation(&self) -> UnitQuaternion<f32> {
-		match self {
-			Self::FirstPerson => UnitQuaternion::identity(),
-			Self::ThirdPersonBack => UnitQuaternion::identity(),
+			Self::FirstPerson => Isometry3::from_parts(eye_offset.into(), *orientation),
+			Self::ThirdPersonBack => {
+				let player_backward: Vector3<f32> = orientation * -*world::global_forward();
+				Isometry3::from_parts(
+					(eye_offset + (player_backward * third_person_offset)).into(),
+					*orientation,
+				)
+			}
 			Self::ThirdPersonFront => {
-				UnitQuaternion::from_axis_angle(&world::global_up(), std::f32::consts::PI)
+				let player_forward: Vector3<f32> = orientation * *world::global_forward();
+				let rotation = math::face_towards_rh(&-player_forward, &*world::global_up());
+				Isometry3::from_parts(
+					(eye_offset + (player_forward * third_person_offset)).into(),
+					rotation,
+				)
 			}
 		}
 	}

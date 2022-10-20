@@ -2,7 +2,7 @@ use crate::{
 	client::model::DescriptorId,
 	entity::component::{self, debug, Perspective, Registration},
 };
-use engine::{ecs};
+use engine::ecs;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
