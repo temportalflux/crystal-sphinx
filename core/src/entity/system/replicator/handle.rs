@@ -2,15 +2,10 @@ use super::{relevancy, EntityOperation};
 use crate::{
 	client::world::chunk::OperationSender as ClientChunkOperationSender,
 	common::network::replication::{self, entity},
-	entity::component::binary,
+	entity::{component::binary, system::replicator::ChunksByRelevance},
 };
-use engine::math::nalgebra::Point3;
 use socknet::connection::Connection;
-use std::{
-	collections::{HashMap, HashSet},
-	net::SocketAddr,
-	sync::Weak,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Weak};
 
 /// Stateful information about what is relevant to a specific client.
 ///
@@ -24,7 +19,7 @@ pub struct Handle {
 	chunk_relevance: relevancy::Relevance,
 	entity_relevance: relevancy::Relevance,
 	relevancy_log: String,
-	pending_chunks: HashSet<Point3<i64>>,
+	pending_chunks: ChunksByRelevance,
 }
 
 enum UpdateChannel {
@@ -68,7 +63,7 @@ impl Handle {
 			chunk_relevance: relevancy::Relevance::default(),
 			entity_relevance: relevancy::Relevance::default(),
 			relevancy_log,
-			pending_chunks: HashSet::new(),
+			pending_chunks: ChunksByRelevance::new(),
 		}
 	}
 
@@ -118,12 +113,13 @@ impl Handle {
 				use crate::client::world::chunk::Operation;
 				match update {
 					relevancy::WorldUpdate::Relevance(relevance) => {
-						let old_chunk_cuboids = self.chunk_relevance.difference(&relevance);
-						for cuboid in old_chunk_cuboids.into_iter() {
-							let cuboid_coords: HashSet<Point3<i64>> = cuboid.into();
-							for coord in cuboid_coords.into_iter() {
-								let _ = chunk_sender.try_send(Operation::Remove(coord));
-							}
+						let mut chunks_to_remove = ChunksByRelevance::new();
+						chunks_to_remove.insert_cuboids(
+							self.chunk_relevance.difference(&relevance),
+							&self.chunk_relevance,
+						);
+						for coord in chunks_to_remove.into_sorted().into_iter() {
+							let _ = chunk_sender.try_send(Operation::Remove(coord));
 						}
 					}
 					relevancy::WorldUpdate::Chunks(new_chunks) => {
@@ -150,7 +146,11 @@ impl Handle {
 		}
 	}
 
-	pub fn pending_chunks_mut(&mut self) -> &mut HashSet<Point3<i64>> {
+	pub fn pending_chunks(&self) -> &ChunksByRelevance {
+		&self.pending_chunks
+	}
+
+	pub fn pending_chunks_mut(&mut self) -> &mut ChunksByRelevance {
 		&mut self.pending_chunks
 	}
 

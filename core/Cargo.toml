@@ -21,7 +21,7 @@ engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
 # [metrics] for writing runtime information to log file/console
 log = "0.4"
 # [metrics] for getting performance information and rendering via any chosen viewer
-profiling = { version = "1.0", features = ["profile-with-tracy"] }
+profiling = { version = "1.0.7", features = ["profile-with-tracy"] }
 
 # [error] collapsing any error into one result type
 anyhow = "1.0"

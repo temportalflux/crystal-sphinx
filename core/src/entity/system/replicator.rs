@@ -23,13 +23,13 @@ use std::{
 
 static LOG: &'static str = "subsystem:replicator";
 
+mod chunks_by_relevance;
+pub use chunks_by_relevance::*;
 mod handle;
 use handle::*;
-
-pub mod relevancy;
-
 mod instigator;
 use instigator::*;
+pub mod relevancy;
 
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
 pub struct Replicator {
@@ -319,35 +319,22 @@ impl EntityUpdates {
 				profiling::scope!("update-pending");
 
 				// Only keep chunks in the pending list that are still relevant
-				{
-					profiling::scope!("retain-relevant-pending");
-					let pending_chunks = handle.pending_chunks_mut();
-					pending_chunks.retain(|coord| next_relevance.is_relevant(&coord));
-				}
-
-				{
-					profiling::scope!("append-new-pending");
-					let cuboids = next_relevance.difference(&handle.chunk_relevance());
-					let pending_chunks = handle.pending_chunks_mut();
-					for cuboid in cuboids.into_iter() {
-						let cuboid_coords: HashSet<Point3<i64>> = cuboid.into();
-						for coord in cuboid_coords {
-							pending_chunks.insert(coord);
-						}
-					}
-				}
+				let new_cuboids = next_relevance.difference(&handle.chunk_relevance());
+				let pending_chunks = handle.pending_chunks_mut();
+				pending_chunks.retain_and_sort_by(next_relevance);
+				pending_chunks.insert_cuboids(new_cuboids, next_relevance);
 			}
 
 			if Instant::now().duration_since(perf_budget_start) < PERF_BUDGET_MS_PER_CONNECTION {
-				let pending_chunks = handle.pending_chunks_mut();
-				profiling::scope!("send-pending", &format!("count:{}", pending_chunks.len(),));
+				profiling::scope!(
+					"send-pending",
+					&format!("count:{}", handle.pending_chunks().len())
+				);
 
-				let mut chunks_to_process = pending_chunks.drain().collect::<Vec<_>>();
-				let mut still_pending = Vec::new();
 				'process_next_chunk: loop {
 					profiling::scope!("send-pending-chunk");
 
-					let coordinate = match chunks_to_process.pop() {
+					let coordinate = match handle.pending_chunks_mut().pop_front() {
 						Some(coord) => coord,
 						None => break 'process_next_chunk,
 					};
@@ -359,7 +346,12 @@ impl EntityUpdates {
 					} else {
 						// If chunk is not load or we've exceeded our alloted time/amount for this update,
 						// then the chunk needs to go back on the component for the next update cycle.
-						still_pending.push(coordinate);
+						if let Some(idx) = handle
+							.pending_chunks()
+							.find_insertion_point(&coordinate, handle.chunk_relevance())
+						{
+							handle.pending_chunks_mut().insert(idx, coordinate);
+						}
 					}
 
 					if Instant::now().duration_since(perf_budget_start)
@@ -368,9 +360,6 @@ impl EntityUpdates {
 						break 'process_next_chunk;
 					}
 				}
-
-				chunks_to_process.append(&mut still_pending);
-				*pending_chunks = chunks_to_process.into_iter().collect();
 			}
 		}
 		self
