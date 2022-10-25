@@ -113,7 +113,7 @@ impl Handler {
 			.map(|account| account.id());
 		match (
 			&local_account_id,
-			builder.get::<component::OwnedByAccount>(),
+			builder.get::<&component::OwnedByAccount>(),
 		) {
 			// If the account ids match, then this entity is the local player's avatar
 			(Ok(local_id), Some(user)) => *user.id() == *local_id,

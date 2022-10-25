@@ -79,7 +79,7 @@ impl Registration {
 		Self {
 			serialize: Box::new(
 				|e: &hecs::EntityRef<'_>| -> Result<Option<SerializedComponent>> {
-					let data = match e.get::<T>() {
+					let data = match e.get::<&T>() {
 						Some(t_comp) => {
 							profiling::scope!("serialize-component", T::unique_id());
 							t_comp.serialize()

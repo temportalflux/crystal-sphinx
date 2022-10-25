@@ -27,12 +27,12 @@ impl Registration {
 	{
 		Self {
 			fn_clone_into: Box::new(|src: &hecs::EntityBuilder, dst: &mut hecs::EntityBuilder| {
-				dst.add(src.get::<T>().unwrap().clone());
+				dst.add(src.get::<&T>().unwrap().clone());
 			}),
 			fn_on_rep: Box::new(
 				|src: &hecs::EntityBuilder, dst: &hecs::EntityRef, is_locally_owned: bool| {
-					let src_c = src.get::<T>().unwrap();
-					let mut dst_c = dst.get_mut::<T>().unwrap();
+					let src_c = src.get::<&T>().unwrap();
+					let mut dst_c = dst.get::<&mut T>().unwrap();
 					dst_c.on_replication(src_c, is_locally_owned);
 				},
 			),

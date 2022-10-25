@@ -21,7 +21,7 @@ fn parse_pem(pem: String) -> Option<Vec<u8>> {
 		match item.unwrap() {
 			Item::X509Certificate(cert) => return Some(cert),
 			Item::PKCS8Key(key) => return Some(key),
-			Item::RSAKey(_) => {} // no-op
+			_ => {} // no-op
 		}
 	}
 	None

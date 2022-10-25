@@ -67,10 +67,10 @@ impl stream::handler::Receiver for Handler {
 
 			let world = arc_world.write().unwrap();
 			if let Ok(entity_ref) = world.entity(data.server_entity) {
-				if let Some(mut velocity) = entity_ref.get_mut::<linear::Velocity>() {
+				if let Some(mut velocity) = entity_ref.get::<&mut linear::Velocity>() {
 					**velocity = data.velocity;
 				}
-				if let Some(mut orientation) = entity_ref.get_mut::<Orientation>() {
+				if let Some(mut orientation) = entity_ref.get::<&mut Orientation>() {
 					**orientation = data.orientation;
 				}
 			}

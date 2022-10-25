@@ -22,7 +22,7 @@ impl Registration {
 	{
 		Self {
 			render_inspector: Box::new(|e: &hecs::EntityRef<'_>, ui: &mut egui::Ui| {
-				if let Some(component) = e.get::<T>() {
+				if let Some(component) = e.get::<&T>() {
 					(*component).render(ui);
 				}
 			}),
