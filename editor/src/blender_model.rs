@@ -38,7 +38,7 @@ impl EditorOps for BlenderModelEditorOps {
 
 			model.set_compiled(exported_data);
 
-			Ok(rmp_serde::to_vec(&model)?)
+			Ok(rmp_serde::to_vec_named(&model)?)
 		})
 	}
 }

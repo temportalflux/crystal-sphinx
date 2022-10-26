@@ -62,7 +62,7 @@ impl engine::Runtime for Runtime {
 			chain.apply_procedure::<DefaultProcedure>()?.into_inner()
 		};
 
-		let ui = engine::ui::egui::Ui::create(&window, &render_phase)?;
+		let ui = engine::ui::egui::Ui::create(&window, &*event_loop, &render_phase)?;
 		editor::ui::icons::Icon::load_all(ui.clone());
 		if let Ok(mut engine) = engine.write() {
 			engine.add_winit_listener(&ui);

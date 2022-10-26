@@ -125,7 +125,7 @@ impl Cache {
 	) -> anyhow::Result<Arc<image_view::View>> {
 		let image = Arc::new(image::Image::create_gpu(
 			&context.object_allocator()?,
-			Some(name.clone()),
+			name.clone(),
 			flags::format::SRGB_8BIT,
 			structs::Extent3D {
 				width: size.x as u32,
@@ -134,7 +134,7 @@ impl Cache {
 			},
 		)?);
 
-		GpuOperationBuilder::new(image.wrap_name(|v| format!("Create({})", v)), context)?
+		GpuOperationBuilder::new(format!("Create({})", image.name()), context)?
 			.begin()?
 			.format_image_for_write(&image)
 			.stage(&binary[..])?
@@ -145,7 +145,7 @@ impl Cache {
 
 		let view = Arc::new(
 			image_view::View::builder()
-				.with_optname(Some(format!("{}.View", name)))
+				.with_name(format!("{}.View", name))
 				.for_image(image)
 				.with_view_type(flags::ImageViewType::TYPE_2D)
 				.with_range(
@@ -167,7 +167,7 @@ impl Cache {
 		let name = format!("RenderModel.Descriptor({id})");
 		let descriptor_set =
 			self.descriptors
-				.insert(id.clone(), Some(name), chain.persistent_descriptor_pool())?;
+				.insert(id.clone(), name, chain.persistent_descriptor_pool())?;
 
 		Queue::default()
 			.with(Operation::Write(WriteOp {

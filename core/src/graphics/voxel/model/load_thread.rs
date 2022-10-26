@@ -161,7 +161,7 @@ pub fn load_models(
 			let chain = thread_chain.read().unwrap();
 			let max_anisotropy = chain.physical()?.max_sampler_anisotropy();
 			sampler::Builder::default()
-				.with_optname(Some("RenderVoxel.Atlas.Sampler".to_owned()))
+				.with_name("RenderVoxel.Atlas.Sampler".to_owned())
 				.with_magnification(flags::Filter::NEAREST)
 				.with_minification(flags::Filter::NEAREST)
 				.with_address_modes([flags::SamplerAddressMode::CLAMP_TO_EDGE; 3])
@@ -190,7 +190,7 @@ pub fn load_models(
 				// NOTE: This should be the id of the atlas and sampler in their respective caches,
 				// but right now there is only 1 atlas and 1 sampler
 				(0, 0),
-				Some(format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0)),
+				format!("RenderVoxel.Atlas.Descriptor({}, {})", 0, 0),
 				chain.persistent_descriptor_pool(),
 			)?;
 

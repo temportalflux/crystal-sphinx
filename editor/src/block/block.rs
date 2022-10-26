@@ -11,6 +11,10 @@ impl EditorOps for BlockEditorOps {
 	}
 
 	fn compile(_build_path: BuildPath, asset: AnyBox) -> PinFutureResult<Vec<u8>> {
-		Box::pin(async move { Ok(rmp_serde::to_vec(&asset.downcast::<Block>().unwrap())?) })
+		Box::pin(async move {
+			Ok(rmp_serde::to_vec_named(
+				&asset.downcast::<Block>().unwrap(),
+			)?)
+		})
 	}
 }

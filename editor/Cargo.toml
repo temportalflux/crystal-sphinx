@@ -15,7 +15,7 @@ engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
 editor = { path = "../temportal-engine/editor", package = "temportal-engine-editor" }
 log = "0.4.14"
 rmp = "0.8"
-rmp-serde = "0.15"
+rmp-serde = "1.1"
 anyhow = "1.0"
 thiserror = "1.0"
 # [serialization] to binary

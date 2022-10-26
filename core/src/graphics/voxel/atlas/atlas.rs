@@ -188,7 +188,7 @@ impl Builder {
 	) -> Result<Atlas> {
 		let image = Arc::new(image::Image::create_gpu(
 			&context.object_allocator()?,
-			Some(name.clone()),
+			name.clone(),
 			flags::format::SRGB_8BIT,
 			structs::Extent3D {
 				width: self.size.x as u32,
@@ -197,7 +197,7 @@ impl Builder {
 			},
 		)?);
 
-		GpuOperationBuilder::new(image.wrap_name(|v| format!("Create({})", v)), context)?
+		GpuOperationBuilder::new(format!("Create({})", image.name()), context)?
 			.begin()?
 			.format_image_for_write(&image)
 			.stage(&self.as_binary()[..])?
@@ -208,7 +208,7 @@ impl Builder {
 
 		let view = Arc::new(
 			image_view::View::builder()
-				.with_optname(Some(format!("{}.View", name)))
+				.with_name(format!("{}.View", name))
 				.for_image(image)
 				.with_view_type(flags::ImageViewType::TYPE_2D)
 				.with_range(

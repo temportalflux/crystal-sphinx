@@ -78,32 +78,29 @@ impl Cache {
 
 		let (vertex_buffer, index_buffer) = {
 			let vertex_buffer = buffer::Buffer::create_gpu(
-				Some("RenderVoxel.VertexBuffer".to_owned()),
+				"RenderVoxel.VertexBuffer".to_owned(),
 				&context.object_allocator()?,
 				flags::BufferUsage::VERTEX_BUFFER,
 				vbuff_size,
 				None,
 			)?;
 
-			GpuOperationBuilder::new(
-				vertex_buffer.wrap_name(|v| format!("Write({})", v)),
-				context,
-			)?
-			.begin()?
-			.stage(&builder.vertices[..])?
-			.copy_stage_to_buffer(&vertex_buffer)
-			.send_signal_to(signal_sender)?
-			.end()?;
+			GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), context)?
+				.begin()?
+				.stage(&builder.vertices[..])?
+				.copy_stage_to_buffer(&vertex_buffer)
+				.send_signal_to(signal_sender)?
+				.end()?;
 
 			let index_buffer = buffer::Buffer::create_gpu(
-				Some("RenderVoxel.IndexBuffer".to_owned()),
+				"RenderVoxel.IndexBuffer".to_owned(),
 				&context.object_allocator()?,
 				flags::BufferUsage::INDEX_BUFFER,
 				ibuff_size,
 				Some(flags::IndexType::UINT32),
 			)?;
 
-			GpuOperationBuilder::new(index_buffer.wrap_name(|v| format!("Write({})", v)), context)?
+			GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), context)?
 				.begin()?
 				.stage(&builder.indices[..])?
 				.copy_stage_to_buffer(&index_buffer)

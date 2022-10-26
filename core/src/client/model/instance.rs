@@ -2,8 +2,7 @@ use crate::client::model::DescriptorId;
 use engine::{
 	channels::mpsc::Sender,
 	graphics::{
-		alloc::{self, Object},
-		buffer, command, flags, pipeline,
+		alloc, buffer, command, flags, pipeline,
 		types::{Mat4, Vec3},
 		utility::NamedObject,
 		vertex_object, GpuOpContext, GpuOperationBuilder,
@@ -108,7 +107,7 @@ impl Buffer {
 		instance_buffer_size: usize,
 	) -> anyhow::Result<Self> {
 		let buffer = buffer::Buffer::create_gpu(
-			Some(format!("RenderModel.InstanceBuffer")),
+			format!("RenderModel.InstanceBuffer"),
 			allocator,
 			flags::BufferUsage::VERTEX_BUFFER,
 			instance_buffer_size,
@@ -154,11 +153,9 @@ impl Buffer {
 
 		let mut task = {
 			profiling::scope!("prepare-task");
-			let mut task = GpuOperationBuilder::new(
-				self.buffer.wrap_name(|v| format!("Write({})", v)),
-				context,
-			)?
-			.begin()?;
+			let mut task =
+				GpuOperationBuilder::new(format!("Write({})", self.buffer.name()), context)?
+					.begin()?;
 			task.stage_start(self.buffer.size())?;
 			task
 		};

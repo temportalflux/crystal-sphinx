@@ -415,14 +415,14 @@ impl Render {
 		log::trace!(target: ID, "Creating buffers");
 
 		let vertex_buffer = buffer::Buffer::create_gpu(
-			Some(format!("ChunkBoundary.VertexBuffer")),
+			format!("ChunkBoundary.VertexBuffer"),
 			&chain.allocator()?,
 			flags::BufferUsage::VERTEX_BUFFER,
 			vertices.len() * std::mem::size_of::<Vertex>(),
 			None,
 		)?;
 
-		GpuOperationBuilder::new(vertex_buffer.wrap_name(|v| format!("Write({})", v)), chain)?
+		GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), chain)?
 			.begin()?
 			.stage(&vertices[..])?
 			.copy_stage_to_buffer(&vertex_buffer)
@@ -430,14 +430,14 @@ impl Render {
 			.end()?;
 
 		let index_buffer = buffer::Buffer::create_gpu(
-			Some(format!("ChunkBoundary.IndexBuffer")),
+			format!("ChunkBoundary.IndexBuffer"),
 			&chain.allocator()?,
 			flags::BufferUsage::INDEX_BUFFER,
 			indices.len() * std::mem::size_of::<u32>(),
 			Some(flags::IndexType::UINT32),
 		)?;
 
-		GpuOperationBuilder::new(index_buffer.wrap_name(|v| format!("Write({})", v)), chain)?
+		GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), chain)?
 			.begin()?
 			.stage(&indices[..])?
 			.copy_stage_to_buffer(&index_buffer)
@@ -445,22 +445,19 @@ impl Render {
 			.end()?;
 
 		let instance_buffer = buffer::Buffer::create_gpu(
-			Some(format!("ChunkBoundary.InstanceBuffer")),
+			format!("ChunkBoundary.InstanceBuffer"),
 			&chain.allocator()?,
 			flags::BufferUsage::VERTEX_BUFFER,
 			instances.len() * std::mem::size_of::<Instance>(),
 			None,
 		)?;
 
-		GpuOperationBuilder::new(
-			instance_buffer.wrap_name(|v| format!("Write({})", v)),
-			chain,
-		)?
-		.begin()?
-		.stage(&instances[..])?
-		.copy_stage_to_buffer(&instance_buffer)
-		.send_signal_to(chain.signal_sender())?
-		.end()?;
+		GpuOperationBuilder::new(format!("Write({})", instance_buffer.name()), chain)?
+			.begin()?
+			.stage(&instances[..])?
+			.copy_stage_to_buffer(&instance_buffer)
+			.send_signal_to(chain.signal_sender())?
+			.end()?;
 
 		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
 			"ChunkBoundary.Camera",

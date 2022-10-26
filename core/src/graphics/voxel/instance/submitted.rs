@@ -14,7 +14,7 @@ pub struct Description {
 impl Description {
 	pub fn new(allocator: &Arc<alloc::Allocator>, instance_buffer_size: usize) -> Result<Self> {
 		let buffer = Buffer::create_gpu(
-			Some(format!("RenderVoxel.InstanceBuffer")),
+			format!("RenderVoxel.InstanceBuffer"),
 			allocator,
 			flags::BufferUsage::VERTEX_BUFFER,
 			instance_buffer_size,
@@ -42,11 +42,9 @@ impl Description {
 
 		let mut task = {
 			profiling::scope!("prepare-task");
-			let mut task = GpuOperationBuilder::new(
-				self.buffer.wrap_name(|v| format!("Write({})", v)),
-				context,
-			)?
-			.begin()?;
+			let mut task =
+				GpuOperationBuilder::new(format!("Write({})", self.buffer.name()), context)?
+					.begin()?;
 			task.stage_start(total_count * instance_size)?;
 			task
 		};

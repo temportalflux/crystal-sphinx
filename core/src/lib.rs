@@ -137,13 +137,16 @@ impl engine::Runtime for Runtime {
 	}
 
 	fn initialize<'a>(&'a self, engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
+		use anyhow::Context;
 		Box::pin(async move {
 			// Load bundled plugins so they can be used throughout the instance
 			if let Ok(mut manager) = plugin::Manager::write() {
 				manager.load(&self.config);
 			}
 
-			engine::asset::Library::scan_pak_directory().await?;
+			engine::asset::Library::scan_pak_directory()
+				.await
+				.context("scan paks")?;
 			block::Lookup::initialize();
 			entity::component::register_types();
 
@@ -161,7 +164,8 @@ impl engine::Runtime for Runtime {
 					self.app_state.clone(),
 					self.network_storage.clone(),
 					Arc::downgrade(&self.world),
-				)?;
+				)
+				.context("load_dedicated_server")?;
 			}
 
 			log::info!(target: CrystalSphinx::name(), "Initialization finished");
@@ -255,7 +259,11 @@ impl engine::Runtime for Runtime {
 		#[cfg(feature = "debug")]
 		{
 			let command_list = commands::create_list(&self.app_state);
-			let ui = egui::Ui::create(self.window.as_ref().unwrap(), &render_phases.egui)?;
+			let ui = egui::Ui::create(
+				self.window.as_ref().unwrap(),
+				&*event_loop,
+				&render_phases.egui,
+			)?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(&input_user)
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
