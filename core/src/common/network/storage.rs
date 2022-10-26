@@ -154,13 +154,14 @@ impl Storage {
 		self.connection_list.as_ref().unwrap()
 	}
 
-	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) {
+	pub fn start_loading(&self, entity_world: &ArcLockEntityWorld) -> anyhow::Result<()> {
 		if let Some(arc_server) = self.server.as_ref() {
 			if let Ok(mut server) = arc_server.write() {
-				server.start_loading_world();
+				server.start_loading_world()?;
 				server.initialize_systems(&entity_world);
 			}
 		}
+		Ok(())
 	}
 }
 

@@ -144,15 +144,16 @@ impl Storage {
 	}
 
 	#[profiling::function]
-	pub fn start_loading_world(&mut self) {
+	pub fn start_loading_world(&mut self) -> anyhow::Result<()> {
 		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
-		let database = Database::new(Self::world_path(self.root_dir.to_owned()));
+		let database = Database::new(Self::world_path(self.root_dir.to_owned()))?;
 
 		let arc_database = Arc::new(RwLock::new(database));
 		let origin_res = Database::load_origin_chunk(&arc_database);
 		assert!(origin_res.is_ok());
 
 		self.database = Some(arc_database);
+		Ok(())
 	}
 
 	pub fn chunk_cache(&self) -> chunk::cache::ArcLock {

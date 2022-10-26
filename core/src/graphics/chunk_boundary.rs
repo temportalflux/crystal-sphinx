@@ -420,6 +420,7 @@ impl Render {
 			flags::BufferUsage::VERTEX_BUFFER,
 			vertices.len() * std::mem::size_of::<Vertex>(),
 			None,
+			false,
 		)?;
 
 		GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), chain)?
@@ -435,6 +436,7 @@ impl Render {
 			flags::BufferUsage::INDEX_BUFFER,
 			indices.len() * std::mem::size_of::<u32>(),
 			Some(flags::IndexType::UINT32),
+			false,
 		)?;
 
 		GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), chain)?
@@ -450,6 +452,7 @@ impl Render {
 			flags::BufferUsage::VERTEX_BUFFER,
 			instances.len() * std::mem::size_of::<Instance>(),
 			None,
+			false,
 		)?;
 
 		GpuOperationBuilder::new(format!("Write({})", instance_buffer.name()), chain)?

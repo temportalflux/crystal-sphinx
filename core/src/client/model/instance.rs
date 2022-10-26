@@ -112,6 +112,7 @@ impl Buffer {
 			flags::BufferUsage::VERTEX_BUFFER,
 			instance_buffer_size,
 			None,
+			false,
 		)?;
 		Ok(Self {
 			pending: None,

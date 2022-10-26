@@ -83,6 +83,7 @@ impl Cache {
 				flags::BufferUsage::VERTEX_BUFFER,
 				vbuff_size,
 				None,
+				false,
 			)?;
 
 			GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), context)?
@@ -98,6 +99,7 @@ impl Cache {
 				flags::BufferUsage::INDEX_BUFFER,
 				ibuff_size,
 				Some(flags::IndexType::UINT32),
+				false,
 			)?;
 
 			GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), context)?

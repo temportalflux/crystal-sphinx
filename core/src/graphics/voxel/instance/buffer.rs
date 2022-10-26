@@ -1,6 +1,6 @@
 use crate::{
 	client::world::chunk::{Operation, OperationReceiver as ChunkOperationReceiver},
-	common::world::chunk,
+	common::{world::chunk, utility::ThreadHandle},
 	graphics::voxel::{
 		instance::{local, submitted, Instance},
 		model,
@@ -20,7 +20,7 @@ static LOG: &'static str = "voxel-instance-buffer";
 pub struct Buffer {
 	local_integrated_buffer: Arc<Mutex<local::IntegratedBuffer>>,
 	submitted_description: submitted::Description,
-	_thread_handle: Arc<()>,
+	_thread_handle: ThreadHandle,
 }
 
 impl Buffer {
@@ -68,7 +68,7 @@ impl Buffer {
 		let submitted_description = submitted::Description::new(allocator, instance_buffer_size)?;
 
 		let _thread_handle =
-			Self::start_thread(chunk_receiver, Arc::downgrade(&local_integrated_buffer));
+			Self::start_thread(chunk_receiver, Arc::downgrade(&local_integrated_buffer))?;
 
 		Ok(Self {
 			_thread_handle,
@@ -80,10 +80,10 @@ impl Buffer {
 	fn start_thread(
 		chunk_receiver: ChunkOperationReceiver,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
-	) -> Arc<()> {
+	) -> anyhow::Result<ThreadHandle> {
 		let handle = Arc::new(());
 		let weak_handle = Arc::downgrade(&handle);
-		utility::spawn_thread(LOG, move || -> Result<()> {
+		let join_handle = utility::spawn_thread(LOG, move || -> Result<()> {
 			use std::thread::sleep;
 			use std::time::Duration;
 			static LOG: &'static str = "_";
@@ -148,8 +148,8 @@ impl Buffer {
 			}
 			log::info!(target: LOG, "Ending thread");
 			Ok(())
-		});
-		handle
+		})?;
+		Ok(ThreadHandle::new(handle, join_handle))
 	}
 
 	pub fn submitted(&self) -> &submitted::Description {

@@ -2,6 +2,7 @@ use crate::server::world::{
 	chunk::{cache, thread, ticket, Level, Ticket},
 	Settings,
 };
+use crate::common::utility::ThreadHandle;
 use anyhow::Result;
 use engine::math::nalgebra::Point3;
 use std::{
@@ -19,31 +20,31 @@ pub struct Database {
 	chunk_cache: cache::ArcLock,
 	_load_request_sender: Arc<ticket::Sender>,
 	// When this is dropped, the loading thread stops.
-	_chunk_thread_handle: thread::Handle,
+	_chunk_thread_handle: ThreadHandle,
 
 	held_tickets: Vec<Arc<Ticket>>,
 }
 
 impl Database {
-	pub fn new(root_path: PathBuf) -> Self {
+	pub fn new(root_path: PathBuf) -> anyhow::Result<Self> {
 		let settings = Settings::load(&root_path).unwrap();
 
 		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
 
 		let (load_request_sender, load_request_receiver) = engine::channels::mpsc::unbounded();
-		let thread_handle = thread::start(root_path, load_request_receiver, &chunk_cache);
+		let thread_handle = thread::start(root_path, load_request_receiver, &chunk_cache)?;
 
 		let load_request_sender = Arc::new(load_request_sender);
 		*Self::ticket_sender_static() = Some(Arc::downgrade(&load_request_sender));
 
-		Self {
+		Ok(Self {
 			_settings: settings,
 			chunk_cache,
 			_load_request_sender: load_request_sender,
 			_chunk_thread_handle: thread_handle,
 
 			held_tickets: Vec::new(),
-		}
+		})
 	}
 
 	fn ticket_sender_static() -> &'static mut Option<Weak<ticket::Sender>> {

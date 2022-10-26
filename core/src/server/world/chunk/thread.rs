@@ -3,6 +3,7 @@ use crate::server::world::chunk::{
 	ticket::{self, Ticket},
 	Chunk, Level,
 };
+use crate::common::utility::ThreadHandle;
 use anyhow::Result;
 use engine::{math::nalgebra::Point3, utility::spawn_thread};
 use std::{
@@ -13,8 +14,6 @@ use std::{
 
 /// The log category for the chunk loading thread.
 static LOG: &'static str = "chunk-loading";
-/// The handle for the chunk-loading thread. Dropping the handle results in the thread ending.
-pub(crate) type Handle = Arc<()>;
 
 /// State data about the loading thread.
 pub(crate) struct ThreadState {
@@ -49,14 +48,12 @@ pub fn start(
 	root_dir: PathBuf,
 	incoming_requests: ticket::Receiver,
 	cache: &cache::ArcLock,
-) -> Handle {
-	let handle = Handle::new(());
-
+) -> anyhow::Result<ThreadHandle> {
+	let handle = Arc::new(());
 	let weak_handle = Arc::downgrade(&handle);
-
 	let cache = cache.clone();
 	let root_dir = root_dir.clone();
-	spawn_thread(LOG, move || -> Result<()> {
+	let join_handle = spawn_thread(LOG, move || -> Result<()> {
 		let mut thread_state = ThreadState {
 			root_dir: root_dir.clone(),
 			cache: cache.clone(),
@@ -78,9 +75,9 @@ pub fn start(
 		log::info!(target: LOG, "Ending chunk-loading thread");
 
 		Ok(())
-	});
+	})?;
 
-	handle
+	Ok(ThreadHandle::new(handle, join_handle))
 }
 
 impl ThreadState {

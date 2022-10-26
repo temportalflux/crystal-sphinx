@@ -165,7 +165,7 @@ fn load_network(
 		storage.set_connection_list(connection::List::new(
 			endpoint.connection_receiver().clone(),
 		));
-		storage.start_loading(&entity_world.upgrade().unwrap());
+		storage.start_loading(&entity_world.upgrade().unwrap())?;
 	}
 
 	Ok(endpoint)

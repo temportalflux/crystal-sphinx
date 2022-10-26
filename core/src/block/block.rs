@@ -112,7 +112,9 @@ impl Block {
 						if let Some(doc) = node.children() {
 							for texture_node in doc.nodes().iter() {
 								if let Some(entry) = parse_texture_node(&texture_node) {
-									if let Some(side) = Side::try_from(texture_node.name().value()).ok() {
+									if let Some(side) =
+										Side::try_from(texture_node.name().value()).ok()
+									{
 										let faces = side.as_face_set();
 										found_faces.insert_all(faces.clone());
 										self.textures.push((entry, faces));
