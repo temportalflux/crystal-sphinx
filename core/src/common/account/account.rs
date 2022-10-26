@@ -106,27 +106,27 @@ impl DataFile for Account {
 	fn load_from(file_path: &Path) -> Result<Self> {
 		let root = file_path.parent().unwrap().to_owned();
 		let meta_text = std::fs::read_to_string(&file_path)?;
-		let nodes = kdl::parse_document(meta_text)?;
+		let nodes = meta_text.parse::<kdl::KdlDocument>()?;
 		let mut display_name = String::new();
 		let mut key_id = String::new();
 		for node in nodes.into_iter() {
-			match node.name.as_str() {
+			match node.name().value() {
 				"display-name" => {
-					let value = node
-						.values
+					let entry = node
+						.entries()
 						.first()
 						.ok_or(LoadError::MissingValue("display-name", 0))?;
-					match value {
+					match entry.value() {
 						kdl::KdlValue::String(s) => display_name = s.clone(),
 						_ => return Err(LoadError::InvalidType("display-name", 0, "String"))?,
 					}
 				}
 				"key" => {
-					let value = node
-						.values
+					let entry = node
+						.entries()
 						.first()
 						.ok_or(LoadError::MissingValue("key", 0))?;
-					match value {
+					match entry.value() {
 						kdl::KdlValue::String(s) => key_id = s.clone(),
 						_ => return Err(LoadError::InvalidType("key", 0, "String"))?,
 					}

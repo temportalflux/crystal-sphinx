@@ -68,7 +68,7 @@ rmp-serde = "1.1"
 # [serialization] to binary
 bincode = "1.3"
 # [serialization] node-like syntax
-kdl = "3.0"
+kdl = "4.6"
 # [serialization] kdl wrapper for enforcing schemas
 kdl-schema = { path = "../temportal-engine/crates/kdl-schema" }
 

@@ -50,8 +50,11 @@ impl Block {
 	}
 
 	fn set_is_opaque(&mut self, node: &kdl::KdlNode) {
-		self.is_opaque = match node.values.get(0) {
-			Some(kdl::KdlValue::Boolean(b)) => *b,
+		self.is_opaque = match node.get(0) {
+			Some(entry) => match entry.value() {
+				kdl::KdlValue::Bool(b) => *b,
+				_ => false,
+			},
 			_ => true,
 		};
 	}
@@ -78,42 +81,48 @@ impl Block {
 				biome_color: (false, None),
 			};
 
-			for node in node.children.iter() {
-				match node.name.as_str() {
-					"biome_color" => {
-						entry.biome_color.0 = match node.properties.get("enabled") {
-							Some(kdl::KdlValue::Boolean(b)) => *b,
-							_ => false,
-						};
-						entry.biome_color.1 = match node.properties.get("mask") {
-							Some(kdl::KdlValue::String(v)) => value_map_asset_id(Some(&v)),
-							_ => None,
-						};
-						if let Some(id) = &entry.biome_color.1 {
-							entry.all_texture_ids.push(id.clone());
+			if let Some(doc) = node.children() {
+				for node in doc.nodes().iter() {
+					match node.name().value() {
+						"biome_color" => {
+							entry.biome_color.0 = match node.get("enabled").map(|e| e.value()) {
+								Some(kdl::KdlValue::Bool(b)) => *b,
+								_ => false,
+							};
+							entry.biome_color.1 = match node.get("mask").map(|e| e.value()) {
+								Some(kdl::KdlValue::String(v)) => value_map_asset_id(Some(&v)),
+								_ => None,
+							};
+							if let Some(id) = &entry.biome_color.1 {
+								entry.all_texture_ids.push(id.clone());
+							}
 						}
+						_ => {}
 					}
-					_ => {}
 				}
 			}
 
 			Some(entry)
 		}
 
-		for node in node.children.iter() {
-			match node.name.as_str() {
-				"sides" => {
-					for texture_node in node.children.iter() {
-						if let Some(entry) = parse_texture_node(&texture_node) {
-							if let Some(side) = Side::try_from(texture_node.name.as_str()).ok() {
-								let faces = side.as_face_set();
-								found_faces.insert_all(faces.clone());
-								self.textures.push((entry, faces));
+		if let Some(doc) = node.children() {
+			for node in doc.nodes().iter() {
+				match node.name().value() {
+					"sides" => {
+						if let Some(doc) = node.children() {
+							for texture_node in doc.nodes().iter() {
+								if let Some(entry) = parse_texture_node(&texture_node) {
+									if let Some(side) = Side::try_from(texture_node.name().value()).ok() {
+										let faces = side.as_face_set();
+										found_faces.insert_all(faces.clone());
+										self.textures.push((entry, faces));
+									}
+								}
 							}
 						}
 					}
+					_ => {}
 				}
-				_ => {}
 			}
 		}
 
