@@ -33,7 +33,7 @@ futures = "0.3"
 # [async] adv async traits
 futures-util = "0.3"
 # [async] async/await syntax and multithreading
-tokio = { version = "1.15", features = ["full"] }
+tokio = { version = "1.21", features = ["full"] }
 
 # [ui] debug immediate-mode UI
 egui = "0.19"

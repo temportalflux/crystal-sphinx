@@ -1,6 +1,6 @@
 use crate::{
 	client::world::chunk::{Operation, OperationReceiver as ChunkOperationReceiver},
-	common::{world::chunk, utility::ThreadHandle},
+	common::{utility::ThreadHandle, world::chunk},
 	graphics::voxel::{
 		instance::{local, submitted, Instance},
 		model,

@@ -19,9 +19,12 @@ pub struct ThreadHandle {
 }
 impl ThreadHandle {
 	pub fn new(stop_signal: std::sync::Arc<()>, handle: std::thread::JoinHandle<()>) -> Self {
-		Self { stop_signal: Some(stop_signal), join_handle: Some(handle) }
+		Self {
+			stop_signal: Some(stop_signal),
+			join_handle: Some(handle),
+		}
 	}
-	
+
 	pub fn stop(&mut self) {
 		self.stop_signal = None;
 	}

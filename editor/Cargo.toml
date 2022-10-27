@@ -14,6 +14,7 @@ crystal-sphinx = { path = "../core" }
 engine = { path = "../temportal-engine/engine", package = "temportal-engine" }
 editor = { path = "../temportal-engine/editor", package = "temportal-engine-editor" }
 log = "0.4.14"
+egui = { version = "0.19", features = ["default_fonts", "persistence"]}
 rmp = "0.8"
 rmp-serde = "1.1"
 anyhow = "1.0"
@@ -24,7 +25,7 @@ bytes = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 regex = "1.5"
 # [async] async/await syntax and multithreading
-tokio = { version = "1.15", features = ["full"] }
+tokio = { version = "1.21", features = ["full"] }
 # [async] base async traits
 futures = "0.3"
 # [async] adv async traits

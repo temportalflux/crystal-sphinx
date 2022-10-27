@@ -1,8 +1,8 @@
+use crate::common::utility::ThreadHandle;
 use crate::server::world::{
 	chunk::{cache, thread, ticket, Level, Ticket},
 	Settings,
 };
-use crate::common::utility::ThreadHandle;
 use anyhow::Result;
 use engine::math::nalgebra::Point3;
 use std::{
