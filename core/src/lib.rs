@@ -156,7 +156,9 @@ impl engine::Runtime for Runtime {
 				// Both clients and servers run the physics simulation.
 				// The server will broadcast authoritative values (via components marked as `Replicatable`),
 				// and clients will tell the server of the changes to the entities they own via TBD.
-				engine.add_system(entity::system::Physics::new(&self.world).arclocked());
+				engine.add_system(common::physics::SimplePhysics::new(&self.world).arclocked());
+				// TODO: This should only be present while a session is active (e.g. in a world)
+				engine.add_system(common::physics::Physics::new().arclocked());
 			}
 
 			if self.app_mode == mode::Kind::Server {

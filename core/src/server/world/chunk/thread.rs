@@ -1,9 +1,9 @@
+use crate::common::utility::ThreadHandle;
 use crate::server::world::chunk::{
 	self, cache,
 	ticket::{self, Ticket},
 	Chunk, Level,
 };
-use crate::common::utility::ThreadHandle;
 use anyhow::Result;
 use engine::{math::nalgebra::Point3, utility::spawn_thread};
 use std::{
