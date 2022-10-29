@@ -1,5 +1,6 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
+	client::graphics::line,
 	common::world::chunk,
 	graphics::voxel::camera,
 	CrystalSphinx,
@@ -10,12 +11,11 @@ use engine::{
 	graphics::{
 		self, buffer,
 		chain::{operation::RequiresRecording, Chain, Operation},
-		command, flags, pipeline,
+		command, flags,
 		procedure::Phase,
 		resource::ColorBuffer,
-		types::{Mat4, Vec3, Vec4},
 		utility::NamedObject,
-		vertex_object, Drawable, GpuOperationBuilder, Uniform,
+		Drawable, GpuOperationBuilder, Uniform,
 	},
 	input,
 	math::nalgebra::{Matrix4, Point3, Translation3, Vector4},
@@ -29,33 +29,6 @@ use std::{
 
 static ID: &'static str = "render-chunk-boundary";
 
-struct LineSegment {
-	pos1: Point3<f32>,
-	pos2: Point3<f32>,
-	color: Vector4<f32>,
-	flags: Vector4<f32>,
-}
-impl From<((f32, f32, f32), (f32, f32, f32), Vector4<f32>)> for LineSegment {
-	fn from(params: ((f32, f32, f32), (f32, f32, f32), Vector4<f32>)) -> Self {
-		Self {
-			pos1: Point3::new(params.0 .0, params.0 .1, params.0 .2),
-			pos2: Point3::new(params.1 .0, params.1 .1, params.1 .2),
-			color: params.2,
-			flags: Vector4::default(),
-		}
-	}
-}
-impl From<((f32, f32, f32), (f32, f32, f32), Vector4<f32>, Vector4<f32>)> for LineSegment {
-	fn from(params: ((f32, f32, f32), (f32, f32, f32), Vector4<f32>, Vector4<f32>)) -> Self {
-		Self {
-			pos1: Point3::new(params.0 .0, params.0 .1, params.0 .2),
-			pos2: Point3::new(params.1 .0, params.1 .1, params.1 .2),
-			color: params.2,
-			flags: params.3,
-		}
-	}
-}
-
 struct BoundaryControl {
 	kind: Type,
 	weak_action: input::action::WeakLockState,
@@ -68,6 +41,7 @@ enum Type {
 	FaceGrid,
 }
 impl BoundaryControl {
+	#[profiling::function]
 	fn create(kind: Type, weak_action: input::action::WeakLockState) -> Arc<RwLock<Self>> {
 		log::trace!(target: ID, "Creating action listener");
 		let control = Arc::new(RwLock::new(Self { kind, weak_action }));
@@ -87,32 +61,29 @@ impl Type {
 		}
 	}
 
-	fn line_segments(&self) -> Vec<LineSegment> {
+	fn line_segments(&self) -> line::Segments {
 		let w_x = chunk::SIZE.x;
 		let h_y = chunk::SIZE.y;
 		let l_z = chunk::SIZE.z;
 		let bound_h = [0.0, h_y];
-		let red = Vector4::new(1.0, 0.0, 0.0, 1.0);
-		let green = Vector4::new(0.0, 1.0, 0.0, 1.0);
-		let blue = Vector4::new(0.0, 0.0, 1.0, 1.0);
-		let mut segments = Vec::new();
+		let mut segments = line::Segments::new();
 		match self {
 			Self::None => {}
 			Self::Column => {
 				let line_height = /*16 chunks*/ 16.0 * chunk::SIZE[1];
 				let h1 = line_height / 2.0 * -1.0;
 				let h2 = line_height / 2.0;
-				segments.push(((0.0, h1, 0.0), (0.0, h2, 0.0), green).into());
-				segments.push(((w_x, h1, 0.0), (w_x, h2, 0.0), green).into());
-				segments.push(((w_x, h1, l_z), (w_x, h2, l_z), green).into());
-				segments.push(((0.0, h1, l_z), (0.0, h2, l_z), green).into());
+				segments.push(((0.0, h1, 0.0), (0.0, h2, 0.0)).into());
+				segments.push(((w_x, h1, 0.0), (w_x, h2, 0.0)).into());
+				segments.push(((w_x, h1, l_z), (w_x, h2, l_z)).into());
+				segments.push(((0.0, h1, l_z), (0.0, h2, l_z)).into());
 			}
 			Self::Cube => {
 				for &y in bound_h.iter() {
-					segments.push(((0.0, y, 0.0), (w_x, y, 0.0), red).into());
-					segments.push(((w_x, y, 0.0), (w_x, y, l_z), red).into());
-					segments.push(((0.0, y, 0.0), (0.0, y, l_z), red).into());
-					segments.push(((0.0, y, l_z), (w_x, y, l_z), red).into());
+					segments.push(((0.0, y, 0.0), (w_x, y, 0.0)).into());
+					segments.push(((w_x, y, 0.0), (w_x, y, l_z)).into());
+					segments.push(((0.0, y, 0.0), (0.0, y, l_z)).into());
+					segments.push(((0.0, y, l_z), (w_x, y, l_z)).into());
 				}
 			}
 			Self::FaceGrid => {
@@ -125,28 +96,28 @@ impl Type {
 				// Y-Faces (Up/Down)
 				for &y in bound_h.iter() {
 					for x in inner_w.clone() {
-						segments.push(((x, y, 0.0), (x, y, l_z), blue).into());
+						segments.push(((x, y, 0.0), (x, y, l_z)).into());
 					}
 					for z in inner_l.clone() {
-						segments.push(((0.0, y, z), (w_x, y, z), blue).into());
+						segments.push(((0.0, y, z), (w_x, y, z)).into());
 					}
 				}
 				// Z-Faces (Back/Front)
 				for &z in bound_l.iter() {
 					for x in inner_w.clone() {
-						segments.push(((x, 0.0, z), (x, h_y, z), blue).into());
+						segments.push(((x, 0.0, z), (x, h_y, z)).into());
 					}
 					for y in inner_h.clone() {
-						segments.push(((0.0, y, z), (w_x, y, z), blue).into());
+						segments.push(((0.0, y, z), (w_x, y, z)).into());
 					}
 				}
 				// X-Faces (Left/Right)
 				for &x in bound_w.iter() {
 					for y in inner_h.clone() {
-						segments.push(((x, y, 0.0), (x, y, l_z), blue).into());
+						segments.push(((x, y, 0.0), (x, y, l_z)).into());
 					}
 					for z in inner_l.clone() {
-						segments.push(((x, 0.0, z), (x, h_y, z), blue).into());
+						segments.push(((x, 0.0, z), (x, h_y, z)).into());
 					}
 				}
 			}
@@ -172,47 +143,6 @@ impl EngineSystem for BoundaryControl {
 	}
 }
 
-#[vertex_object]
-#[derive(Debug, Default, Clone)]
-pub struct Vertex {
-	#[vertex_attribute([R, G, B], Bit32, SFloat)]
-	pub position: Vec3,
-
-	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
-	pub color: Vec4,
-
-	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
-	pub flags: Vec4,
-}
-
-#[vertex_object]
-#[derive(Clone, Debug, Default)]
-pub struct Instance {
-	#[vertex_attribute([R, G, B, A], Bit32, SFloat)]
-	#[vertex_span(4)]
-	pub model_matrix: Mat4,
-}
-
-struct Segments(Vec<LineSegment>);
-impl Segments {
-	fn prepare(self) -> (Vec<Vertex>, Vec<u32>) {
-		let mut vertices = Vec::new();
-		let mut indices = Vec::new();
-		for segment in self.0.into_iter() {
-			for pos in [segment.pos1, segment.pos2].iter() {
-				let i = vertices.len() as u32;
-				vertices.push(Vertex {
-					position: (*pos).into(),
-					color: segment.color.into(),
-					flags: segment.flags.into(),
-				});
-				indices.push(i);
-			}
-		}
-		(vertices, indices)
-	}
-}
-
 #[derive(Debug, Hash, Eq, PartialEq)]
 enum RenderType {
 	ChunkBoundary(Type),
@@ -233,7 +163,7 @@ impl RenderType {
 		all
 	}
 
-	fn line_segments(&self) -> Vec<LineSegment> {
+	fn line_segments(&self) -> line::Segments {
 		match self {
 			Self::ChunkBoundary(boundary) => boundary.line_segments(),
 			Self::OrientationGadget => {
@@ -244,20 +174,20 @@ impl RenderType {
 				let start = Point3::<f32>::new(0.0, 0.0, 0.0);
 				let axis_length = 0.01f32;
 
-				let mut segments = Vec::new();
-				segments.push(LineSegment {
+				let mut segments = line::Segments::new();
+				segments.push(line::Segment {
 					pos1: start,
 					pos2: start + (*world::global_right() * axis_length),
 					color: red,
 					flags,
 				});
-				segments.push(LineSegment {
+				segments.push(line::Segment {
 					pos1: start,
 					pos2: start + (*world::global_up() * axis_length),
 					color: green,
 					flags,
 				});
-				segments.push(LineSegment {
+				segments.push(line::Segment {
 					pos1: start,
 					pos2: start + (*world::global_forward() * axis_length),
 					color: blue,
@@ -268,27 +198,38 @@ impl RenderType {
 		}
 	}
 
-	fn instance(&self) -> Instance {
+	fn instance(&self) -> line::Instance {
 		match self {
-			Self::ChunkBoundary(_) => Instance {
+			Self::ChunkBoundary(Type::None) => line::Instance {
+				chunk_coordinate: Point3::origin().into(),
 				model_matrix: Matrix4::identity().into(),
+				color: Vector4::new(1.0, 1.0, 1.0, 1.0).into(),
+			},
+			Self::ChunkBoundary(Type::Column) => line::Instance {
+				chunk_coordinate: Point3::origin().into(),
+				model_matrix: Matrix4::identity().into(),
+				color: Vector4::new(0.0, 1.0, 0.0, 1.0).into(),
+			},
+			Self::ChunkBoundary(Type::Cube) => line::Instance {
+				chunk_coordinate: Point3::origin().into(),
+				model_matrix: Matrix4::identity().into(),
+				color: Vector4::new(1.0, 0.0, 0.0, 1.0).into(),
+			},
+			Self::ChunkBoundary(Type::FaceGrid) => line::Instance {
+				chunk_coordinate: Point3::origin().into(),
+				model_matrix: Matrix4::identity().into(),
+				color: Vector4::new(0.0, 0.0, 1.0, 1.0).into(),
 			},
 			Self::OrientationGadget => {
 				let transform = Translation3::<f32>::new(0.0, 0.0, -0.25);
-				Instance {
+				line::Instance {
+					chunk_coordinate: Point3::origin().into(),
 					model_matrix: transform.to_homogeneous().into(),
+					color: Vector4::new(1.0, 1.0, 1.0, 1.0).into(),
 				}
 			}
 		}
 	}
-}
-
-struct TypeSettings {
-	index_start: usize,
-	index_count: usize,
-	vertex_start: usize,
-	instance_start: usize,
-	instance_count: usize,
 }
 
 pub type ArcLockRender = Arc<RwLock<Render>>;
@@ -297,7 +238,7 @@ pub struct Render {
 
 	control: Arc<RwLock<BoundaryControl>>,
 	recorded_kind: Vec<Type>,
-	type_settings: HashMap<RenderType, TypeSettings>,
+	type_settings: HashMap<RenderType, line::BufferDrawSubset>,
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
 	instance_buffer: Arc<buffer::Buffer>,
@@ -311,63 +252,8 @@ impl Render {
 		CrystalSphinx::get_asset_id("render_pass/subpass/debug")
 	}
 
-	pub fn add_state_listener(
-		app_state: &ArcLockMachine,
-		chain: &Arc<RwLock<Chain>>,
-		phase: Weak<Phase>,
-		camera: &Arc<RwLock<camera::Camera>>,
-		arc_user: &input::ArcLockUser,
-	) {
-		use state::{
-			storage::{Event::*, Storage},
-			State::*,
-			Transition::*,
-			*,
-		};
-
-		let callback_chain = Arc::downgrade(&chain);
-		let callback_camera = Arc::downgrade(&camera);
-		let callback_phase = phase;
-		let callback_action =
-			input::User::get_action_in(&arc_user, crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES)
-				.unwrap();
-		Storage::<ArcLockRender>::default()
-			// On Enter InGame => create Self and hold ownership in `storage`
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
-				profiling::scope!("init-render", ID);
-				log::trace!(target: ID, "Received Enter(InGame) transition");
-				let arc_chain = callback_chain.upgrade().unwrap();
-				let arc_camera = callback_camera.upgrade().unwrap();
-				let arc_phase = callback_phase.upgrade().unwrap();
-				Ok(
-					match Self::create(arc_chain, &arc_phase, arc_camera, callback_action.clone()) {
-						Ok(arclocked) => Some(arclocked),
-						Err(err) => {
-							log::error!(target: ID, "{}", err);
-							None
-						}
-					},
-				)
-			});
-	}
-
-	fn create(
-		chain: Arc<RwLock<Chain>>,
-		phase: &Arc<Phase>,
-		camera: Arc<RwLock<camera::Camera>>,
-		weak_action: input::action::WeakLockState,
-	) -> Result<ArcLockRender> {
-		log::info!(target: ID, "Initializing");
-		let mut chain = chain.write().unwrap();
-		let render_chunks = Self::new(&chain, camera, weak_action)?.arclocked();
-		chain.add_operation(phase, Arc::downgrade(&render_chunks), None)?;
-		Ok(render_chunks)
-	}
-
-	fn new(
+	#[profiling::function]
+	pub fn new(
 		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
 		weak_action: input::action::WeakLockState,
@@ -386,30 +272,31 @@ impl Render {
 		let mut type_settings = HashMap::new();
 		let mut vertices = Vec::new();
 		let mut indices = Vec::new();
-		let mut instances = vec![RenderType::ChunkBoundary(Type::None).instance()];
+		let mut instances = Vec::new();
 		for render_type in RenderType::all().into_iter() {
-			let (mut kind_vertices, mut kind_indices) =
-				Segments(render_type.line_segments()).prepare();
-			let (instance_start, instance_count) = match render_type {
-				RenderType::OrientationGadget => {
-					let start = instances.len();
-					instances.push(render_type.instance());
-					(start, instances.len() - start)
-				}
-				RenderType::ChunkBoundary(_) => (0, 1), // use the identity matrix, first instance
-			};
+			let segments = render_type.line_segments();
+			let instance = render_type.instance();
+
+			let (mut kind_vertices, mut kind_indices) = segments.into_vertices();
+
 			type_settings.insert(
 				render_type,
-				TypeSettings {
-					index_start: indices.len(),
-					index_count: kind_indices.len(),
-					vertex_start: vertices.len(),
-					instance_start,
-					instance_count,
+				line::BufferDrawSubset {
+					model: line::ModelSubset {
+						index_start: indices.len(),
+						index_count: kind_indices.len(),
+						vertex_start: vertices.len(),
+					},
+					instance: line::InstanceSubset {
+						start: instances.len(),
+						count: 1,
+					},
 				},
 			);
+
 			vertices.append(&mut kind_vertices);
 			indices.append(&mut kind_indices);
+			instances.push(instance);
 		}
 
 		log::trace!(target: ID, "Creating buffers");
@@ -418,7 +305,7 @@ impl Render {
 			format!("ChunkBoundary.VertexBuffer"),
 			&chain.allocator()?,
 			flags::BufferUsage::VERTEX_BUFFER,
-			vertices.len() * std::mem::size_of::<Vertex>(),
+			vertices.len() * std::mem::size_of::<line::Vertex>(),
 			None,
 			false,
 		)?;
@@ -450,7 +337,7 @@ impl Render {
 			format!("ChunkBoundary.InstanceBuffer"),
 			&chain.allocator()?,
 			flags::BufferUsage::VERTEX_BUFFER,
-			instances.len() * std::mem::size_of::<Instance>(),
+			instances.len() * std::mem::size_of::<line::Instance>(),
 			None,
 			false,
 		)?;
@@ -462,7 +349,7 @@ impl Render {
 			.send_signal_to(chain.signal_sender())?
 			.end()?;
 
-		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+		let camera_uniform = Uniform::new::<camera::UniformData>(
 			"ChunkBoundary.Camera",
 			&chain.logical()?,
 			&chain.allocator()?,
@@ -486,7 +373,7 @@ impl Render {
 		})
 	}
 
-	fn arclocked(self) -> ArcLockRender {
+	pub fn arclocked(self) -> ArcLockRender {
 		Arc::new(RwLock::new(self))
 	}
 }
@@ -525,8 +412,8 @@ impl Operation for Render {
 			Pipeline::builder()
 				.with_vertex_layout(
 					vertex::Layout::default()
-						.with_object::<Vertex>(0, flags::VertexInputRate::VERTEX)
-						.with_object::<Instance>(1, flags::VertexInputRate::INSTANCE),
+						.with_object::<line::Vertex>(0, flags::VertexInputRate::VERTEX)
+						.with_object::<line::Instance>(1, flags::VertexInputRate::INSTANCE),
 				)
 				.set_viewport_state(Viewport::from(*chain.extent()))
 				.with_topology(
@@ -600,11 +487,11 @@ impl Operation for Render {
 			for render_type in render_types.into_iter() {
 				if let Some(settings) = self.type_settings.get(&render_type) {
 					buffer.draw(
-						settings.index_count,
-						settings.index_start,
-						settings.instance_count,
-						settings.instance_start,
-						settings.vertex_start,
+						settings.model.index_count,
+						settings.model.index_start,
+						settings.instance.count,
+						settings.instance.start,
+						settings.model.vertex_start,
 					);
 				}
 			}

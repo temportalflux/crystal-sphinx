@@ -75,7 +75,7 @@ impl RenderModel {
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/vertex"))?;
 		drawable.add_shader(&CrystalSphinx::get_asset_id("shaders/entity/fragment"))?;
 
-		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+		let camera_uniform = Uniform::new::<camera::UniformData>(
 			"RenderEntity.Camera",
 			&chain.logical()?,
 			&chain.allocator()?,

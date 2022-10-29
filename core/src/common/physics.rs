@@ -1,6 +1,7 @@
 use crate::entity::{self, component, ArcLockEntityWorld};
-use nalgebra::{vector, Vector3};
 use engine::EngineSystem;
+use nalgebra::{vector, Vector3};
+use rand::Rng;
 use rapier3d::prelude::{
 	BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
 	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder,
@@ -64,10 +65,8 @@ pub struct Physics {
 	ccd_solver: CCDSolver,
 	// ----- Object Data -----
 	rigid_bodies: RigidBodySet,
-	colliders: ColliderSet,
+	colliders: Arc<RwLock<ColliderSet>>,
 	duration_since_update: Duration,
-
-	demo_ball_handle: Option<RigidBodyHandle>,
 }
 
 impl Physics {
@@ -85,31 +84,54 @@ impl Physics {
 			ccd_solver: CCDSolver::new(),
 			// ----- Object Data -----
 			rigid_bodies: RigidBodySet::new(),
-			colliders: ColliderSet::new(),
+			colliders: Arc::new(RwLock::new(ColliderSet::new())),
 			duration_since_update: Duration::from_millis(0),
-			demo_ball_handle: None,
 		}
 		.init_demo()
 	}
 
 	fn init_demo(mut self) -> Self {
-		let floor = ColliderBuilder::cuboid(100.0, 0.1, 100.0).build();
-		self.colliders.insert(floor);
+		{
+			let mut colliders = self.colliders.write().unwrap();
 
-		let ball_rb = RigidBodyBuilder::dynamic()
-			.translation(vector![0.0, 10.0, 0.0])
-			.build();
-		let ball_col = ColliderBuilder::ball(0.5).restitution(0.7).build();
-		let ball_handle = self.rigid_bodies.insert(ball_rb);
-		self.colliders
-			.insert_with_parent(ball_col, ball_handle, &mut self.rigid_bodies);
-		self.demo_ball_handle = Some(ball_handle);
+			colliders.insert(
+				ColliderBuilder::cuboid(8.0, 0.5, 8.0)
+					.translation(vector![8.0, 6.0, 8.0])
+					.build(),
+			);
 
+			let mut rng = rand::thread_rng();
+			let balls = vec![
+				(vector![5.0, (rng.gen::<f32>() * 20.0 + 10.0), 8.0], 0.1),
+				(vector![11.0, (rng.gen::<f32>() * 20.0 + 10.0), 8.0], 0.3),
+				(vector![8.0, (rng.gen::<f32>() * 20.0 + 10.0), 8.0], 0.5),
+				(vector![8.0, (rng.gen::<f32>() * 20.0 + 10.0), 5.0], 0.7),
+				(vector![8.0, (rng.gen::<f32>() * 20.0 + 10.0), 11.0], 0.9),
+			];
+			for (position, bounciness) in balls.into_iter() {
+				let ball_rb = RigidBodyBuilder::dynamic()
+					.translation(position)
+					.ccd_enabled(true)
+					.build();
+				let ball_col = ColliderBuilder::ball(0.5).restitution(bounciness).build();
+				let ball_handle = self.rigid_bodies.insert(ball_rb);
+				colliders.insert_with_parent(ball_col, ball_handle, &mut self.rigid_bodies);
+			}
+
+			//let cyl_col = ColliderBuilder::cylinder(0.85, 0.4)
+			//	.translation(vector![5.0, 10.0, 5.0])
+			//	.build();
+			//colliders.insert(cyl_col);
+		}
 		self
 	}
 
 	pub fn arclocked(self) -> Arc<RwLock<Self>> {
 		Arc::new(RwLock::new(self))
+	}
+
+	pub fn colliders(&self) -> &Arc<RwLock<ColliderSet>> {
+		&self.colliders
 	}
 }
 
@@ -133,6 +155,7 @@ impl Physics {
 	fn fixed_update(&mut self) {
 		let physics_hooks = ();
 		let event_handler = ();
+		let mut colliders = self.colliders.write().unwrap();
 		self.physics_pipeline.step(
 			&self.gravity,
 			&self.integration_parameters,
@@ -140,7 +163,7 @@ impl Physics {
 			&mut self.broad_phase,
 			&mut self.narrow_phase,
 			&mut self.rigid_bodies,
-			&mut self.colliders,
+			&mut colliders,
 			&mut self.impulse_joints,
 			&mut self.multibody_joints,
 			&mut self.ccd_solver,
@@ -148,11 +171,13 @@ impl Physics {
 			&event_handler,
 		);
 
+		/*
 		if let Some(handle) = &self.demo_ball_handle {
 			log::debug!(target: "physics",
 				"Ball altitude: {}",
 				self.rigid_bodies[*handle].translation().y
 			);
 		}
+		*/
 	}
 }

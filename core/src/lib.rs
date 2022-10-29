@@ -37,7 +37,7 @@ use engine::{
 };
 use std::{
 	path::PathBuf,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 };
 
 pub mod client;
@@ -68,9 +68,7 @@ pub struct Runtime {
 	config: plugin::Config,
 	app_mode: mode::Kind,
 
-	app_state: Arc<RwLock<app::state::Machine>>,
-	world: entity::ArcLockEntityWorld,
-	network_storage: Arc<RwLock<common::network::Storage>>,
+	context: Arc<RwLock<SystemsContext>>,
 	#[allow(dead_code)]
 	egui_ui: Option<Arc<RwLock<egui::Ui>>>,
 	window: Option<Window>,
@@ -111,9 +109,12 @@ impl Runtime {
 		Self {
 			config,
 			app_mode,
-			app_state,
-			world,
-			network_storage,
+			context: Arc::new(RwLock::new(SystemsContext {
+				app_state,
+				world,
+				network_storage,
+				client: None,
+			})),
 			egui_ui: None,
 			window: None,
 		}
@@ -150,22 +151,19 @@ impl engine::Runtime for Runtime {
 			block::Lookup::initialize();
 			entity::component::register_types();
 
-			if let Ok(mut engine) = engine.write() {
-				engine.add_weak_system(Arc::downgrade(&self.app_state));
+			InGameSystems::add_state_listener(&self.context);
 
-				// Both clients and servers run the physics simulation.
-				// The server will broadcast authoritative values (via components marked as `Replicatable`),
-				// and clients will tell the server of the changes to the entities they own via TBD.
-				engine.add_system(common::physics::SimplePhysics::new(&self.world).arclocked());
-				// TODO: This should only be present while a session is active (e.g. in a world)
-				engine.add_system(common::physics::Physics::new().arclocked());
+			let context = self.context.read().unwrap();
+
+			if let Ok(mut engine) = engine.write() {
+				engine.add_weak_system(Arc::downgrade(&context.app_state));
 			}
 
 			if self.app_mode == mode::Kind::Server {
 				common::network::task::load_dedicated_server(
-					self.app_state.clone(),
-					self.network_storage.clone(),
-					Arc::downgrade(&self.world),
+					context.app_state.clone(),
+					context.network_storage.clone(),
+					Arc::downgrade(&context.world),
 				)
 				.context("load_dedicated_server")?;
 			}
@@ -198,26 +196,6 @@ impl engine::Runtime for Runtime {
 
 		let input_user = input::init();
 
-		common::network::task::add_load_network_listener(
-			&self.app_state,
-			&self.network_storage,
-			&self.world,
-		);
-
-		let weak_world = Arc::downgrade(&self.world);
-		entity::system::PlayerController::add_state_listener(
-			&self.app_state,
-			Arc::downgrade(&self.network_storage),
-			weak_world.clone(),
-			input_user.clone(),
-		);
-
-		let fn_view_world = weak_world.clone();
-		let fn_view_input = input_user.clone();
-		app::store_during(&self.app_state, InGame, move || {
-			client::UpdateCameraView::create(fn_view_world.clone(), &fn_view_input)
-		});
-
 		let graphics_chain = {
 			let window = Window::builder()
 				.with_title("Crystal Sphinx")
@@ -237,30 +215,53 @@ impl engine::Runtime for Runtime {
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
+
+		self.context.write().unwrap().client = Some(ClientSystemsContext {
+			chain: Arc::downgrade(&graphics_chain),
+			render_phases: render_phases.clone(),
+			camera: arc_camera.clone(),
+			input_user: input_user.clone(),
+		});
+
+		let context = self.context.read().unwrap();
+
+		common::network::task::add_load_network_listener(
+			&context.app_state,
+			&context.network_storage,
+			&context.world,
+		);
+
+		entity::system::PlayerController::add_state_listener(
+			&context.app_state,
+			Arc::downgrade(&context.network_storage),
+			Arc::downgrade(&context.world),
+			input_user.clone(),
+		);
+
+		let fn_view_world = Arc::downgrade(&context.world);
+		let fn_view_input = input_user.clone();
+		app::store_during(&context.app_state, InGame, move || {
+			client::UpdateCameraView::create(fn_view_world.clone(), &fn_view_input)
+		});
+
 		graphics::voxel::model::load_models(
-			&self.app_state,
-			Arc::downgrade(&self.network_storage),
+			&context.app_state,
+			Arc::downgrade(&context.network_storage),
 			&graphics_chain,
 			&render_phases.world,
 			&arc_camera,
-			&self.world,
+			&context.world,
 		);
 
-		graphics::chunk_boundary::Render::add_state_listener(
-			&self.app_state,
-			&graphics_chain,
-			Arc::downgrade(&render_phases.debug),
-			&arc_camera,
-			&input_user,
-		);
 		if let Ok(mut engine) = engine.write() {
-			engine
-				.add_system(entity::system::UpdateCamera::new(&self.world, arc_camera).arclocked());
+			engine.add_system(
+				entity::system::UpdateCamera::new(&context.world, arc_camera).arclocked(),
+			);
 		}
 
 		#[cfg(feature = "debug")]
 		{
-			let command_list = commands::create_list(&self.app_state);
+			let command_list = commands::create_list(&context.app_state);
 			let ui = egui::Ui::create(
 				self.window.as_ref().unwrap(),
 				&*event_loop,
@@ -269,7 +270,10 @@ impl engine::Runtime for Runtime {
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(&input_user)
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
-					.with_window("Entity Inspector", debug::EntityInspector::new(&self.world))
+					.with_window(
+						"Entity Inspector",
+						debug::EntityInspector::new(&context.world),
+					)
 					.with_window("Chunk Inspector", debug::ChunkInspector::new()),
 			);
 			if let Ok(mut engine) = engine.write() {
@@ -280,11 +284,11 @@ impl engine::Runtime for Runtime {
 
 		let viewport = ui::AppStateViewport::new().arclocked();
 		// initial UI is added when a callback matching the initial state is added to the app-state-machine
-		ui::AppStateViewport::add_state_listener(&viewport, &self.app_state);
+		ui::AppStateViewport::add_state_listener(&viewport, &context.app_state);
 
 		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
 		{
-			let thread_app_state = self.app_state.clone();
+			let thread_app_state = context.app_state.clone();
 			engine::task::spawn("temp".to_owned(), async move {
 				tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 				thread_app_state
@@ -320,7 +324,7 @@ impl engine::Runtime for Runtime {
 
 	fn on_event_loop_complete(&self) {
 		// Make sure any app-state storages are cleared out before the window is destroyed (to ensure render objects are dropped in the correct order).
-		if let Ok(mut app_state) = self.app_state.write() {
+		if let Ok(mut app_state) = self.context.read().unwrap().app_state.write() {
 			app_state.clear_callbacks();
 		}
 		if let Ok(mut guard) = client::account::Manager::write() {
@@ -371,3 +375,132 @@ let _source = {
 	}
 };
 */
+
+#[derive(Clone)]
+pub struct SystemsContext {
+	pub app_state: Arc<RwLock<app::state::Machine>>,
+	pub world: Arc<RwLock<entity::World>>,
+	pub network_storage: Arc<RwLock<common::network::Storage>>,
+	pub client: Option<ClientSystemsContext>,
+}
+#[derive(Clone)]
+pub struct ClientSystemsContext {
+	pub chain: Weak<RwLock<engine::graphics::Chain>>,
+	pub render_phases: graphics::Phases,
+	pub camera: graphics::voxel::camera::ArcLockCamera,
+	pub input_user: Arc<RwLock<input::User>>,
+}
+impl ClientSystemsContext {
+	pub fn chain(&self) -> Arc<RwLock<engine::graphics::Chain>> {
+		self.chain.upgrade().unwrap()
+	}
+}
+pub struct InGameSystems {
+	#[allow(dead_code)]
+	pub old_physics: Arc<RwLock<common::physics::SimplePhysics>>,
+	pub physics: Arc<RwLock<common::physics::Physics>>,
+}
+impl InGameSystems {
+	pub fn add_state_listener(context: &Arc<RwLock<SystemsContext>>) {
+		use app::state::{
+			storage::{Event::*, Storage},
+			State::*,
+			Transition::*,
+			*,
+		};
+
+		let app_state = context.read().unwrap().app_state.clone();
+		let callback_context = Arc::downgrade(&context);
+		Storage::<(Self, Option<ClientInGameSystems>)>::default()
+			// On Enter InGame => create Self and hold ownership in `storage`
+			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
+			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
+			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
+			.create_callbacks(&app_state, move || {
+				profiling::scope!("init-game-systems");
+				let arc_context = callback_context.upgrade().unwrap();
+				let context = arc_context.read().unwrap();
+
+				// Both clients and servers run the physics simulation.
+				// The server will broadcast authoritative values (via components marked as `Replicatable`),
+				// and clients will tell the server of the changes to the entities they own via TBD.
+				let old_physics = common::physics::SimplePhysics::new(&context.world).arclocked();
+				let physics = common::physics::Physics::new().arclocked();
+				{
+					let mut engine = Engine::get().write().unwrap();
+					engine.add_weak_system(Arc::downgrade(&old_physics));
+					engine.add_weak_system(Arc::downgrade(&physics));
+				}
+
+				let systems = Self {
+					old_physics,
+					physics,
+				};
+
+				let client = if mode::get().contains(mode::Kind::Client) {
+					Some(ClientInGameSystems::new(&context, &systems)?)
+				} else {
+					None
+				};
+
+				Ok(Some((systems, client)))
+			});
+	}
+}
+
+#[allow(dead_code)]
+struct ClientInGameSystems {
+	pub render_chunk_boundaries: Arc<RwLock<graphics::chunk_boundary::Render>>,
+	pub gather_renderable_colliders: Arc<RwLock<client::physics::GatherRenderableColliders>>,
+	pub render_colliders: Arc<RwLock<client::physics::RenderColliders>>,
+}
+impl ClientInGameSystems {
+	#[profiling::function]
+	pub fn new(ctx: &SystemsContext, in_game: &InGameSystems) -> anyhow::Result<Self> {
+		let client_ctx = ctx.client.as_ref().unwrap();
+		let arc_chain = client_ctx.chain.upgrade().unwrap();
+
+		let action_toggle_chunk_boundaries = input::User::get_action_in(
+			&client_ctx.input_user,
+			crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES,
+		);
+		let render_chunk_boundaries = graphics::chunk_boundary::Render::new(
+			&arc_chain.read().unwrap(),
+			client_ctx.camera.clone(),
+			action_toggle_chunk_boundaries.unwrap(),
+		)?
+		.arclocked();
+
+		log::debug!("create collider systems");
+
+		let (gather_renderable_colliders, render_colliders) =
+			client::physics::create_collider_systems(ctx, in_game)?;
+		{
+			let mut engine = Engine::get().write().unwrap();
+			engine.add_weak_system(Arc::downgrade(&gather_renderable_colliders));
+		}
+
+		log::debug!("collider systems created");
+
+		{
+			profiling::scope!("attach chain operations");
+			let mut chain = arc_chain.write().unwrap();
+			chain.add_operation(
+				&client_ctx.render_phases.debug,
+				Arc::downgrade(&render_chunk_boundaries),
+				None,
+			)?;
+			chain.add_operation(
+				&client_ctx.render_phases.debug,
+				Arc::downgrade(&render_colliders),
+				None,
+			)?;
+		}
+
+		Ok(Self {
+			gather_renderable_colliders,
+			render_colliders,
+			render_chunk_boundaries,
+		})
+	}
+}

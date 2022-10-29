@@ -152,7 +152,7 @@ impl RenderVoxel {
 			chunk_receiver,
 		)?;
 
-		let camera_uniform = Uniform::new::<camera::UniformData, &str>(
+		let camera_uniform = Uniform::new::<camera::UniformData>(
 			"RenderVoxel.Camera",
 			&chain.logical()?,
 			&chain.allocator()?,

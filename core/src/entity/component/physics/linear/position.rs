@@ -16,7 +16,7 @@ impl Default for Position {
 		Self {
 			prev_chunk: None,
 			chunk: Point3::new(0, 0, 0),
-			offset: Point3::new(3.5, 0.0, 0.5),
+			offset: Point3::new(7.5, 8.0, 5.5),
 			has_changed: false,
 		}
 	}

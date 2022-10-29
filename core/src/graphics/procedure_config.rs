@@ -86,6 +86,7 @@ impl AttachmentConfig for Attachments {
 	}
 }
 
+#[derive(Clone)]
 pub struct Phases {
 	pub world: Arc<Phase>,
 	pub debug: Arc<Phase>,
