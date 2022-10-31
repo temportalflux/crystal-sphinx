@@ -8,5 +8,3 @@ mod flags;
 pub use flags::*;
 mod instance;
 pub use instance::*;
-mod range_set;
-pub use range_set::*;

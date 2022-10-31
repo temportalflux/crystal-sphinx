@@ -1,9 +1,10 @@
 use crate::{
 	block,
+	common::utility::RangeSet,
 	graphics::voxel::{
 		instance::{
 			category::{self, Category},
-			Instance, RangeSet,
+			Instance,
 		},
 		model, Face,
 	},

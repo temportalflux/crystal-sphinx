@@ -4,6 +4,9 @@ pub use data_file::*;
 mod multi_hash_map;
 pub use multi_hash_map::*;
 
+mod vec_sectioned;
+pub use vec_sectioned::*;
+
 pub fn get_named_arg(name: &str) -> Option<u16> {
 	std::env::args().find_map(|arg| {
 		let prefix = format!("-{}=", name);

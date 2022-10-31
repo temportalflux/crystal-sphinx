@@ -1,10 +1,4 @@
-use crate::{
-	app::state::{self, ArcLockMachine},
-	client::graphics::line,
-	common::world::chunk,
-	graphics::voxel::camera,
-	CrystalSphinx,
-};
+use crate::{client::graphics::line, common::world::chunk, graphics::voxel::camera, CrystalSphinx};
 use anyhow::Result;
 use engine::{
 	asset,
@@ -12,7 +6,6 @@ use engine::{
 		self, buffer,
 		chain::{operation::RequiresRecording, Chain, Operation},
 		command, flags,
-		procedure::Phase,
 		resource::ColorBuffer,
 		utility::NamedObject,
 		Drawable, GpuOperationBuilder, Uniform,
@@ -24,7 +17,7 @@ use engine::{
 use enumset::{EnumSet, EnumSetType};
 use std::{
 	collections::HashMap,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
 
 static ID: &'static str = "render-chunk-boundary";

@@ -1,5 +1,4 @@
 use crate::{
-	app::state::{self, ArcLockMachine},
 	client::graphics::line,
 	common::physics::Physics,
 	graphics::voxel::camera::{self, Camera},
@@ -12,7 +11,6 @@ use engine::{
 		buffer,
 		chain::{operation::RequiresRecording, Operation},
 		command, flags,
-		procedure::Phase,
 		resource::ColorBuffer,
 		utility::NamedObject,
 		Chain, Drawable, GpuOperationBuilder, Uniform,
@@ -20,11 +18,11 @@ use engine::{
 	Application, EngineSystem,
 };
 use multimap::MultiMap;
-use nalgebra::{Affine3, Matrix4, Point3, Similarity3, Vector3, Vector4};
+use nalgebra::{Matrix4, Point3, Vector3, Vector4};
 use rapier3d::prelude::{Collider, ColliderSet, ShapeType};
 use std::{
 	collections::HashMap,
-	sync::{Arc, Mutex, RwLock, Weak},
+	sync::{Arc, Mutex, RwLock},
 	time::Duration,
 };
 

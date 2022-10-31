@@ -4,8 +4,7 @@ use nalgebra::{vector, Vector3};
 use rand::Rng;
 use rapier3d::prelude::{
 	BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
-	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder,
-	RigidBodyHandle, RigidBodySet,
+	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet,
 };
 use std::{
 	sync::{Arc, RwLock, Weak},
