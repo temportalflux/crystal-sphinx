@@ -1339,8 +1339,5 @@ mod test {
 				}
 			);
 		}
-
-		#[test]
-		fn many_remove() {}
 	}
 }
