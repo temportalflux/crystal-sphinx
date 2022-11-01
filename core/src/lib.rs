@@ -425,7 +425,7 @@ impl InGameSystems {
 				// The server will broadcast authoritative values (via components marked as `Replicatable`),
 				// and clients will tell the server of the changes to the entities they own via TBD.
 				let old_physics = common::physics::SimplePhysics::new(&context.world).arclocked();
-				let physics = common::physics::Physics::new().arclocked();
+				let physics = common::physics::Physics::new(&context.world).arclocked();
 				{
 					let mut engine = Engine::get().write().unwrap();
 					engine.add_weak_system(Arc::downgrade(&old_physics));

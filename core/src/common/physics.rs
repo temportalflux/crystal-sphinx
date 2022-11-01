@@ -1,4 +1,6 @@
-use crate::entity::{self, component, ArcLockEntityWorld};
+//! Inspired by https://github.com/leetvr/hotham/blob/d355bb1c996682900eab64d7afb4c8f87a7d48c9/hotham/src/systems/physics.rs
+
+use crate::entity::{self, ArcLockEntityWorld};
 use engine::EngineSystem;
 use nalgebra::{vector, Vector3};
 use rand::Rng;
@@ -13,9 +15,12 @@ use std::{
 };
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
-	&'c mut component::physics::linear::Position,
-	&'c component::physics::linear::Velocity,
+	&'c mut entity::component::physics::linear::Position,
+	&'c entity::component::physics::linear::Velocity,
 )>;
+
+pub mod component;
+mod phase;
 
 pub struct SimplePhysics {
 	world: Weak<RwLock<entity::World>>,
@@ -52,7 +57,7 @@ impl EngineSystem for SimplePhysics {
 	}
 }
 
-pub struct Physics {
+pub struct Context {
 	// ----- System Configuration -----
 	gravity: Vector3<f32>,
 	integration_parameters: IntegrationParameters,
@@ -67,34 +72,44 @@ pub struct Physics {
 	// ----- Object Data -----
 	rigid_bodies: RigidBodySet,
 	colliders: Arc<RwLock<ColliderSet>>,
-	duration_since_update: Duration,
+}
+
+pub struct Physics {
+	world: Weak<RwLock<entity::World>>,
+	context: Context,
+	simulation: phase::StepSimulation,
 }
 
 impl Physics {
-	pub fn new() -> Self {
+	pub fn new(world: &Arc<RwLock<entity::World>>) -> Self {
 		Self {
-			// ----- System Configuration -----
-			gravity: vector![0.0, -9.81, 0.0],
-			integration_parameters: IntegrationParameters::default(),
-			physics_pipeline: PhysicsPipeline::new(),
-			query_pipeline: QueryPipeline::new(),
-			islands: IslandManager::new(),
-			broad_phase: BroadPhase::new(),
-			narrow_phase: NarrowPhase::new(),
-			impulse_joints: ImpulseJointSet::new(),
-			multibody_joints: MultibodyJointSet::new(),
-			ccd_solver: CCDSolver::new(),
-			// ----- Object Data -----
-			rigid_bodies: RigidBodySet::new(),
-			colliders: Arc::new(RwLock::new(ColliderSet::new())),
-			duration_since_update: Duration::from_millis(0),
+			world: Arc::downgrade(world),
+			context: Context {
+				// ----- System Configuration -----
+				gravity: vector![0.0, -9.81, 0.0],
+				integration_parameters: IntegrationParameters::default(),
+				physics_pipeline: PhysicsPipeline::new(),
+				query_pipeline: QueryPipeline::new(),
+				islands: IslandManager::new(),
+				broad_phase: BroadPhase::new(),
+				narrow_phase: NarrowPhase::new(),
+				impulse_joints: ImpulseJointSet::new(),
+				multibody_joints: MultibodyJointSet::new(),
+				ccd_solver: CCDSolver::new(),
+				// ----- Object Data -----
+				rigid_bodies: RigidBodySet::new(),
+				colliders: Arc::new(RwLock::new(ColliderSet::new())),
+			},
+			simulation: phase::StepSimulation {
+				duration_since_update: Duration::from_millis(0),
+			},
 		}
 		.init_demo()
 	}
 
 	fn init_demo(mut self) -> Self {
 		{
-			let mut colliders = self.colliders.write().unwrap();
+			let mut colliders = self.context.colliders.write().unwrap();
 
 			colliders.insert(
 				ColliderBuilder::cuboid(8.0, 0.5, 8.0)
@@ -116,8 +131,8 @@ impl Physics {
 					.ccd_enabled(true)
 					.build();
 				let ball_col = ColliderBuilder::ball(0.5).restitution(bounciness).build();
-				let ball_handle = self.rigid_bodies.insert(ball_rb);
-				colliders.insert_with_parent(ball_col, ball_handle, &mut self.rigid_bodies);
+				let ball_handle = self.context.rigid_bodies.insert(ball_rb);
+				colliders.insert_with_parent(ball_col, ball_handle, &mut self.context.rigid_bodies);
 			}
 
 			//let cyl_col = ColliderBuilder::cylinder(0.85, 0.4)
@@ -133,7 +148,7 @@ impl Physics {
 	}
 
 	pub fn colliders(&self) -> &Arc<RwLock<ColliderSet>> {
-		&self.colliders
+		&self.context.colliders
 	}
 }
 
@@ -141,38 +156,18 @@ impl EngineSystem for Physics {
 	fn update(&mut self, delta_time: Duration, _: bool) {
 		profiling::scope!("subsystem:physics");
 
-		// Collect total delta_time since the last update
-		self.duration_since_update += delta_time;
-		// If enough time has passed to run the next fixed-timestep-update, do so.
-		let integration_dt = Duration::from_secs_f32(self.integration_parameters.dt);
-		while self.duration_since_update >= integration_dt {
-			self.duration_since_update -= integration_dt;
-			self.fixed_update();
-		}
-	}
-}
+		let arc_world = match self.world.upgrade() {
+			Some(arc) => arc,
+			None => return,
+		};
+		let mut world = {
+			profiling::scope!("lock-world");
+			arc_world.write().unwrap()
+		};
 
-impl Physics {
-	#[profiling::function]
-	fn fixed_update(&mut self) {
-		let physics_hooks = ();
-		let event_handler = ();
-		let mut colliders = self.colliders.write().unwrap();
-		self.physics_pipeline.step(
-			&self.gravity,
-			&self.integration_parameters,
-			&mut self.islands,
-			&mut self.broad_phase,
-			&mut self.narrow_phase,
-			&mut self.rigid_bodies,
-			&mut colliders,
-			&mut self.impulse_joints,
-			&mut self.multibody_joints,
-			&mut self.ccd_solver,
-			&physics_hooks,
-			&event_handler,
-		);
-		self.query_pipeline
-			.update(&self.islands, &self.rigid_bodies, &colliders);
+		phase::AddPhysicsObjects::execute(&mut self.context, &mut world);
+		phase::CopyComponentsToPhysics::execute(&mut self.context, &mut world);
+		self.simulation.execute(&mut self.context, delta_time);
+		phase::CopyPhysicsToComponents::execute(&mut self.context, &mut world);
 	}
 }

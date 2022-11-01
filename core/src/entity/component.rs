@@ -36,6 +36,11 @@ pub fn register_types() {
 	registry.register::<OwnedByConnection>();
 	registry.register::<physics::linear::Position>();
 	registry.register::<physics::linear::Velocity>();
+	registry.register::<crate::common::physics::component::RigidBody>();
+	registry.register::<crate::common::physics::component::RigidBodyHandle>();
+	registry.register::<crate::common::physics::component::Collider>();
+	registry.register::<crate::common::physics::component::ColliderHandle>();
+	registry.register::<crate::client::physics::RenderCollider>();
 	registry.register::<crate::client::model::blender::Component>();
 	registry.register::<crate::client::model::PlayerModel>();
 }

@@ -49,7 +49,7 @@ impl std::fmt::Display for Position {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		write!(
 			f,
-			"Position(<{:04}`{:.2}, {:04}`{:.2}, {:04}`{:.2})",
+			"Position(<{:04}`{:.2}, {:04}`{:.2}, {:04}`{:.2}>)",
 			self.chunk[0],
 			self.offset[0],
 			self.chunk[1],

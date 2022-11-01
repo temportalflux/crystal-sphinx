@@ -7,6 +7,7 @@ use crate::{
 use crate::{InGameSystems, SystemsContext};
 use anyhow::Context;
 use engine::{
+	channels::mpsc::{Receiver, Sender},
 	graphics::{
 		buffer,
 		chain::{operation::RequiresRecording, Operation},
@@ -65,6 +66,26 @@ pub fn create_collider_systems(
 	Ok((gather_renderable_colliders, render_colliders))
 }
 
+/// Component-flag indicating if an entity with a physics collider has been registered as a renderable collider.
+pub struct RenderCollider {
+	handle: rapier3d::prelude::ColliderHandle,
+	on_drop: Sender<rapier3d::prelude::ColliderHandle>,
+}
+impl Drop for RenderCollider {
+	fn drop(&mut self) {
+		self.on_drop.send(self.handle).unwrap();
+	}
+}
+impl crate::entity::component::Component for RenderCollider {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::client::physics::RenderCollider"
+	}
+
+	fn display_name() -> &'static str {
+		"RenderCollider"
+	}
+}
+
 /// Analyzes the existing physics collider-set to copy relevant data to the renderer for collision shapes.
 pub struct GatherRenderableColliders {
 	colliders: Arc<RwLock<ColliderSet>>,
@@ -107,7 +128,7 @@ impl EngineSystem for GatherRenderableColliders {
 		}
 
 		// TODO:
-		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no collider-render component.
+		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no RenderCollider component.
 		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
 		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
 		// which will remove instances with a particular collider handle when the drop signal is processed.
