@@ -79,6 +79,13 @@ where
 			}
 		}
 	}
+
+	fn as_unordered(&self) -> HashMap<&K, &V> {
+		self.idx_map
+			.iter()
+			.map(|(key, idx)| (key, self.value(*idx)))
+			.collect()
+	}
 }
 
 /// A linear vec, sorted into subsections by key association.
@@ -133,6 +140,18 @@ where
 		}
 	}
 
+	pub fn with_capacity(capacity: usize) -> Self {
+		Self {
+			sections: OrderedHashMap::new(),
+
+			value_key_to_idx: HashMap::with_capacity(capacity),
+			value_idx_to_key: HashMap::with_capacity(capacity),
+			values: Vec::with_capacity(capacity),
+
+			changed_ranges: RangeSet::default(),
+		}
+	}
+
 	/// Returns the length of the value vec, including all idle/unused values.
 	pub fn len(&self) -> usize {
 		self.values.len()
@@ -146,10 +165,19 @@ where
 		(!self.changed_ranges.is_empty()).then(|| self.changed_ranges.take())
 	}
 
+	pub fn sections(&self) -> HashMap<S, std::ops::Range<usize>> {
+		let sections = self.sections.as_unordered();
+		sections
+			.into_iter()
+			.map(|(key, section)| (key.clone(), section.inner().clone()))
+			.collect()
+	}
+
 	pub fn values(&self) -> &Vec<V> {
 		&self.values
 	}
 
+	#[profiling::function]
 	pub fn insert(&mut self, section_id: &S, key: &K, value: V)
 	where
 		K: Clone,
@@ -166,6 +194,7 @@ where
 		self.change_section(None, Some(section_idx), &key);
 	}
 
+	#[profiling::function]
 	pub fn remove(&mut self, key: &K) -> Option<(S, V)>
 	where
 		S: Clone,
@@ -180,6 +209,7 @@ where
 		value.map(|v| (section_id, v))
 	}
 
+	#[profiling::function]
 	pub fn swap(&mut self, key: &K, new_section: &S)
 	where
 		S: Clone,

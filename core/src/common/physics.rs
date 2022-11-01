@@ -4,7 +4,8 @@ use nalgebra::{vector, Vector3};
 use rand::Rng;
 use rapier3d::prelude::{
 	BroadPhase, CCDSolver, ColliderBuilder, ColliderSet, ImpulseJointSet, IntegrationParameters,
-	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodyBuilder, RigidBodySet,
+	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, QueryPipeline,
+	RigidBodyBuilder, RigidBodySet,
 };
 use std::{
 	sync::{Arc, RwLock, Weak},
@@ -56,6 +57,7 @@ pub struct Physics {
 	gravity: Vector3<f32>,
 	integration_parameters: IntegrationParameters,
 	physics_pipeline: PhysicsPipeline,
+	query_pipeline: QueryPipeline,
 	islands: IslandManager,
 	broad_phase: BroadPhase,
 	narrow_phase: NarrowPhase,
@@ -75,6 +77,7 @@ impl Physics {
 			gravity: vector![0.0, -9.81, 0.0],
 			integration_parameters: IntegrationParameters::default(),
 			physics_pipeline: PhysicsPipeline::new(),
+			query_pipeline: QueryPipeline::new(),
 			islands: IslandManager::new(),
 			broad_phase: BroadPhase::new(),
 			narrow_phase: NarrowPhase::new(),
@@ -169,14 +172,7 @@ impl Physics {
 			&physics_hooks,
 			&event_handler,
 		);
-
-		/*
-		if let Some(handle) = &self.demo_ball_handle {
-			log::debug!(target: "physics",
-				"Ball altitude: {}",
-				self.rigid_bodies[*handle].translation().y
-			);
-		}
-		*/
+		self.query_pipeline
+			.update(&self.islands, &self.rigid_bodies, &colliders);
 	}
 }

@@ -1,5 +1,5 @@
 use crate::{
-	client::graphics::line,
+	client::graphics::{line, SectionedBuffer},
 	common::physics::Physics,
 	graphics::voxel::camera::{self, Camera},
 	CrystalSphinx,
@@ -17,19 +17,18 @@ use engine::{
 	},
 	Application, EngineSystem,
 };
-use multimap::MultiMap;
 use nalgebra::{Matrix4, Point3, Vector3, Vector4};
-use rapier3d::prelude::{Collider, ColliderSet, ShapeType};
+use rapier3d::prelude::{Collider, ColliderHandle, ColliderSet, ShapeType};
 use std::{
 	collections::HashMap,
-	sync::{Arc, Mutex, RwLock},
+	sync::{Arc, RwLock},
 	time::Duration,
 };
 
 static LOG: &'static str = "render-colliders";
 static ID: &'static str = "RenderColliders";
 
-type PendingInstances = Arc<Mutex<Option<MultiMap<ShapeType, line::Instance>>>>;
+type InstanceBuffer = SectionedBuffer<ShapeType, ColliderHandle, line::Instance>;
 
 #[profiling::function]
 pub fn create_collider_systems(
@@ -41,15 +40,24 @@ pub fn create_collider_systems(
 )> {
 	let client_ctx = ctx.client.as_ref().unwrap();
 
-	let pending_instances = Arc::new(Mutex::new(None));
+	let instance_buffer = Arc::new({
+		let allocator = {
+			let arc_chain = client_ctx.chain();
+			let chain = arc_chain.read().unwrap();
+			chain.allocator()?
+		};
+		let name = format!("{ID}.InstanceBuffer");
+		let result = InstanceBuffer::new(name, &allocator, 500);
+		result.context(format!("create {ID} instance buffer"))?
+	});
 
 	let gather_renderable_colliders =
-		GatherRenderableColliders::new(&in_game.physics, pending_instances.clone()).arclocked();
+		GatherRenderableColliders::new(&in_game.physics, instance_buffer.clone()).arclocked();
 
 	let render_colliders = RenderColliders::new(
 		&*client_ctx.chain().read().unwrap(),
 		client_ctx.camera.clone(),
-		pending_instances,
+		instance_buffer,
 	)
 	.context("creating render colliders operation")?
 	.arclocked();
@@ -60,16 +68,16 @@ pub fn create_collider_systems(
 /// Analyzes the existing physics collider-set to copy relevant data to the renderer for collision shapes.
 pub struct GatherRenderableColliders {
 	colliders: Arc<RwLock<ColliderSet>>,
-	pending_instances: PendingInstances,
+	instance_buffer: Arc<InstanceBuffer>,
 }
 
 impl GatherRenderableColliders {
 	#[profiling::function]
-	pub fn new(physics: &Arc<RwLock<Physics>>, pending_instances: PendingInstances) -> Self {
+	pub fn new(physics: &Arc<RwLock<Physics>>, instance_buffer: Arc<InstanceBuffer>) -> Self {
 		let colliders = physics.read().unwrap().colliders().clone();
 		Self {
 			colliders,
-			pending_instances,
+			instance_buffer,
 		}
 	}
 
@@ -89,21 +97,25 @@ impl EngineSystem for GatherRenderableColliders {
 			_ => return,
 		};
 
-		let mut collider_instances = MultiMap::new();
 		for (_handle, collider) in colliders.iter() {
 			profiling::scope!("insert-collider-instance");
 
 			// Gather colliders as render Instances, by shape type. Store in multimap by shapetype
 			// where each instances has the transform data to convert the base shape model into the shape for that collider.
 			// Each instance should have a basic color, unless the model type is not yet supported, in which case ERROR-PINK (r1g0b1) and show aabb bounding box.
-			collider_instances.insert(collider.shape().shape_type(), self.make_instance(collider));
+			//collider_instances.insert(collider.shape().shape_type(), self.make_instance(collider));
 		}
 
-		// Save instances to a buffer, to be written to GPU on next frame (this can later be optimized to only write updates to the buffer,
-		// and also is remarkably similar to the block type instance buffer, in that the entries are grouped by model type).
-		*self.pending_instances.lock().unwrap() = Some(collider_instances);
+		// TODO:
+		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no collider-render component.
+		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
+		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
+		// which will remove instances with a particular collider handle when the drop signal is processed.
+		// UPDATE: To update instances, we can send a signal from the physics system saying "these objects moved this step", and use that information
+		// to gather the set of all entities which have moved. From there, we can regenerate their instances and write those to the buffer.
 	}
 }
+
 impl GatherRenderableColliders {
 	#[profiling::function]
 	fn make_instance(&self, collider: &Collider) -> line::Instance {
@@ -150,11 +162,10 @@ impl GatherRenderableColliders {
 pub struct RenderColliders {
 	drawable: Drawable,
 
-	pending_instances: PendingInstances,
-	models: HashMap<ShapeType, line::BufferDrawSubset>,
+	models: HashMap<ShapeType, line::ModelSubset>,
 	vertex_buffer: Arc<buffer::Buffer>,
 	index_buffer: Arc<buffer::Buffer>,
-	instance_buffer: Arc<buffer::Buffer>,
+	instance_buffer: Arc<InstanceBuffer>,
 	/// Reference to `instance_buffer` for each frame which has used it and may still be in flight.
 	/// This is required so that when instance_buffer needs to expand, the old one isn't
 	/// immediately dropped if its was used in the last `n` frames.
@@ -169,7 +180,7 @@ impl RenderColliders {
 	pub fn new(
 		chain: &Chain,
 		camera: Arc<RwLock<Camera>>,
-		pending_instances: PendingInstances,
+		instance_buffer: Arc<InstanceBuffer>,
 	) -> anyhow::Result<Self> {
 		log::trace!(target: LOG, "Creating renderer");
 
@@ -184,7 +195,6 @@ impl RenderColliders {
 
 		let mut vertices = Vec::<line::Vertex>::new();
 		let mut indices = Vec::<u32>::new();
-		let mut instances = Vec::<line::Instance>::with_capacity(500);
 		let models = Self::construct_shape_models(&mut vertices, &mut indices);
 
 		log::trace!(target: LOG, "Creating buffers");
@@ -223,16 +233,6 @@ impl RenderColliders {
 			.send_signal_to(chain.signal_sender())?
 			.end()?;
 
-		let instance_buffer = buffer::Buffer::create_gpu(
-			format!("{ID}.InstanceBuffer"),
-			&chain.allocator()?,
-			flags::BufferUsage::VERTEX_BUFFER,
-			instances.capacity() * std::mem::size_of::<line::Instance>(),
-			None,
-			false,
-		)
-		.context(format!("create {ID} instance buffer"))?;
-
 		let camera_uniform = Uniform::new::<camera::UniformData>(
 			format!("{ID}.Camera"),
 			&chain.logical()?,
@@ -244,7 +244,6 @@ impl RenderColliders {
 		log::trace!(target: LOG, "Finalizing construction");
 		Ok(Self {
 			drawable,
-			pending_instances,
 			models,
 			vertex_buffer,
 			index_buffer,
@@ -262,17 +261,11 @@ impl RenderColliders {
 	fn construct_shape_models(
 		vertices: &mut Vec<line::Vertex>,
 		indices: &mut Vec<u32>,
-	) -> HashMap<ShapeType, line::BufferDrawSubset> {
+	) -> HashMap<ShapeType, line::ModelSubset> {
 		let mut models = HashMap::new();
 		for shape in Self::all_shapes().into_iter() {
 			let subset = Self::make_subset(vertices, indices, Self::make_segments(shape));
-			models.insert(
-				shape,
-				line::BufferDrawSubset {
-					model: subset,
-					instance: line::InstanceSubset { start: 0, count: 0 },
-				},
-			);
+			models.insert(shape, subset);
 		}
 		models
 	}
@@ -492,7 +485,7 @@ impl Operation for RenderColliders {
 		use engine::graphics::pipeline::{state::*, Pipeline};
 
 		self.instance_buffer_per_frame = (0..chain.view_count())
-			.map(|_| self.instance_buffer.clone())
+			.map(|_| self.instance_buffer.buffer())
 			.collect();
 
 		let sample_count = {
@@ -548,49 +541,20 @@ impl Operation for RenderColliders {
 			.as_uniform_data(&chain.resolution());
 		self.camera_uniform.write_data(frame_image, &data)?;
 
-		let pending = self.pending_instances.lock().unwrap().take();
-		let instance_count = pending.as_ref().map(|by_type| by_type.len()).unwrap_or(0);
-		if instance_count > 0 {
-			let required_size = instance_count * std::mem::size_of::<line::Instance>();
-			// Allocate a new buffer if the current one is not large enough to hold all the instances.
-			match self.instance_buffer.expand(required_size) {
-				Some(Ok(new_buffer)) => {
-					// The new buffer will have the original name, and the now-old buffer will be denoted as such.
-					self.instance_buffer
-						.rename(&format!("{} (<{frame_image})", self.instance_buffer.name()));
-					// Save the new buffer as the primary buffer. The previous outdated buffer will
-					// be dropped when there are no frames using it.
-					self.instance_buffer = Arc::new(new_buffer);
-				}
-				Some(Err(err)) => {
-					*self.pending_instances.lock().unwrap() = pending;
-					return Err(err)?;
-				}
-				None => {}
+		match self
+			.instance_buffer
+			.submit_changes(chain, chain.signal_sender())
+		{
+			Ok(true) => Ok(RequiresRecording::AllFrames),
+			Ok(false) => Ok(RequiresRecording::NotRequired),
+			Err(err) => {
+				log::error!(
+					target: LOG,
+					"Failed to submit instance buffer changes: {err:?}"
+				);
+				Ok(RequiresRecording::NotRequired)
 			}
 		}
-		if let Some(pending) = pending {
-			let mut all_instances = Vec::with_capacity(instance_count);
-			for (shape, mut instances) in pending.into_iter() {
-				let buffer_subset = self.models.get_mut(&shape).unwrap();
-				buffer_subset.instance = line::InstanceSubset {
-					start: all_instances.len(),
-					count: instances.len(),
-				};
-				all_instances.append(&mut instances);
-			}
-
-			GpuOperationBuilder::new(format!("Write({})", self.instance_buffer.name()), chain)?
-				.begin()?
-				.stage(&all_instances[..])?
-				.copy_stage_to_buffer(&self.instance_buffer)
-				.send_signal_to(chain.signal_sender())?
-				.end()?;
-
-			return Ok(RequiresRecording::CurrentFrame);
-		}
-
-		Ok(RequiresRecording::NotRequired)
 	}
 
 	#[profiling::function]
@@ -605,27 +569,32 @@ impl Operation for RenderColliders {
 				vec![&self.camera_uniform.get_set(buffer_index).unwrap()],
 			);
 
-			self.instance_buffer_per_frame[buffer_index] = self.instance_buffer.clone();
+			let (instance_buffer, instance_sections) = self.instance_buffer.submitted();
 			buffer.bind_vertex_buffers(0, vec![&self.vertex_buffer], vec![0]);
-			buffer.bind_vertex_buffers(1, vec![&self.instance_buffer], vec![0]);
+			buffer.bind_vertex_buffers(1, vec![&instance_buffer], vec![0]);
 			buffer.bind_index_buffer(&self.index_buffer, 0);
 
-			for (shape, draw_subset) in self.models.iter() {
-				if draw_subset.instance.count > 0 {
+			for (shape, instance_range) in instance_sections.into_iter() {
+				let model = self.models.get(&shape).unwrap();
+				let instance_count = instance_range.end - instance_range.start;
+				if instance_count > 0 {
 					buffer.begin_label(
 						format!("{shape:?}"),
 						engine::graphics::debug::LABEL_COLOR_DRAW,
 					);
 					buffer.draw(
-						draw_subset.model.index_count,
-						draw_subset.model.index_start,
-						draw_subset.instance.count,
-						draw_subset.instance.start,
-						draw_subset.model.vertex_start,
+						model.index_count,
+						model.index_start,
+						instance_count,
+						instance_range.start,
+						model.vertex_start,
 					);
 					buffer.end_label();
 				}
 			}
+
+			// Ensure the instance buffer is not dropped (due to possible reallocation) if its being used by a frame.
+			self.instance_buffer_per_frame[buffer_index] = instance_buffer;
 		}
 		buffer.end_label();
 

@@ -43,6 +43,10 @@ impl Section {
 		self.count() == 0
 	}
 
+	pub(super) fn inner(&self) -> &Range<usize> {
+		&self.range
+	}
+
 	pub(super) fn apply(&mut self, operation: Operation) {
 		match operation {
 			Operation::Shift(size) => {
