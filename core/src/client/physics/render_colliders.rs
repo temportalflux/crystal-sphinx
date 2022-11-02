@@ -1,13 +1,13 @@
 use crate::{
 	client::graphics::{line, SectionedBuffer},
-	common::physics::Physics,
+	common::physics::{component::ColliderHandle, Physics},
+	entity,
 	graphics::voxel::camera::{self, Camera},
-	CrystalSphinx,
+	CrystalSphinx, InGameSystems, SystemsContext,
 };
-use crate::{InGameSystems, SystemsContext};
 use anyhow::Context;
 use engine::{
-	channels::mpsc::{Receiver, Sender},
+	channels::mpsc::{self, Receiver, Sender},
 	graphics::{
 		buffer,
 		chain::{operation::RequiresRecording, Operation},
@@ -19,17 +19,17 @@ use engine::{
 	Application, EngineSystem,
 };
 use nalgebra::{Matrix4, Point3, Vector3, Vector4};
-use rapier3d::prelude::{Collider, ColliderHandle, ColliderSet, ShapeType};
+use rapier3d::prelude::{ColliderSet, ShapeType};
 use std::{
 	collections::HashMap,
-	sync::{Arc, RwLock},
+	sync::{Arc, RwLock, Weak},
 	time::Duration,
 };
 
 static LOG: &'static str = "render-colliders";
 static ID: &'static str = "RenderColliders";
 
-type InstanceBuffer = SectionedBuffer<ShapeType, ColliderHandle, line::Instance>;
+type InstanceBuffer = SectionedBuffer<ShapeType, rapier3d::prelude::ColliderHandle, line::Instance>;
 
 #[profiling::function]
 pub fn create_collider_systems(
@@ -53,17 +53,19 @@ pub fn create_collider_systems(
 	});
 
 	let gather_renderable_colliders =
-		GatherRenderableColliders::new(&in_game.physics, instance_buffer.clone()).arclocked();
+		GatherRenderableColliders::new(&ctx.world, &in_game.physics, instance_buffer.clone());
 
 	let render_colliders = RenderColliders::new(
 		&*client_ctx.chain().read().unwrap(),
 		client_ctx.camera.clone(),
 		instance_buffer,
 	)
-	.context("creating render colliders operation")?
-	.arclocked();
+	.context("creating render colliders operation")?;
 
-	Ok((gather_renderable_colliders, render_colliders))
+	Ok((
+		gather_renderable_colliders.arclocked(),
+		render_colliders.arclocked(),
+	))
 }
 
 /// Component-flag indicating if an entity with a physics collider has been registered as a renderable collider.
@@ -88,17 +90,29 @@ impl crate::entity::component::Component for RenderCollider {
 
 /// Analyzes the existing physics collider-set to copy relevant data to the renderer for collision shapes.
 pub struct GatherRenderableColliders {
+	world: Weak<RwLock<entity::World>>,
 	colliders: Arc<RwLock<ColliderSet>>,
 	instance_buffer: Arc<InstanceBuffer>,
+	dropped_colliders: (
+		Sender<rapier3d::prelude::ColliderHandle>,
+		Receiver<rapier3d::prelude::ColliderHandle>,
+	),
 }
 
 impl GatherRenderableColliders {
 	#[profiling::function]
-	pub fn new(physics: &Arc<RwLock<Physics>>, instance_buffer: Arc<InstanceBuffer>) -> Self {
+	pub fn new(
+		world: &Arc<RwLock<entity::World>>,
+		physics: &Arc<RwLock<Physics>>,
+		instance_buffer: Arc<InstanceBuffer>,
+	) -> Self {
 		let colliders = physics.read().unwrap().colliders().clone();
+		let dropped_colliders = mpsc::unbounded();
 		Self {
+			world: Arc::downgrade(&world),
 			colliders,
 			instance_buffer,
+			dropped_colliders,
 		}
 	}
 
@@ -112,34 +126,62 @@ impl EngineSystem for GatherRenderableColliders {
 	fn update(&mut self, _delta_time: Duration, _: bool) {
 		profiling::scope!("subsystem:render-colliders::gather");
 
-		// Non-blocking read, if something currently as write access, we skip this update.
-		let colliders = match self.colliders.try_read() {
-			Ok(colliders) => colliders,
-			_ => return,
-		};
-
-		for (_handle, collider) in colliders.iter() {
-			profiling::scope!("insert-collider-instance");
-
-			// Gather colliders as render Instances, by shape type. Store in multimap by shapetype
-			// where each instances has the transform data to convert the base shape model into the shape for that collider.
-			// Each instance should have a basic color, unless the model type is not yet supported, in which case ERROR-PINK (r1g0b1) and show aabb bounding box.
-			//collider_instances.insert(collider.shape().shape_type(), self.make_instance(collider));
-		}
-
-		// TODO:
 		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no RenderCollider component.
 		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
+		self.add_render_components();
+
+		// TODO:
 		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
 		// which will remove instances with a particular collider handle when the drop signal is processed.
 		// UPDATE: To update instances, we can send a signal from the physics system saying "these objects moved this step", and use that information
 		// to gather the set of all entities which have moved. From there, we can regenerate their instances and write those to the buffer.
 	}
 }
+impl GatherRenderableColliders {
+	#[profiling::function]
+	fn add_render_components(&self) {
+		// Non-blocking read, if something currently as write access, we skip this update.
+		let colliders = match self.colliders.try_read() {
+			Ok(colliders) => colliders,
+			_ => return,
+		};
+		let arc_world = match self.world.upgrade() {
+			Some(arc) => arc,
+			_ => return,
+		};
+		let mut world = match arc_world.try_write() {
+			Ok(world) => world,
+			_ => return,
+		};
+
+		let mut transaction = hecs::CommandBuffer::new();
+		for (entity, handle) in world
+			.query::<&ColliderHandle>()
+			.without::<&RenderCollider>()
+			.iter()
+		{
+			let (shape_type, instance) = {
+				let collider = colliders.get(*handle.inner()).unwrap();
+				let shape_type = collider.shared_shape().shape_type();
+				(shape_type, self.make_instance(collider))
+			};
+			self.instance_buffer
+				.insert(handle.inner(), instance, &shape_type);
+			transaction.insert_one(
+				entity,
+				RenderCollider {
+					handle: *handle.inner(),
+					on_drop: self.dropped_colliders.0.clone(),
+				},
+			);
+		}
+		transaction.run_on(&mut world);
+	}
+}
 
 impl GatherRenderableColliders {
 	#[profiling::function]
-	fn make_instance(&self, collider: &Collider) -> line::Instance {
+	fn make_instance(&self, collider: &rapier3d::prelude::Collider) -> line::Instance {
 		let use_model_color = Vector4::new(1.0, 1.0, 1.0, 1.0);
 		let cuboid_base_extents = Vector3::<f32>::new(0.5, 0.5, 0.5);
 

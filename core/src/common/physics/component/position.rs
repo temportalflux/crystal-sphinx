@@ -1,4 +1,7 @@
-use crate::entity::component::{binary, debug, network, Component, Registration};
+use crate::{
+	common::world::Point,
+	entity::component::{binary, debug, network, Component, Registration},
+};
 use anyhow::Result;
 use engine::math::nalgebra::{Point3, Vector3};
 use nalgebra::{Isometry3, Translation3, UnitQuaternion};
@@ -7,8 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
 	prev_chunk: Option<Point3<i64>>,
-	chunk: Point3<i64>,
-	offset: Point3<f32>,
+	point: Point<f32>,
 	has_changed: bool,
 }
 
@@ -16,8 +18,7 @@ impl Default for Position {
 	fn default() -> Self {
 		Self {
 			prev_chunk: None,
-			chunk: Point3::new(0, 0, 0),
-			offset: Point3::new(7.5, 8.0, 5.5),
+			point: Point::new(Point3::origin(), Point3::new(7.5, 8.0, 5.5)),
 			has_changed: false,
 		}
 	}
@@ -48,16 +49,7 @@ impl Component for Position {
 
 impl std::fmt::Display for Position {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(
-			f,
-			"Position(<{:04}`{:.2}, {:04}`{:.2}, {:04}`{:.2}>)",
-			self.chunk[0],
-			self.offset[0],
-			self.chunk[1],
-			self.offset[1],
-			self.chunk[2],
-			self.offset[2]
-		)
+		write!(f, "Position({})", self.point)
 	}
 }
 
@@ -67,17 +59,17 @@ impl Position {
 	}
 
 	pub fn acknowledge_chunk(&mut self) {
-		self.prev_chunk = Some(self.chunk);
+		self.prev_chunk = Some(*self.point.chunk());
 	}
 
 	/// Returns the coordinate of the chunk the entity is in.
 	pub fn chunk(&self) -> &Point3<i64> {
-		&self.chunk
+		self.point.chunk()
 	}
 
 	/// Returns the offset position the entity is at within their chunk.
 	pub fn offset(&self) -> &Point3<f32> {
-		&self.offset
+		self.point.offset()
 	}
 
 	/// Returns the physics translation required to move from origin to the current location.
@@ -102,30 +94,13 @@ impl Position {
 	}
 
 	pub fn set_translation(&mut self, translation: Translation3<f32>) {
-		let world = translation.vector;
+		self.point = Point::from(translation.vector);
 	}
 }
 
 impl std::ops::AddAssign<Vector3<f32>> for Position {
 	fn add_assign(&mut self, rhs: Vector3<f32>) {
-		use crate::common::world::chunk::SIZE;
-		self.offset += rhs;
-		let iter = self
-			.offset
-			.iter_mut()
-			.zip(self.chunk.iter_mut())
-			.zip(SIZE.iter());
-		for ((offset, chunk), &size) in iter {
-			let sign = if *offset < 0.0 {
-				-1.0
-			} else if *offset >= size {
-				1.0
-			} else {
-				0.0
-			};
-			*offset -= sign * size;
-			*chunk += sign as i64;
-		}
+		self.point += rhs;
 		self.has_changed = true;
 	}
 }
@@ -157,13 +132,15 @@ impl binary::Serializable for Position {
 
 impl debug::EguiInformation for Position {
 	fn render(&self, ui: &mut egui::Ui) {
+		let chunk = self.point.chunk();
 		ui.label(format!(
 			"Chunk: <{:04}, {:04}, {:04}>",
-			self.chunk[0], self.chunk[1], self.chunk[2]
+			chunk[0], chunk[1], chunk[2]
 		));
+		let offset = self.point.offset();
 		ui.label(format!(
 			"Offset: <{:.2}, {:.2}, {:.2}>",
-			self.offset[0], self.offset[1], self.offset[2]
+			offset[0], offset[1], offset[2]
 		));
 	}
 }

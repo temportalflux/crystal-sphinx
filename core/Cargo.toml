@@ -78,6 +78,7 @@ nalgebra = { version = "0.31", features = ["serde-serialize"] }
 rapier3d = { version = "0.15", features = [ "simd-stable", "serde-serialize" ] }
 
 num-traits = "0.2"
+approx = "0.5"
 
 # [utility] pseudo/generated randomness
 rand = "0.8"

@@ -27,7 +27,7 @@ impl CopyPhysicsToComponents {
 
 	#[profiling::function]
 	fn copy_rigid_bodies(ctx: &mut Context, world: &mut entity::World) {
-		for (entity, components) in world.query_mut::<RigidBodyBundle>() {
+		for (_entity, components) in world.query_mut::<RigidBodyBundle>() {
 			let RigidBodyBundle {
 				handle,
 				rigid_body,
@@ -50,5 +50,7 @@ impl CopyPhysicsToComponents {
 	}
 
 	#[profiling::function]
-	fn propogate_collisions(ctx: &mut Context, world: &mut entity::World) {}
+	fn propogate_collisions(ctx: &mut Context, world: &mut entity::World) {
+		// TODO: Receive events from physics systems, clear cached collisions on colliders, and update the cached list with the new collisions
+	}
 }

@@ -3,11 +3,10 @@ use crate::{
 		component::{Collider, ColliderHandle, Orientation, Position, RigidBody, RigidBodyHandle},
 		Context,
 	},
-	common::world::chunk,
 	entity,
 };
 use hecs::Query;
-use nalgebra::{Isometry3, Quaternion, UnitQuaternion};
+use nalgebra::Isometry3;
 use rapier3d::prelude::{ActiveEvents, ColliderBuilder, RigidBodyBuilder};
 
 #[derive(Query)]
@@ -86,7 +85,7 @@ impl AddPhysicsObjects {
 				_ => Isometry3::identity(),
 			};
 
-			let mut collider = ColliderBuilder::new(collider.shape().clone())
+			let collider = ColliderBuilder::new(collider.shape().clone())
 				// enable us to fetch the entity id for a collider, providing a two-way mapping.
 				.user_data(entity.to_bits().get() as _)
 				.position(isometry)
@@ -106,7 +105,7 @@ impl AddPhysicsObjects {
 				None => ctx.colliders.write().unwrap().insert(collider),
 			};
 
-			transaction.insert_one(entity, ColliderHandle(handle));
+			transaction.insert_one(entity, ColliderHandle::from(handle));
 		}
 		// Commit the collider components.
 		transaction.run_on(world);

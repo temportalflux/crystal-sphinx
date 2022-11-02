@@ -89,6 +89,7 @@ impl std::fmt::Debug for Section {
 
 #[cfg(test)]
 mod section {
+	use super::super::OperationSize;
 	use super::*;
 
 	#[test]

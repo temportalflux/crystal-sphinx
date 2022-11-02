@@ -78,7 +78,7 @@ impl CopyComponentsToPhysics {
 				position,
 				orientation,
 			} = components;
-			let target = colliders.get_mut(handle.0).unwrap();
+			let target = colliders.get_mut(*handle.inner()).unwrap();
 
 			if rigid_body.is_none() {
 				target.set_position(match (position, orientation) {

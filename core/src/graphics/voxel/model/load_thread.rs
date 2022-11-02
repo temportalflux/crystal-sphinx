@@ -6,6 +6,7 @@ use crate::{
 	graphics::voxel::{atlas, camera, model, RenderVoxel},
 	CrystalSphinx,
 };
+use anyhow::Context;
 use engine::{
 	asset,
 	graphics::{
@@ -266,7 +267,9 @@ pub fn load_models(
 		log::debug!(target: LOG, "Finalizing model cache");
 		let model_cache = {
 			let chain = thread_chain.read().unwrap();
-			let model_cache = cache_builder.build(&*chain, chain.signal_sender())?;
+			let model_cache = cache_builder
+				.build(&*chain, chain.signal_sender())
+				.context("build model cache")?;
 			model_cache
 		};
 
@@ -279,7 +282,8 @@ pub fn load_models(
 				let mut models = HashMap::with_capacity(model_ids.len());
 				// TODO: This should load all of the model assets at once so we aren't constantly opening the zip archive
 				for asset_id in model_ids.into_iter() {
-					let any_box = asset::Loader::load_sync(&asset_id)?;
+					let any_box =
+						asset::Loader::load_sync(&asset_id).context("load blender model asset")?;
 					let model = match any_box.downcast::<blender::Asset>() {
 						Ok(model) => model,
 						_ => {
@@ -303,9 +307,13 @@ pub fn load_models(
 				builder.insert(id, model);
 			}
 			let chain = thread_chain.read().unwrap();
-			let model_cache =
-				Arc::new(builder.build(&*chain, "RenderEntity", chain.signal_sender())?);
-			let texture_cache = crate::client::model::texture::Cache::new(&*chain, atlas_sampler)?;
+			let model_cache = Arc::new(
+				builder
+					.build(&*chain, "RenderEntity", chain.signal_sender())
+					.context("build blender model cache")?,
+			);
+			let texture_cache = crate::client::model::texture::Cache::new(&*chain, atlas_sampler)
+				.context("create blender texture cache")?;
 			(model_cache, texture_cache)
 		};
 		texture_cache

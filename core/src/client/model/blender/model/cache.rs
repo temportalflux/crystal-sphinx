@@ -75,41 +75,42 @@ impl Cache {
 		name: &str,
 		signal_sender: &Sender<Arc<Semaphore>>,
 	) -> Result<Self> {
-		let vbuff_size = std::mem::size_of::<Vertex>() * builder.vertices.len();
-		let ibuff_size = std::mem::size_of::<u32>() * builder.indices.len();
-
 		let (vertex_buffer, index_buffer) = {
 			let vertex_buffer = buffer::Buffer::create_gpu(
 				format!("{name}.VertexBuffer"),
 				&context.object_allocator()?,
 				flags::BufferUsage::VERTEX_BUFFER,
-				vbuff_size,
+				builder.vertices.len().max(50) * std::mem::size_of::<Vertex>(),
 				None,
 				false,
 			)?;
 
-			GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), context)?
-				.begin()?
-				.stage(&builder.vertices[..])?
-				.copy_stage_to_buffer(&vertex_buffer)
-				.send_signal_to(signal_sender)?
-				.end()?;
+			if !builder.vertices.is_empty() {
+				GpuOperationBuilder::new(format!("Write({})", vertex_buffer.name()), context)?
+					.begin()?
+					.stage(&builder.vertices[..])?
+					.copy_stage_to_buffer(&vertex_buffer)
+					.send_signal_to(signal_sender)?
+					.end()?;
+			}
 
 			let index_buffer = buffer::Buffer::create_gpu(
 				format!("{name}.IndexBuffer"),
 				&context.object_allocator()?,
 				flags::BufferUsage::INDEX_BUFFER,
-				ibuff_size,
+				builder.indices.len().max(50) * std::mem::size_of::<u32>(),
 				Some(flags::IndexType::UINT32),
 				false,
 			)?;
 
-			GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), context)?
-				.begin()?
-				.stage(&builder.indices[..])?
-				.copy_stage_to_buffer(&index_buffer)
-				.send_signal_to(signal_sender)?
-				.end()?;
+			if !builder.indices.is_empty() {
+				GpuOperationBuilder::new(format!("Write({})", index_buffer.name()), context)?
+					.begin()?
+					.stage(&builder.indices[..])?
+					.copy_stage_to_buffer(&index_buffer)
+					.send_signal_to(signal_sender)?
+					.end()?;
+			}
 
 			(vertex_buffer, index_buffer)
 		};
