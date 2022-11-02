@@ -1,8 +1,10 @@
+use crate::entity::component::{binary, debug, network, Component, Registration};
 use anyhow::Result;
 use engine::{
 	math::nalgebra::{Unit, UnitQuaternion, Vector3},
 	world,
 };
+use nalgebra::{Isometry3, Translation3};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -18,7 +20,7 @@ impl Default for Orientation {
 	}
 }
 
-impl super::Component for Orientation {
+impl Component for Orientation {
 	fn unique_id() -> &'static str {
 		"crystal_sphinx::entity::component::Orientation"
 	}
@@ -27,17 +29,14 @@ impl super::Component for Orientation {
 		"Orientation"
 	}
 
-	fn registration() -> super::Registration<Self>
+	fn registration() -> Registration<Self>
 	where
 		Self: Sized,
 	{
-		use super::binary::Registration as binary;
-		use super::debug::Registration as debug;
-		use super::network::Registration as network;
-		super::Registration::<Self>::default()
-			.with_ext(binary::from::<Self>())
-			.with_ext(debug::from::<Self>())
-			.with_ext(network::from::<Self>())
+		Registration::<Self>::default()
+			.with_ext(binary::Registration::from::<Self>())
+			.with_ext(debug::Registration::from::<Self>())
+			.with_ext(network::Registration::from::<Self>())
 	}
 }
 
@@ -62,12 +61,20 @@ impl Orientation {
 		&self.0
 	}
 
+	pub fn isometry(&self) -> Isometry3<f32> {
+		Isometry3::from_parts(Translation3::default(), *self.orientation())
+	}
+
+	pub fn set_rotation(&mut self, rotation: UnitQuaternion<f32>) {
+		self.0 = rotation;
+	}
+
 	pub fn forward(&self) -> Unit<Vector3<f32>> {
 		self.orientation() * world::global_forward()
 	}
 }
 
-impl super::network::Replicatable for Orientation {
+impl network::Replicatable for Orientation {
 	fn on_replication(&mut self, replicated: &Self, is_locally_owned: bool) {
 		if !is_locally_owned {
 			*self = *replicated;
@@ -75,12 +82,12 @@ impl super::network::Replicatable for Orientation {
 	}
 }
 
-impl super::binary::Serializable for Orientation {
+impl binary::Serializable for Orientation {
 	fn serialize(&self) -> Result<Vec<u8>> {
-		super::binary::serialize(&self)
+		binary::serialize(&self)
 	}
 	fn deserialize(bytes: Vec<u8>) -> Result<Self> {
-		super::binary::deserialize::<Self>(&bytes)
+		binary::deserialize::<Self>(&bytes)
 	}
 }
 
@@ -97,7 +104,7 @@ impl std::ops::DerefMut for Orientation {
 	}
 }
 
-impl super::debug::EguiInformation for Orientation {
+impl debug::EguiInformation for Orientation {
 	fn render(&self, ui: &mut egui::Ui) {
 		ui.label(match self.0.axis() {
 			Some(axis) => {

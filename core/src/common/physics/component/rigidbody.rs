@@ -1,4 +1,6 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
+use nalgebra::Vector3;
+use rapier3d::prelude::RigidBodyType;
 use serde::{Deserialize, Serialize};
 
 /// Component-flag indicating if an entity has an equivalent rigidbody in the physics system.
@@ -15,11 +17,44 @@ impl Component for RigidBodyHandle {
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub struct RigidBody {}
+pub struct RigidBody {
+	kind: RigidBodyType,
+	linear_velocity: Vector3<f32>,
+}
+
+impl RigidBody {
+	pub fn new(kind: RigidBodyType) -> Self {
+		Self {
+			kind,
+			linear_velocity: Vector3::default(),
+		}
+	}
+
+	pub fn kind(&self) -> RigidBodyType {
+		self.kind
+	}
+
+	pub fn with_linear_velocity(mut self, velocity: Vector3<f32>) -> Self {
+		self.set_linear_velocity(velocity);
+		self
+	}
+
+	pub fn set_linear_velocity(&mut self, velocity: Vector3<f32>) {
+		self.linear_velocity = velocity;
+	}
+
+	pub fn linear_velocity(&self) -> &Vector3<f32> {
+		&self.linear_velocity
+	}
+}
 
 impl std::fmt::Display for RigidBody {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "RigidBody()",)
+		write!(
+			f,
+			"RigidBody({:?}, velocity=<{:.2}, {:.2}, {:.2}>)",
+			self.kind, self.linear_velocity.x, self.linear_velocity.y, self.linear_velocity.z
+		)
 	}
 }
 
@@ -56,5 +91,11 @@ impl binary::Serializable for RigidBody {
 }
 
 impl debug::EguiInformation for RigidBody {
-	fn render(&self, ui: &mut egui::Ui) {}
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label(format!("Kind: {:?}", self.kind));
+		ui.label(format!(
+			"Linear Velocity: <{:.2}, {:.2}, {:.2}>",
+			self.linear_velocity.x, self.linear_velocity.y, self.linear_velocity.z
+		));
+	}
 }

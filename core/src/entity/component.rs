@@ -4,8 +4,7 @@ pub use camera::*;
 pub mod chunk;
 pub mod debug;
 pub mod network;
-mod orientation;
-pub use orientation::*;
+pub use crate::common::physics::component::Orientation;
 mod owned_by_account;
 pub use owned_by_account::*;
 mod owned_by_connection;
@@ -34,7 +33,7 @@ pub fn register_types() {
 	registry.register::<Orientation>();
 	registry.register::<OwnedByAccount>();
 	registry.register::<OwnedByConnection>();
-	registry.register::<physics::linear::Position>();
+	registry.register::<crate::common::physics::component::Position>();
 	registry.register::<physics::linear::Velocity>();
 	registry.register::<crate::common::physics::component::RigidBody>();
 	registry.register::<crate::common::physics::component::RigidBodyHandle>();

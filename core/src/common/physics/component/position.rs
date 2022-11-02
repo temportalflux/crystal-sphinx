@@ -1,6 +1,7 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
 use anyhow::Result;
 use engine::math::nalgebra::{Point3, Vector3};
+use nalgebra::{Isometry3, Translation3, UnitQuaternion};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -77,6 +78,31 @@ impl Position {
 	/// Returns the offset position the entity is at within their chunk.
 	pub fn offset(&self) -> &Point3<f32> {
 		&self.offset
+	}
+
+	/// Returns the physics translation required to move from origin to the current location.
+	/// WARNING: This will result in a loss of precision at large values.
+	pub fn translation(&self) -> Translation3<f32> {
+		let chunk = self
+			.chunk()
+			.coords
+			.cast::<f32>()
+			.component_mul(&crate::common::world::chunk::SIZE);
+		Translation3::from(self.offset() + chunk)
+	}
+
+	pub fn isometry(&self, orientation: Option<&super::Orientation>) -> Isometry3<f32> {
+		Isometry3::from_parts(
+			self.translation(),
+			match orientation {
+				Some(comp) => *comp.orientation(),
+				None => UnitQuaternion::<f32>::identity(),
+			},
+		)
+	}
+
+	pub fn set_translation(&mut self, translation: Translation3<f32>) {
+		let world = translation.vector;
 	}
 }
 

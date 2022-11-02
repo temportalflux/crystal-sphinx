@@ -1,4 +1,3 @@
-mod position;
-pub use position::*;
+pub use crate::common::physics::component::Position;
 mod velocity;
 pub use velocity::*;
