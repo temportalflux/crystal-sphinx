@@ -74,13 +74,13 @@ pub struct Context {
 	colliders: Arc<RwLock<ColliderSet>>,
 }
 
-pub struct Physics {
+pub struct PhysicsSystem {
 	world: Weak<RwLock<entity::World>>,
 	context: Context,
 	simulation: phase::StepSimulation,
 }
 
-impl Physics {
+impl PhysicsSystem {
 	pub fn new(world: &Arc<RwLock<entity::World>>) -> Self {
 		Self::init_demo(&mut *world.write().unwrap());
 		Self {
@@ -159,7 +159,7 @@ impl Physics {
 	}
 }
 
-impl EngineSystem for Physics {
+impl EngineSystem for PhysicsSystem {
 	fn update(&mut self, delta_time: Duration, _: bool) {
 		profiling::scope!("subsystem:physics");
 
