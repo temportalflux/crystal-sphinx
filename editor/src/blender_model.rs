@@ -38,7 +38,10 @@ impl EditorOps for BlenderModelEditorOps {
 
 			model.set_compiled(exported_data);
 
-			Ok(rmp_serde::to_vec_named(&model).context("writing compiled blender asset to disk")?)
+			Ok(
+				rmp_serde::to_vec_named(&model)
+					.context("writing compiled blender asset to disk")?,
+			)
 		})
 	}
 }

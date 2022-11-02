@@ -54,6 +54,11 @@ impl std::fmt::Display for Position {
 }
 
 impl Position {
+	pub fn with_point(mut self, point: Point<f32>) -> Self {
+		self.point = point;
+		self
+	}
+
 	pub fn prev_chunk(&self) -> &Option<Point3<i64>> {
 		&self.prev_chunk
 	}

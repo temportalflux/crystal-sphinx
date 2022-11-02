@@ -54,6 +54,7 @@ impl AddPhysicsObjects {
 				.user_data(entity.to_bits().get() as _)
 				.position(position.isometry(orientation))
 				.linvel(*rigidbody.linear_velocity())
+				.ccd_enabled(rigidbody.ccd_enabled())
 				.build();
 			rigid_body.recompute_mass_properties_from_colliders(&*ctx.colliders.read().unwrap());
 			let handle = RigidBodyHandle(ctx.rigid_bodies.insert(rigid_body));

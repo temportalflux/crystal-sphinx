@@ -75,7 +75,7 @@ pub struct RenderCollider {
 }
 impl Drop for RenderCollider {
 	fn drop(&mut self) {
-		self.on_drop.send(self.handle).unwrap();
+		let _ = self.on_drop.send(self.handle);
 	}
 }
 impl crate::entity::component::Component for RenderCollider {
@@ -130,11 +130,13 @@ impl EngineSystem for GatherRenderableColliders {
 		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
 		self.add_render_components();
 
-		// TODO:
 		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
 		// which will remove instances with a particular collider handle when the drop signal is processed.
+		self.remove_dropped_entities();
+
 		// UPDATE: To update instances, we can send a signal from the physics system saying "these objects moved this step", and use that information
 		// to gather the set of all entities which have moved. From there, we can regenerate their instances and write those to the buffer.
+		self.update_instances();
 	}
 }
 impl GatherRenderableColliders {
@@ -176,6 +178,18 @@ impl GatherRenderableColliders {
 			);
 		}
 		transaction.run_on(&mut world);
+	}
+
+	#[profiling::function]
+	fn remove_dropped_entities(&self) {
+		while let Ok(handle) = self.dropped_colliders.1.try_recv() {
+			self.instance_buffer.remove(&handle);
+		}
+	}
+
+	#[profiling::function]
+	fn update_instances(&self) {
+		//let _ = todo!();
 	}
 }
 

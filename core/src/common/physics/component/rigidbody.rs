@@ -20,6 +20,7 @@ impl Component for RigidBodyHandle {
 pub struct RigidBody {
 	kind: RigidBodyType,
 	linear_velocity: Vector3<f32>,
+	continuous_collision_detection: bool,
 }
 
 impl RigidBody {
@@ -27,6 +28,7 @@ impl RigidBody {
 		Self {
 			kind,
 			linear_velocity: Vector3::default(),
+			continuous_collision_detection: false,
 		}
 	}
 
@@ -45,6 +47,15 @@ impl RigidBody {
 
 	pub fn linear_velocity(&self) -> &Vector3<f32> {
 		&self.linear_velocity
+	}
+
+	pub fn with_ccd_enabled(mut self, enabled: bool) -> Self {
+		self.continuous_collision_detection = enabled;
+		self
+	}
+
+	pub fn ccd_enabled(&self) -> bool {
+		self.continuous_collision_detection
 	}
 }
 
