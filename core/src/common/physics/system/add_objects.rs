@@ -1,7 +1,7 @@
 use crate::{
 	common::physics::{
 		component::{Collider, ColliderHandle, Orientation, Position, RigidBody, RigidBodyHandle},
-		Context,
+		State,
 	},
 	entity,
 };
@@ -29,14 +29,14 @@ type CollidersWithoutHandles<'c> = hecs::Without<ColliderBundle<'c>, &'c Collide
 /// Adds physics objects to the simulation when new entities are detected.
 pub(in crate::common::physics) struct AddPhysicsObjects;
 impl AddPhysicsObjects {
-	pub fn execute(ctx: &mut Context, world: &mut entity::World) {
+	pub fn execute(ctx: &mut State, world: &mut entity::World) {
 		profiling::scope!("add-physics-objects");
 		Self::add_rigid_bodies(ctx, world);
 		Self::add_colliders(ctx, world);
 	}
 
 	#[profiling::function]
-	fn add_rigid_bodies(ctx: &mut Context, world: &mut entity::World) {
+	fn add_rigid_bodies(ctx: &mut State, world: &mut entity::World) {
 		let mut transaction = hecs::CommandBuffer::new();
 
 		// Iterate over all entities which have the `RigidBody` component (and a position),
@@ -57,7 +57,7 @@ impl AddPhysicsObjects {
 				.linvel(*rigidbody.linear_velocity())
 				.ccd_enabled(rigidbody.ccd_enabled())
 				.build();
-			rigid_body.recompute_mass_properties_from_colliders(&*ctx.colliders.read().unwrap());
+			rigid_body.recompute_mass_properties_from_colliders(&ctx.colliders);
 			let handle = RigidBodyHandle(ctx.rigid_bodies.insert(rigid_body));
 			transaction.insert_one(entity, handle);
 		}
@@ -67,7 +67,7 @@ impl AddPhysicsObjects {
 	}
 
 	#[profiling::function]
-	fn add_colliders(ctx: &mut Context, world: &mut entity::World) {
+	fn add_colliders(ctx: &mut State, world: &mut entity::World) {
 		let mut transaction = hecs::CommandBuffer::new();
 
 		for (entity, components) in world.query::<CollidersWithoutHandles>().iter() {
@@ -99,12 +99,12 @@ impl AddPhysicsObjects {
 				.build();
 
 			let handle = match rigidbody {
-				Some(rigid_body_handle) => ctx.colliders.write().unwrap().insert_with_parent(
+				Some(rigid_body_handle) => ctx.colliders.insert_with_parent(
 					collider,
 					rigid_body_handle.0,
 					&mut ctx.rigid_bodies,
 				),
-				None => ctx.colliders.write().unwrap().insert(collider),
+				None => ctx.colliders.insert(collider),
 			};
 
 			transaction.insert_one(entity, ColliderHandle::from(handle));

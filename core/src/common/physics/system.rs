@@ -1,13 +1,8 @@
-use crate::entity::{self, ArcLockEntityWorld};
+use super::component;
+use crate::entity::{self};
 use engine::EngineSystem;
-use nalgebra::{vector, Vector3};
+use nalgebra::vector;
 use rand::Rng;
-use rapier3d::prelude::{
-	BroadPhase, CCDSolver, ColliderSet, ImpulseJointSet, IntegrationParameters,
-	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, QueryPipeline,
-	RigidBodySet,
-};
-use super::{component, Context};
 use std::{
 	sync::{Arc, RwLock, Weak},
 	time::Duration,
@@ -25,7 +20,6 @@ use simulate::*;
 pub struct System {
 	world: Weak<RwLock<entity::World>>,
 	state: Arc<super::Physics>,
-	context: Context,
 	simulation: StepSimulation,
 }
 
@@ -35,22 +29,6 @@ impl System {
 		Self {
 			world: Arc::downgrade(world),
 			state: Arc::new(super::Physics::default()),
-			context: Context {
-				// ----- System Configuration -----
-				gravity: vector![0.0, -9.81, 0.0],
-				integration_parameters: IntegrationParameters::default(),
-				physics_pipeline: PhysicsPipeline::new(),
-				query_pipeline: QueryPipeline::new(),
-				islands: IslandManager::new(),
-				broad_phase: BroadPhase::new(),
-				narrow_phase: NarrowPhase::new(),
-				impulse_joints: ImpulseJointSet::new(),
-				multibody_joints: MultibodyJointSet::new(),
-				ccd_solver: CCDSolver::new(),
-				// ----- Object Data -----
-				rigid_bodies: RigidBodySet::new(),
-				colliders: Arc::new(RwLock::new(ColliderSet::new())),
-			},
 			simulation: StepSimulation {
 				duration_since_update: Duration::from_millis(0),
 			},
@@ -104,8 +82,8 @@ impl System {
 		Arc::new(RwLock::new(self))
 	}
 
-	pub fn colliders(&self) -> &Arc<RwLock<ColliderSet>> {
-		&self.context.colliders
+	pub fn state(&self) -> &Arc<super::Physics> {
+		&self.state
 	}
 }
 
@@ -122,10 +100,10 @@ impl EngineSystem for System {
 			arc_world.write().unwrap()
 		};
 
-		AddPhysicsObjects::execute(&mut self.context, &mut world);
-		CopyComponentsToPhysics::execute(&mut self.context, &mut world);
-		self.simulation.execute(&mut self.context, delta_time);
-		CopyPhysicsToComponents::execute(&mut self.context, &mut world);
+		let mut state = self.state.write();
+		AddPhysicsObjects::execute(&mut state, &mut world);
+		CopyComponentsToPhysics::execute(&mut state, &mut world);
+		self.simulation.execute(&mut state, delta_time);
+		CopyPhysicsToComponents::execute(&mut state, &mut world);
 	}
 }
-

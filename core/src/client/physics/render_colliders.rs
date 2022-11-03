@@ -1,6 +1,10 @@
 use crate::{
 	client::graphics::{line, SectionedBuffer},
-	common::physics::{component::ColliderHandle, System},
+	common::physics::{
+		self,
+		component::{ColliderHandle, RigidBodyIsActive},
+		Physics, System,
+	},
 	entity,
 	graphics::voxel::camera::{self, Camera},
 	CrystalSphinx, InGameSystems, SystemsContext,
@@ -19,7 +23,7 @@ use engine::{
 	Application, EngineSystem,
 };
 use nalgebra::{Matrix4, Point3, Vector3, Vector4};
-use rapier3d::prelude::{ColliderSet, ShapeType};
+use rapier3d::prelude::ShapeType;
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock, Weak},
@@ -91,7 +95,7 @@ impl crate::entity::component::Component for RenderCollider {
 /// Analyzes the existing physics collider-set to copy relevant data to the renderer for collision shapes.
 pub struct GatherRenderableColliders {
 	world: Weak<RwLock<entity::World>>,
-	colliders: Arc<RwLock<ColliderSet>>,
+	physics_state: Arc<Physics>,
 	instance_buffer: Arc<InstanceBuffer>,
 	dropped_colliders: (
 		Sender<rapier3d::prelude::ColliderHandle>,
@@ -106,11 +110,11 @@ impl GatherRenderableColliders {
 		physics: &Arc<RwLock<System>>,
 		instance_buffer: Arc<InstanceBuffer>,
 	) -> Self {
-		let colliders = physics.read().unwrap().colliders().clone();
+		let physics_state = physics.read().unwrap().state().clone();
 		let dropped_colliders = mpsc::unbounded();
 		Self {
 			world: Arc::downgrade(&world),
-			colliders,
+			physics_state,
 			instance_buffer,
 			dropped_colliders,
 		}
@@ -126,27 +130,8 @@ impl EngineSystem for GatherRenderableColliders {
 	fn update(&mut self, _delta_time: Duration, _: bool) {
 		profiling::scope!("subsystem:render-colliders::gather");
 
-		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no RenderCollider component.
-		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
-		self.add_render_components();
-
-		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
-		// which will remove instances with a particular collider handle when the drop signal is processed.
-		self.remove_dropped_entities();
-
-		// UPDATE: To update instances, we can send a signal from the physics system saying "these objects moved this step", and use that information
-		// to gather the set of all entities which have moved. From there, we can regenerate their instances and write those to the buffer.
-		self.update_instances();
-	}
-}
-impl GatherRenderableColliders {
-	#[profiling::function]
-	fn add_render_components(&self) {
 		// Non-blocking read, if something currently as write access, we skip this update.
-		let colliders = match self.colliders.try_read() {
-			Ok(colliders) => colliders,
-			_ => return,
-		};
+		let state = self.physics_state.read();
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
 			_ => return,
@@ -156,6 +141,22 @@ impl GatherRenderableColliders {
 			_ => return,
 		};
 
+		// INSERT: In order to detect when a collider is added, we need to detect when an entity in ecs has a collider handle but no RenderCollider component.
+		// When thats the case, we know that we need to make a collider-render component for that entity, and add it to the instance buffer.
+		self.add_render_components(&state, &mut world);
+
+		// REMOVE: To remove old instances, the collider-render component needs a channel to send a signal to when its Dropped. That signal can be received by this system,
+		// which will remove instances with a particular collider handle when the drop signal is processed.
+		self.remove_dropped_entities();
+
+		// UPDATE: To update instances, we can send a signal from the physics system saying "these objects moved this step", and use that information
+		// to gather the set of all entities which have moved. From there, we can regenerate their instances and write those to the buffer.
+		self.update_instances(&state, &world);
+	}
+}
+impl GatherRenderableColliders {
+	#[profiling::function]
+	fn add_render_components(&self, state: &physics::State, world: &mut entity::World) {
 		let mut transaction = hecs::CommandBuffer::new();
 		for (entity, handle) in world
 			.query::<&ColliderHandle>()
@@ -163,7 +164,7 @@ impl GatherRenderableColliders {
 			.iter()
 		{
 			let (shape_type, instance) = {
-				let collider = colliders.get(*handle.inner()).unwrap();
+				let collider = state.collider(*handle.inner()).unwrap();
 				let shape_type = collider.shared_shape().shape_type();
 				(shape_type, self.make_instance(collider))
 			};
@@ -177,7 +178,7 @@ impl GatherRenderableColliders {
 				},
 			);
 		}
-		transaction.run_on(&mut world);
+		transaction.run_on(world);
 	}
 
 	#[profiling::function]
@@ -188,8 +189,14 @@ impl GatherRenderableColliders {
 	}
 
 	#[profiling::function]
-	fn update_instances(&self) {
-		//let _ = todo!();
+	fn update_instances(&self, state: &physics::State, world: &entity::World) {
+		for (entity, (handle, instance_handle)) in world
+			.query::<(&ColliderHandle, &RenderCollider)>()
+			.with::<&RigidBodyIsActive>()
+			.iter()
+		{
+			// TODO: Write instance updates to instance buffer
+		}
 	}
 }
 
@@ -199,7 +206,7 @@ impl GatherRenderableColliders {
 		let use_model_color = Vector4::new(1.0, 1.0, 1.0, 1.0);
 		let cuboid_base_extents = Vector3::<f32>::new(0.5, 0.5, 0.5);
 
-		let mut scaling = Matrix4::identity();
+		let mut scaling;
 		let mut color = Vector4::new(0.0, 0.3, 0.6, 1.0);
 
 		match collider.shape().shape_type() {

@@ -1,7 +1,7 @@
 use crate::{
 	common::physics::{
 		component::{Collider, ColliderHandle, Orientation, Position, RigidBody, RigidBodyHandle},
-		Context,
+		State,
 	},
 	entity,
 };
@@ -29,14 +29,14 @@ struct ColliderBundle<'c> {
 /// Copies data from the entity components' to the physics simulation.
 pub(in crate::common::physics) struct CopyComponentsToPhysics;
 impl CopyComponentsToPhysics {
-	pub fn execute(ctx: &mut Context, world: &mut entity::World) {
+	pub fn execute(ctx: &mut State, world: &mut entity::World) {
 		profiling::scope!("copy components -> physics");
 		Self::copy_rigid_bodies(ctx, world);
 		Self::copy_colliders(ctx, world);
 	}
 
 	#[profiling::function]
-	fn copy_rigid_bodies(ctx: &mut Context, world: &mut entity::World) {
+	fn copy_rigid_bodies(ctx: &mut State, world: &mut entity::World) {
 		for (_entity, components) in world.query::<RigidBodyBundle>().iter() {
 			let RigidBodyBundle {
 				rigid_body,
@@ -68,8 +68,7 @@ impl CopyComponentsToPhysics {
 	}
 
 	#[profiling::function]
-	fn copy_colliders(ctx: &mut Context, world: &mut entity::World) {
-		let mut colliders = ctx.colliders.write().unwrap();
+	fn copy_colliders(ctx: &mut State, world: &mut entity::World) {
 		for (_entity, components) in world.query::<ColliderBundle>().iter() {
 			let ColliderBundle {
 				collider,
@@ -78,7 +77,7 @@ impl CopyComponentsToPhysics {
 				position,
 				orientation,
 			} = components;
-			let target = colliders.get_mut(*handle.inner()).unwrap();
+			let target = ctx.colliders.get_mut(*handle.inner()).unwrap();
 
 			if rigid_body.is_none() {
 				target.set_position(match (position, orientation) {

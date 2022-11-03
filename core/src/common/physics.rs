@@ -2,13 +2,6 @@
 
 use crate::entity::{self, ArcLockEntityWorld};
 use engine::EngineSystem;
-use nalgebra::{vector, Vector3};
-use rand::Rng;
-use rapier3d::prelude::{
-	BroadPhase, CCDSolver, ColliderSet, ImpulseJointSet, IntegrationParameters,
-	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, QueryPipeline,
-	RigidBodySet,
-};
 use std::{
 	sync::{Arc, RwLock, Weak},
 	time::Duration,

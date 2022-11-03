@@ -16,6 +16,19 @@ impl Component for RigidBodyHandle {
 	}
 }
 
+/// Component-flag indicating that the entity with a RigidBody (and handle) has moved in the most recent physics system update.
+/// The updated transform is in the Position & Orientation structures.
+pub struct RigidBodyIsActive;
+impl Component for RigidBodyIsActive {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::common::physics::component::RigidBodyIsActive"
+	}
+
+	fn display_name() -> &'static str {
+		"RigidBodyIsActive"
+	}
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct RigidBody {
 	kind: RigidBodyType,

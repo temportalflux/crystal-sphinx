@@ -1,4 +1,4 @@
-use crate::common::physics::Context;
+use crate::common::physics::State;
 use std::time::Duration;
 
 /// Runs the update step in the physics simulation.
@@ -6,7 +6,7 @@ pub(in crate::common::physics) struct StepSimulation {
 	pub(in crate::common::physics) duration_since_update: Duration,
 }
 impl StepSimulation {
-	pub fn execute(&mut self, ctx: &mut Context, delta_time: Duration) {
+	pub fn execute(&mut self, ctx: &mut State, delta_time: Duration) {
 		profiling::scope!("step-simulation");
 		// Collect total delta_time since the last update
 		self.duration_since_update += delta_time;
@@ -19,10 +19,9 @@ impl StepSimulation {
 	}
 
 	#[profiling::function]
-	fn fixed_update(&self, ctx: &mut Context) {
+	fn fixed_update(&self, ctx: &mut State) {
 		let physics_hooks = ();
 		let event_handler = ();
-		let mut colliders = ctx.colliders.write().unwrap();
 		ctx.physics_pipeline.step(
 			&ctx.gravity,
 			&ctx.integration_parameters,
@@ -30,7 +29,7 @@ impl StepSimulation {
 			&mut ctx.broad_phase,
 			&mut ctx.narrow_phase,
 			&mut ctx.rigid_bodies,
-			&mut colliders,
+			&mut ctx.colliders,
 			&mut ctx.impulse_joints,
 			&mut ctx.multibody_joints,
 			&mut ctx.ccd_solver,
@@ -38,6 +37,6 @@ impl StepSimulation {
 			&event_handler,
 		);
 		ctx.query_pipeline
-			.update(&ctx.islands, &ctx.rigid_bodies, &colliders);
+			.update(&ctx.islands, &ctx.rigid_bodies, &ctx.colliders);
 	}
 }

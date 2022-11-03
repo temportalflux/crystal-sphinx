@@ -1,34 +1,13 @@
-use crate::entity::{self, ArcLockEntityWorld};
-use engine::EngineSystem;
 use nalgebra::{vector, Vector3};
-use rand::Rng;
 use rapier3d::prelude::{
-	BroadPhase, CCDSolver, ColliderSet, ImpulseJointSet, IntegrationParameters,
-	IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, QueryPipeline,
-	RigidBodySet, ColliderHandle, Collider,
+	BroadPhase, CCDSolver, Collider, ColliderHandle, ColliderSet, ImpulseJointSet,
+	IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline,
+	QueryPipeline, RigidBodySet,
 };
 use std::{
-	sync::{Arc, RwLock, Weak, RwLockReadGuard, RwLockWriteGuard},
-	time::Duration,
+	collections::HashSet,
+	sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
-
-// TODO: Old
-pub struct Context {
-	// ----- System Configuration -----
-	pub(in crate::common::physics) gravity: Vector3<f32>,
-	pub(in crate::common::physics) integration_parameters: IntegrationParameters,
-	pub(in crate::common::physics) physics_pipeline: PhysicsPipeline,
-	pub(in crate::common::physics) query_pipeline: QueryPipeline,
-	pub(in crate::common::physics) islands: IslandManager,
-	pub(in crate::common::physics) broad_phase: BroadPhase,
-	pub(in crate::common::physics) narrow_phase: NarrowPhase,
-	pub(in crate::common::physics) impulse_joints: ImpulseJointSet,
-	pub(in crate::common::physics) multibody_joints: MultibodyJointSet,
-	pub(in crate::common::physics) ccd_solver: CCDSolver,
-	// ----- Object Data -----
-	pub(in crate::common::physics) rigid_bodies: RigidBodySet,
-	pub(in crate::common::physics) colliders: Arc<RwLock<ColliderSet>>,
-}
 
 pub struct Physics(RwLock<State>);
 impl Default for Physics {
@@ -59,6 +38,8 @@ pub struct State {
 	pub(in crate::common::physics) ccd_solver: CCDSolver,
 	pub(in crate::common::physics) rigid_bodies: RigidBodySet,
 	pub(in crate::common::physics) colliders: ColliderSet,
+	/// A list of entities which moved in the last update (are active/awake).
+	pub(in crate::common::physics) active_entites: HashSet<hecs::Entity>,
 }
 impl Default for State {
 	fn default() -> Self {
@@ -75,11 +56,16 @@ impl Default for State {
 			ccd_solver: CCDSolver::new(),
 			rigid_bodies: RigidBodySet::new(),
 			colliders: ColliderSet::new(),
+			active_entites: HashSet::new(),
 		}
 	}
 }
 impl State {
 	pub fn collider(&self, handle: ColliderHandle) -> Option<&Collider> {
 		self.colliders.get(handle)
+	}
+
+	pub fn get_active_entities(&self) -> &HashSet<hecs::Entity> {
+		&self.active_entites
 	}
 }
