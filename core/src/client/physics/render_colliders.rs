@@ -1,6 +1,6 @@
 use crate::{
 	client::graphics::{line, SectionedBuffer},
-	common::physics::{component::ColliderHandle, PhysicsSystem},
+	common::physics::{component::ColliderHandle, System},
 	entity,
 	graphics::voxel::camera::{self, Camera},
 	CrystalSphinx, InGameSystems, SystemsContext,
@@ -103,7 +103,7 @@ impl GatherRenderableColliders {
 	#[profiling::function]
 	pub fn new(
 		world: &Arc<RwLock<entity::World>>,
-		physics: &Arc<RwLock<PhysicsSystem>>,
+		physics: &Arc<RwLock<System>>,
 		instance_buffer: Arc<InstanceBuffer>,
 	) -> Self {
 		let colliders = physics.read().unwrap().colliders().clone();

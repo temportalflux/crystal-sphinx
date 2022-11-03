@@ -398,7 +398,7 @@ impl ClientSystemsContext {
 pub struct InGameSystems {
 	#[allow(dead_code)]
 	pub old_physics: Arc<RwLock<common::physics::SimplePhysics>>,
-	pub physics: Arc<RwLock<common::physics::PhysicsSystem>>,
+	pub physics: Arc<RwLock<common::physics::System>>,
 }
 impl InGameSystems {
 	pub fn add_state_listener(context: &Arc<RwLock<SystemsContext>>) {
@@ -425,7 +425,7 @@ impl InGameSystems {
 				// The server will broadcast authoritative values (via components marked as `Replicatable`),
 				// and clients will tell the server of the changes to the entities they own via TBD.
 				let old_physics = common::physics::SimplePhysics::new(&context.world).arclocked();
-				let physics = common::physics::PhysicsSystem::new(&context.world).arclocked();
+				let physics = common::physics::System::new(&context.world).arclocked();
 				{
 					let mut engine = Engine::get().write().unwrap();
 					engine.add_weak_system(Arc::downgrade(&old_physics));
