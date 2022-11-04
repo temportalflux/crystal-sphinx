@@ -37,7 +37,7 @@ impl CopyPhysicsToComponents {
 				orientation,
 			} = components;
 
-			let source = ctx.rigid_bodies.get(handle.0).unwrap();
+			let source = ctx.rigid_bodies.get(*handle.inner()).unwrap();
 			match rigid_body.kind() {
 				RigidBodyType::Dynamic | RigidBodyType::KinematicVelocityBased => {
 					let isometry = source.position();
@@ -48,6 +48,7 @@ impl CopyPhysicsToComponents {
 				}
 				_ => {}
 			}
+			rigid_body.set_linear_velocity(*source.linvel());
 		}
 	}
 
@@ -90,7 +91,7 @@ impl<'world> UpdateActiveBodies<'world> {
 			.query::<&RigidBodyHandle>()
 			.with::<&RigidBodyIsActive>()
 			.iter()
-			.map(|(entity, handle)| (handle.0, entity))
+			.map(|(entity, handle)| (*handle.inner(), entity))
 			.collect();
 	}
 

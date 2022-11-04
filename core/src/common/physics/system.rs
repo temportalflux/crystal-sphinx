@@ -1,5 +1,5 @@
 use super::component;
-use crate::entity::{self};
+use crate::entity;
 use engine::EngineSystem;
 use nalgebra::vector;
 use rand::Rng;
@@ -20,6 +20,7 @@ use simulate::*;
 pub struct System {
 	world: Weak<RwLock<entity::World>>,
 	state: Arc<super::Physics>,
+	update_objects: AddPhysicsObjects,
 	simulation: StepSimulation,
 }
 
@@ -29,6 +30,7 @@ impl System {
 		Self {
 			world: Arc::downgrade(world),
 			state: Arc::new(super::Physics::default()),
+			update_objects: AddPhysicsObjects::new(),
 			simulation: StepSimulation {
 				duration_since_update: Duration::from_millis(0),
 			},
@@ -101,7 +103,7 @@ impl EngineSystem for System {
 		};
 
 		let mut state = self.state.write();
-		AddPhysicsObjects::execute(&mut state, &mut world);
+		self.update_objects.execute(&mut state, &mut world);
 		CopyComponentsToPhysics::execute(&mut state, &mut world);
 		self.simulation.execute(&mut state, delta_time);
 		CopyPhysicsToComponents::execute(&mut state, &mut world);

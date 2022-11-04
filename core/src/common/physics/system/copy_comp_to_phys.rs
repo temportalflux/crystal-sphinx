@@ -7,6 +7,7 @@ use crate::{
 };
 use hecs::Query;
 use nalgebra::Isometry3;
+use rand::Rng;
 use rapier3d::prelude::RigidBodyType;
 
 #[derive(Query)]
@@ -21,7 +22,7 @@ struct RigidBodyBundle<'c> {
 struct ColliderBundle<'c> {
 	collider: &'c Collider,
 	handle: &'c ColliderHandle,
-	rigid_body: Option<&'c RigidBody>,
+	rigid_body_handle: Option<&'c RigidBodyHandle>,
 	position: Option<&'c Position>,
 	orientation: Option<&'c Orientation>,
 }
@@ -44,7 +45,7 @@ impl CopyComponentsToPhysics {
 				position,
 				orientation,
 			} = components;
-			let target = ctx.rigid_bodies.get_mut(handle.0).unwrap();
+			let target = ctx.rigid_bodies.get_mut(*handle.inner()).unwrap();
 			target.set_body_type(rigid_body.kind());
 			match rigid_body.kind() {
 				// Kinematics are driven by game logic, so their isometries are directly copied into physics
@@ -73,20 +74,21 @@ impl CopyComponentsToPhysics {
 			let ColliderBundle {
 				collider,
 				handle,
-				rigid_body,
+				rigid_body_handle,
 				position,
 				orientation,
 			} = components;
+			let isometry = match (rigid_body_handle, position, orientation) {
+				(Some(_), _, _) => None,
+				(_, Some(position), orientation) => Some(position.isometry(orientation)),
+				(_, None, Some(orientation)) => Some(orientation.isometry()),
+				_ => Some(Isometry3::identity()),
+			};
+
 			let target = ctx.colliders.get_mut(*handle.inner()).unwrap();
-
-			if rigid_body.is_none() {
-				target.set_position(match (position, orientation) {
-					(Some(position), orientation) => position.isometry(orientation),
-					(None, Some(orientation)) => orientation.isometry(),
-					_ => Isometry3::identity(),
-				});
+			if let Some(isometry) = isometry {
+				target.set_position(isometry);
 			}
-
 			target.set_sensor(collider.is_sensor());
 			target.set_shape(collider.shape().clone());
 			target.set_collision_groups(collider.interaction_groups);

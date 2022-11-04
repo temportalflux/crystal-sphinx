@@ -1,11 +1,20 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
+use engine::channels::mpsc;
 use enumset::{EnumSet, EnumSetType};
 use rapier3d::prelude::{ActiveCollisionTypes, Group, InteractionGroups, SharedShape};
 use serde::{Deserialize, Serialize};
 
 /// Component-flag indicating if an entity has an equivalent collider in the physics system.
 /// Created during the [`AddPhysicsObjects`] phase of [`Physics::update`] for any entities with a [`Collider`] component.
-pub struct ColliderHandle(rapier3d::prelude::ColliderHandle);
+pub struct ColliderHandle {
+	pub(in crate::common::physics) handle: rapier3d::prelude::ColliderHandle,
+	pub(in crate::common::physics) on_drop: mpsc::Sender<rapier3d::prelude::ColliderHandle>,
+}
+impl Drop for ColliderHandle {
+	fn drop(&mut self) {
+		let _ = self.on_drop.send(self.handle);
+	}
+}
 impl Component for ColliderHandle {
 	fn unique_id() -> &'static str {
 		"crystal_sphinx::common::physics::component::ColliderHandle"
@@ -15,14 +24,9 @@ impl Component for ColliderHandle {
 		"ColliderHandle"
 	}
 }
-impl From<rapier3d::prelude::ColliderHandle> for ColliderHandle {
-	fn from(handle: rapier3d::prelude::ColliderHandle) -> Self {
-		Self(handle)
-	}
-}
 impl ColliderHandle {
 	pub fn inner(&self) -> &rapier3d::prelude::ColliderHandle {
-		&self.0
+		&self.handle
 	}
 }
 

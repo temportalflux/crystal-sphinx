@@ -1,11 +1,20 @@
 use crate::entity::component::{binary, debug, network, Component, Registration};
+use engine::channels::mpsc;
 use nalgebra::Vector3;
 use rapier3d::prelude::RigidBodyType;
 use serde::{Deserialize, Serialize};
 
 /// Component-flag indicating if an entity has an equivalent rigidbody in the physics system.
 /// Created during the [`AddPhysicsObjects`] phase of [`Physics::update`] for any entities with a [`RigidBody`] component.
-pub struct RigidBodyHandle(pub(in crate::common::physics) rapier3d::prelude::RigidBodyHandle);
+pub struct RigidBodyHandle {
+	pub(in crate::common::physics) handle: rapier3d::prelude::RigidBodyHandle,
+	pub(in crate::common::physics) on_drop: mpsc::Sender<rapier3d::prelude::RigidBodyHandle>,
+}
+impl Drop for RigidBodyHandle {
+	fn drop(&mut self) {
+		let _ = self.on_drop.send(self.handle);
+	}
+}
 impl Component for RigidBodyHandle {
 	fn unique_id() -> &'static str {
 		"crystal_sphinx::common::physics::component::RigidBodyHandle"
@@ -13,6 +22,11 @@ impl Component for RigidBodyHandle {
 
 	fn display_name() -> &'static str {
 		"RigidBodyHandle"
+	}
+}
+impl RigidBodyHandle {
+	pub fn inner(&self) -> &rapier3d::prelude::RigidBodyHandle {
+		&self.handle
 	}
 }
 
@@ -32,6 +46,10 @@ impl Component for RigidBodyIsActive {
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct RigidBody {
 	kind: RigidBodyType,
+	/// The linear velocity of the body.
+	/// When created, the body in the physics subsystem will be initialized with this value.
+	/// In subsequent update/simulation steps, this value is written into the physics system
+	/// (thereby overriding accumulative gravity), and copied back into the component when physics is done simulating.
 	linear_velocity: Vector3<f32>,
 	continuous_collision_detection: bool,
 }
