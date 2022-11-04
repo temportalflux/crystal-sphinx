@@ -7,7 +7,6 @@ use crate::{
 };
 use hecs::Query;
 use nalgebra::Isometry3;
-use rand::Rng;
 use rapier3d::prelude::RigidBodyType;
 
 #[derive(Query)]
@@ -47,6 +46,9 @@ impl CopyComponentsToPhysics {
 			} = components;
 			let target = ctx.rigid_bodies.get_mut(*handle.inner()).unwrap();
 			target.set_body_type(rigid_body.kind());
+			if target.gravity_scale() != rigid_body.gravity_scale() {
+				target.set_gravity_scale(rigid_body.gravity_scale(), true);
+			}
 			match rigid_body.kind() {
 				// Kinematics are driven by game logic, so their isometries are directly copied into physics
 				RigidBodyType::KinematicPositionBased => {

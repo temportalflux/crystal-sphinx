@@ -94,8 +94,8 @@ impl AddPhysicsObjects {
 				.user_data(entity.to_bits().get() as _)
 				.position(position.isometry(orientation))
 				.linvel(*rigidbody.linear_velocity())
+				.gravity_scale(rigidbody.gravity_scale())
 				.ccd_enabled(rigidbody.ccd_enabled())
-				.gravity_scale(1.0)
 				.build();
 			let handle = RigidBodyHandle {
 				handle: ctx.rigid_bodies.insert(rigid_body),

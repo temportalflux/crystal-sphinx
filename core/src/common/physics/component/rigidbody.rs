@@ -51,6 +51,7 @@ pub struct RigidBody {
 	/// In subsequent update/simulation steps, this value is written into the physics system
 	/// (thereby overriding accumulative gravity), and copied back into the component when physics is done simulating.
 	linear_velocity: Vector3<f32>,
+	gravity_scale: f32,
 	continuous_collision_detection: bool,
 }
 
@@ -59,6 +60,7 @@ impl RigidBody {
 		Self {
 			kind,
 			linear_velocity: Vector3::default(),
+			gravity_scale: 1.0,
 			continuous_collision_detection: false,
 		}
 	}
@@ -78,6 +80,19 @@ impl RigidBody {
 
 	pub fn linear_velocity(&self) -> &Vector3<f32> {
 		&self.linear_velocity
+	}
+
+	pub fn with_gravity_scale(mut self, scalar: f32) -> Self {
+		self.set_gravity_scale(scalar);
+		self
+	}
+
+	pub fn set_gravity_scale(&mut self, scalar: f32) {
+		self.gravity_scale = scalar;
+	}
+
+	pub fn gravity_scale(&self) -> f32 {
+		self.gravity_scale
 	}
 
 	pub fn with_ccd_enabled(mut self, enabled: bool) -> Self {

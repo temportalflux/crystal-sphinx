@@ -3,6 +3,7 @@ use crate::entity;
 use engine::EngineSystem;
 use nalgebra::vector;
 use rand::Rng;
+use rapier3d::prelude::{RigidBodyType, SharedShape};
 use std::{
 	sync::{Arc, RwLock, Weak},
 	time::Duration,
@@ -42,9 +43,7 @@ impl System {
 
 		transaction.spawn(
 			hecs::EntityBuilder::default()
-				.add(component::Collider::new(
-					rapier3d::prelude::SharedShape::cuboid(8.0, 0.5, 8.0),
-				))
+				.add(component::Collider::new(SharedShape::cuboid(8.0, 0.5, 8.0)))
 				.add(component::Position::default().with_point(vector![8.0, 6.0, 8.0].into()))
 				.build(),
 		);
@@ -62,12 +61,10 @@ impl System {
 				hecs::EntityBuilder::default()
 					.add(component::Position::default().with_point(position.into()))
 					.add(
-						component::Collider::new(rapier3d::prelude::SharedShape::ball(0.5))
+						component::Collider::new(SharedShape::ball(0.5))
 							.with_restitution(bounciness),
 					)
-					.add(component::RigidBody::new(
-						rapier3d::prelude::RigidBodyType::Dynamic,
-					))
+					.add(component::RigidBody::new(RigidBodyType::Dynamic))
 					.build(),
 			);
 		}
