@@ -53,6 +53,12 @@ where
 		self.local_data.write().unwrap().insert(section, key, value);
 	}
 
+	/// Updates a value by some key in the buffer.
+	#[profiling::function]
+	pub fn update(&self, key: &K, value: V) {
+		self.local_data.write().unwrap().update(key, value);
+	}
+
 	/// Removes a value by its key from the buffer.
 	#[profiling::function]
 	pub fn remove(&self, key: &K) -> Option<(S, V)> {

@@ -195,6 +195,19 @@ where
 	}
 
 	#[profiling::function]
+	pub fn update(&mut self, key: &K, value: V) -> bool {
+		let Some((_, value_idx)) = self.value_key_to_idx.get(key) else {
+			return false;
+		};
+		let Some(old_value) = self.values.get_mut(*value_idx) else {
+			return false;
+		};
+		*old_value = value;
+		self.changed_ranges.insert(*value_idx);
+		true
+	}
+
+	#[profiling::function]
 	pub fn remove(&mut self, key: &K) -> Option<(S, V)>
 	where
 		S: Clone,

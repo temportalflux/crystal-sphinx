@@ -190,12 +190,14 @@ impl GatherRenderableColliders {
 
 	#[profiling::function]
 	fn update_instances(&self, state: &physics::State, world: &entity::World) {
-		for (entity, (handle, instance_handle)) in world
-			.query::<(&ColliderHandle, &RenderCollider)>()
-			.with::<&RigidBodyIsActive>()
+		for (_entity, handle) in world
+			.query::<&ColliderHandle>()
+			.with::<(&RenderCollider, &RigidBodyIsActive)>()
 			.iter()
 		{
-			// TODO: Write instance updates to instance buffer
+			let collider = state.collider(*handle.inner()).unwrap();
+			let instance = self.make_instance(collider);
+			self.instance_buffer.update(handle.inner(), instance);
 		}
 	}
 }
@@ -206,9 +208,8 @@ impl GatherRenderableColliders {
 		let use_model_color = Vector4::new(1.0, 1.0, 1.0, 1.0);
 		let cuboid_base_extents = Vector3::<f32>::new(0.5, 0.5, 0.5);
 
-		let mut scaling;
 		let mut color = Vector4::new(0.0, 0.3, 0.6, 1.0);
-
+		let scaling;
 		match collider.shape().shape_type() {
 			ShapeType::Cuboid => {
 				let half_extents = collider.shape().as_cuboid().unwrap().half_extents;

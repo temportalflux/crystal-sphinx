@@ -8,10 +8,10 @@ pub(in crate::common::physics) struct StepSimulation {
 impl StepSimulation {
 	pub fn execute(&mut self, ctx: &mut State, delta_time: Duration) {
 		profiling::scope!("step-simulation");
-		// Collect total delta_time since the last update
-		self.duration_since_update += delta_time;
 		// If enough time has passed to run the next fixed-timestep-update, do so.
 		let integration_dt = Duration::from_secs_f32(ctx.integration_parameters.dt);
+		// Collect total delta_time since the last update
+		self.duration_since_update += delta_time;
 		while self.duration_since_update >= integration_dt {
 			self.duration_since_update -= integration_dt;
 			self.fixed_update(ctx);

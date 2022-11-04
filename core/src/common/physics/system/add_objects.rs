@@ -42,6 +42,7 @@ impl AddPhysicsObjects {
 		// Iterate over all entities which have the `RigidBody` component (and a position),
 		// but do not yet have a rigid body physics handle.
 		for (entity, components) in world.query::<RigidBodiesWithoutHandles>().iter() {
+			profiling::scope!(&format!("add-rigid_body:{entity:?}"));
 			let RigidBodyBundle {
 				rigidbody,
 				position,
@@ -49,7 +50,7 @@ impl AddPhysicsObjects {
 			} = components;
 
 			// Make a rigid body for the entity.
-			let mut rigid_body = RigidBodyBuilder::new(rigidbody.kind())
+			let rigid_body = RigidBodyBuilder::new(rigidbody.kind())
 				// TODO: Use a custom bit-field (u128), where 1 bit identifies entity vs static block, and 64-bits identify the entity id
 				// enable us to fetch the entity id for a rigidbody, providing a two-way mapping.
 				.user_data(entity.to_bits().get() as _)
@@ -57,7 +58,6 @@ impl AddPhysicsObjects {
 				.linvel(*rigidbody.linear_velocity())
 				.ccd_enabled(rigidbody.ccd_enabled())
 				.build();
-			rigid_body.recompute_mass_properties_from_colliders(&ctx.colliders);
 			let handle = RigidBodyHandle(ctx.rigid_bodies.insert(rigid_body));
 			transaction.insert_one(entity, handle);
 		}
