@@ -1,6 +1,7 @@
 use crate::{
 	common::physics::{
 		component::{Collider, ColliderHandle, Orientation, Position, RigidBody, RigidBodyHandle},
+		system::{ObjectId, ObjectKind},
 		State,
 	},
 	entity,
@@ -89,9 +90,13 @@ impl AddPhysicsObjects {
 
 			// Make a rigid body for the entity.
 			let rigid_body = RigidBodyBuilder::new(rigidbody.kind())
-				// TODO: Use a custom bit-field (u128), where 1 bit identifies entity vs static block, and 64-bits identify the entity id
 				// enable us to fetch the entity id for a rigidbody, providing a two-way mapping.
-				.user_data(entity.to_bits().get() as _)
+				.user_data(
+					ObjectId {
+						kind: ObjectKind::Entity(entity),
+					}
+					.into(),
+				)
 				.position(position.isometry(orientation))
 				.linvel(*rigidbody.linear_velocity())
 				.gravity_scale(rigidbody.gravity_scale())
@@ -132,7 +137,12 @@ impl AddPhysicsObjects {
 
 			let target = ColliderBuilder::new(collider.shape().clone())
 				// enable us to fetch the entity id for a collider, providing a two-way mapping.
-				.user_data(entity.to_bits().get() as _)
+				.user_data(
+					ObjectId {
+						kind: ObjectKind::Entity(entity),
+					}
+					.into(),
+				)
 				.position(isometry)
 				.sensor(collider.is_sensor())
 				.active_collision_types(*collider.collision_types())

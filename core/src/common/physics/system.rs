@@ -9,14 +9,16 @@ use std::{
 	time::Duration,
 };
 
-mod add_objects;
-use add_objects::*;
-mod copy_comp_to_phys;
-use copy_comp_to_phys::*;
-mod copy_phys_to_comp;
-use copy_phys_to_comp::*;
-mod simulate;
-use simulate::*;
+mod object_id;
+use object_id::*;
+mod phase_add_objects;
+use phase_add_objects::*;
+mod phase_copy_comp_to_phys;
+use phase_copy_comp_to_phys::*;
+mod phase_copy_phys_to_comp;
+use phase_copy_phys_to_comp::*;
+mod phase_simulate;
+use phase_simulate::*;
 
 pub struct System {
 	world: Weak<RwLock<entity::World>>,

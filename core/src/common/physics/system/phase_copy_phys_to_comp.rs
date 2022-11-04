@@ -1,6 +1,7 @@
 use crate::{
 	common::physics::{
 		component::{Orientation, Position, RigidBody, RigidBodyHandle, RigidBodyIsActive},
+		system::{ObjectId, ObjectKind},
 		State,
 	},
 	entity,
@@ -106,7 +107,8 @@ impl<'world> UpdateActiveBodies<'world> {
 				// If it is not in the list, then we should add a new component for that entity.
 				None => {
 					let rigid_body = rigid_bodies.get(*handle).unwrap();
-					if let Some(entity) = hecs::Entity::from_bits(rigid_body.user_data as u64) {
+					let obj_id = ObjectId::from(rigid_body.user_data);
+					if let ObjectKind::Entity(entity) = obj_id.kind {
 						if self.world.contains(entity) {
 							self.transaction.insert_one(entity, RigidBodyIsActive);
 							self.active_entities.insert(entity);
