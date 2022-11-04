@@ -1,4 +1,9 @@
-use crate::entity::component::{binary, debug, network, Component, Registration};
+use std::collections::HashMap;
+
+use crate::{
+	common::physics::{backend, ObjectId},
+	entity::component::{binary, debug, network, Component, Registration},
+};
 use engine::channels::mpsc;
 use enumset::{EnumSet, EnumSetType};
 use rapier3d::prelude::{ActiveCollisionTypes, Group, InteractionGroups, SharedShape};
@@ -235,5 +240,122 @@ impl binary::Serializable for Collider {
 impl debug::EguiInformation for Collider {
 	fn render(&self, ui: &mut egui::Ui) {
 		ui.label("TBD");
+	}
+}
+
+/// Component-flag indicating that the entity with a Collider (and handle) is colliding with another collider.
+pub struct CollidingWith {
+	pub(in crate::common::physics) started_collisions:
+		HashMap<ObjectId, EnumSet<CollisionEventFlags>>,
+	pub(in crate::common::physics) existing_collisions:
+		HashMap<ObjectId, EnumSet<CollisionEventFlags>>,
+	pub(in crate::common::physics) stopped_collisions:
+		HashMap<ObjectId, EnumSet<CollisionEventFlags>>,
+}
+impl Component for CollidingWith {
+	fn unique_id() -> &'static str {
+		"crystal_sphinx::common::physics::component::CollidingWith"
+	}
+
+	fn display_name() -> &'static str {
+		"CollidingWith"
+	}
+
+	fn registration() -> Registration<Self> {
+		Registration::<Self>::default().with_ext(debug::Registration::from::<Self>())
+	}
+}
+impl debug::EguiInformation for CollidingWith {
+	fn render(&self, ui: &mut egui::Ui) {
+		ui.label("Active Collisions:");
+		for (object_id, flags) in self.existing_collisions.iter() {
+			let flag_list = if flags.is_empty() {
+				format!("Ø")
+			} else {
+				let items = flags.iter().map(|f| format!("{f:?}")).collect::<Vec<_>>();
+				format!("[{}]", items.join(", "))
+			};
+			ui.label(format!("{:?} flags={flag_list}", object_id.kind));
+		}
+	}
+}
+impl CollidingWith {
+	pub(in crate::common::physics) fn new() -> Self {
+		Self {
+			started_collisions: HashMap::new(),
+			existing_collisions: HashMap::new(),
+			stopped_collisions: HashMap::new(),
+		}
+	}
+
+	// TODO: Needs to be called for all CollidingWith before collision events are inserted.
+	pub(in crate::common::physics) fn clear_updates(&mut self) {
+		self.started_collisions.clear();
+		self.stopped_collisions.clear();
+	}
+
+	pub(in crate::common::physics) fn start_many(
+		&mut self,
+		collisions: Vec<(ObjectId, EnumSet<CollisionEventFlags>)>,
+	) {
+		for (object_id, flags) in collisions.into_iter() {
+			self.started_collisions.insert(object_id, flags);
+			self.existing_collisions.insert(object_id, flags);
+		}
+	}
+
+	pub(in crate::common::physics) fn stop_many(
+		&mut self,
+		collisions: Vec<(ObjectId, EnumSet<CollisionEventFlags>)>,
+	) {
+		for (object_id, flags) in collisions.into_iter() {
+			self.existing_collisions.remove(&object_id);
+			self.stopped_collisions.insert(object_id, flags);
+		}
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.existing_collisions.is_empty()
+	}
+
+	pub fn has_new_events(&self) -> bool {
+		!self.started_collisions.is_empty() || !self.stopped_collisions.is_empty()
+	}
+
+	pub fn collisions_started(&self) -> &HashMap<ObjectId, EnumSet<CollisionEventFlags>> {
+		&self.started_collisions
+	}
+
+	pub fn active_collisions(&self) -> &HashMap<ObjectId, EnumSet<CollisionEventFlags>> {
+		&self.existing_collisions
+	}
+
+	pub fn collisions_stopped(&self) -> &HashMap<ObjectId, EnumSet<CollisionEventFlags>> {
+		&self.stopped_collisions
+	}
+}
+
+#[derive(EnumSetType, Debug)]
+pub enum CollisionEventFlags {
+	Sensor,
+	Removed,
+}
+impl Into<backend::CollisionEventFlags> for CollisionEventFlags {
+	fn into(self) -> backend::CollisionEventFlags {
+		match self {
+			Self::Sensor => backend::CollisionEventFlags::SENSOR,
+			Self::Removed => backend::CollisionEventFlags::REMOVED,
+		}
+	}
+}
+impl CollisionEventFlags {
+	pub(in crate::common::physics) fn from(flags: backend::CollisionEventFlags) -> EnumSet<Self> {
+		let mut new_flags = EnumSet::new();
+		for parsed in EnumSet::<Self>::all().into_iter() {
+			if flags.contains(parsed.into()) {
+				new_flags.insert(parsed);
+			}
+		}
+		new_flags
 	}
 }

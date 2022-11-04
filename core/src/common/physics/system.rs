@@ -1,16 +1,16 @@
 use super::component;
 use crate::entity;
-use engine::EngineSystem;
+use engine::{channels::mpsc, EngineSystem};
 use nalgebra::vector;
 use rand::Rng;
-use rapier3d::prelude::{RigidBodyType, SharedShape};
+use rapier3d::prelude::{ChannelEventCollector, RigidBodyType, SharedShape};
 use std::{
 	sync::{Arc, RwLock, Weak},
 	time::Duration,
 };
 
 mod object_id;
-use object_id::*;
+pub use object_id::*;
 mod phase_add_objects;
 use phase_add_objects::*;
 mod phase_copy_comp_to_phys;
@@ -25,18 +25,28 @@ pub struct System {
 	state: Arc<super::Physics>,
 	update_objects: AddPhysicsObjects,
 	simulation: StepSimulation,
+	phys_to_world: CopyPhysicsToComponents,
 }
 
 impl System {
 	pub fn new(world: &Arc<RwLock<entity::World>>) -> Self {
 		Self::init_demo(&mut *world.write().unwrap());
+		let (event_handler, phys_to_world) = {
+			let (send_collisions, recv_collisions) = mpsc::unbounded();
+			let (send_contact_forces, recv_contact_forces) = mpsc::unbounded();
+			let event_handler = ChannelEventCollector::new(send_collisions, send_contact_forces);
+			let phys_to_world = CopyPhysicsToComponents {
+				recv_collisions,
+				recv_contact_forces,
+			};
+			(event_handler, phys_to_world)
+		};
 		Self {
 			world: Arc::downgrade(world),
 			state: Arc::new(super::Physics::default()),
 			update_objects: AddPhysicsObjects::new(),
-			simulation: StepSimulation {
-				duration_since_update: Duration::from_millis(0),
-			},
+			simulation: StepSimulation::new(event_handler),
+			phys_to_world,
 		}
 	}
 
@@ -105,6 +115,6 @@ impl EngineSystem for System {
 		self.update_objects.execute(&mut state, &mut world);
 		CopyComponentsToPhysics::execute(&mut state, &mut world);
 		self.simulation.execute(&mut state, delta_time);
-		CopyPhysicsToComponents::execute(&mut state, &mut world);
+		self.phys_to_world.execute(&mut state, &mut world);
 	}
 }

@@ -12,6 +12,7 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c entity::component::physics::linear::Velocity,
 )>;
 
+pub use rapier3d::prelude as backend;
 pub mod component;
 mod state;
 pub use state::*;

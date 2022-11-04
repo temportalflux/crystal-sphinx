@@ -40,6 +40,7 @@ pub fn register_types() {
 	registry.register::<crate::common::physics::component::RigidBodyIsActive>();
 	registry.register::<crate::common::physics::component::Collider>();
 	registry.register::<crate::common::physics::component::ColliderHandle>();
+	registry.register::<crate::common::physics::component::CollidingWith>();
 	registry.register::<crate::client::physics::RenderCollider>();
 	registry.register::<crate::client::model::blender::Component>();
 	registry.register::<crate::client::model::PlayerModel>();

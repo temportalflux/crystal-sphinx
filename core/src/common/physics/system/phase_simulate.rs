@@ -1,11 +1,20 @@
 use crate::common::physics::State;
+use rapier3d::prelude::ChannelEventCollector;
 use std::time::Duration;
 
 /// Runs the update step in the physics simulation.
 pub(in crate::common::physics) struct StepSimulation {
-	pub(in crate::common::physics) duration_since_update: Duration,
+	pub duration_since_update: Duration,
+	pub event_handler: ChannelEventCollector,
 }
 impl StepSimulation {
+	pub fn new(event_handler: ChannelEventCollector) -> Self {
+		Self {
+			duration_since_update: Duration::from_millis(0),
+			event_handler,
+		}
+	}
+
 	pub fn execute(&mut self, ctx: &mut State, delta_time: Duration) {
 		profiling::scope!("step-simulation");
 		// If enough time has passed to run the next fixed-timestep-update, do so.
@@ -21,7 +30,6 @@ impl StepSimulation {
 	#[profiling::function]
 	fn fixed_update(&self, ctx: &mut State) {
 		let physics_hooks = ();
-		let event_handler = ();
 		ctx.physics_pipeline.step(
 			&ctx.gravity,
 			&ctx.integration_parameters,
@@ -34,7 +42,7 @@ impl StepSimulation {
 			&mut ctx.multibody_joints,
 			&mut ctx.ccd_solver,
 			&physics_hooks,
-			&event_handler,
+			&self.event_handler,
 		);
 		ctx.query_pipeline
 			.update(&ctx.islands, &ctx.rigid_bodies, &ctx.colliders);

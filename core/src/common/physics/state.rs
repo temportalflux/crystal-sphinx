@@ -4,10 +4,7 @@ use rapier3d::prelude::{
 	IntegrationParameters, IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline,
 	QueryPipeline, RigidBodySet,
 };
-use std::{
-	collections::HashSet,
-	sync::{RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub struct Physics(RwLock<State>);
 impl Default for Physics {
@@ -38,8 +35,6 @@ pub struct State {
 	pub(in crate::common::physics) ccd_solver: CCDSolver,
 	pub(in crate::common::physics) rigid_bodies: RigidBodySet,
 	pub(in crate::common::physics) colliders: ColliderSet,
-	/// A list of entities which moved in the last update (are active/awake).
-	pub(in crate::common::physics) active_entites: HashSet<hecs::Entity>,
 }
 impl Default for State {
 	fn default() -> Self {
@@ -56,16 +51,11 @@ impl Default for State {
 			ccd_solver: CCDSolver::new(),
 			rigid_bodies: RigidBodySet::new(),
 			colliders: ColliderSet::new(),
-			active_entites: HashSet::new(),
 		}
 	}
 }
 impl State {
 	pub fn collider(&self, handle: ColliderHandle) -> Option<&Collider> {
 		self.colliders.get(handle)
-	}
-
-	pub fn get_active_entities(&self) -> &HashSet<hecs::Entity> {
-		&self.active_entites
 	}
 }

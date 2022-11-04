@@ -1,3 +1,6 @@
+use std::hash::Hash;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ObjectId {
 	pub kind: ObjectKind,
 }
@@ -25,6 +28,7 @@ impl From<u128> for ObjectId {
 	}
 }
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum ObjectKind {
 	Entity(hecs::Entity),
 	Block,
