@@ -209,29 +209,33 @@ impl GatherRenderableColliders {
 		let cuboid_base_extents = Vector3::<f32>::new(0.5, 0.5, 0.5);
 
 		let mut color = Vector4::new(0.0, 0.3, 0.6, 1.0);
+		let mut isometry = collider.position().clone();
 		let scaling;
 		match collider.shape().shape_type() {
 			ShapeType::Cuboid => {
-				let half_extents = collider.shape().as_cuboid().unwrap().half_extents;
-				let scale = half_extents.component_div(&cuboid_base_extents);
+				let cuboid = collider.shape().as_cuboid().unwrap();
+				isometry.translation.y += cuboid.half_extents.y;
+
+				let scale = cuboid.half_extents.component_div(&cuboid_base_extents);
 				scaling = Matrix4::new_nonuniform_scaling(&scale);
 			}
 			ShapeType::Ball => {
 				let radius_scaled = collider.shape().as_ball().unwrap().radius / 0.5f32;
 				let scale = Vector3::new(1.0, 1.0, 1.0) * radius_scaled;
 				scaling = Matrix4::new_nonuniform_scaling(&scale);
-				color = Vector4::new(1.0, 1.0, 0.0, 1.0); // TODO: color, ball does not have its own model yet
+				color = Vector4::new(1.0, 1.0, 0.0, 1.0);
 			}
 			_ => {
-				let half_extents = collider.compute_aabb().half_extents();
-				let scale = half_extents.component_div(&cuboid_base_extents);
+				let aabb = collider.compute_aabb();
+				isometry.translation.vector = aabb.center().coords;
+				let scale = aabb.half_extents().component_div(&cuboid_base_extents);
 				scaling = Matrix4::new_nonuniform_scaling(&scale);
 				color = use_model_color;
 			}
 		}
 
 		// First scale the model, then apply rotation, then translate it in world space.
-		let transform_matrix = collider.position().to_homogeneous() * scaling;
+		let transform_matrix = isometry.to_homogeneous() * scaling;
 
 		// TODO: Convert the physics f32 position into a chunk position (using logic similar to the f32 in Position component and the block::Point::align).
 		//let offset = isometry.transform_point(&Point3::origin());
