@@ -32,7 +32,13 @@ impl Database {
 		let chunk_cache = Arc::new(RwLock::new(cache::Cache::new()));
 
 		let (load_request_sender, load_request_receiver) = engine::channels::mpsc::unbounded();
-		let thread_handle = thread::start(root_path, load_request_receiver, &chunk_cache)?;
+		let (send_world_updates, recv_world_updates) = engine::channels::future::unbounded();
+		let thread_handle = thread::start(
+			root_path,
+			load_request_receiver,
+			send_world_updates,
+			&chunk_cache,
+		)?;
 
 		let load_request_sender = Arc::new(load_request_sender);
 		*Self::ticket_sender_static() = Some(Arc::downgrade(&load_request_sender));

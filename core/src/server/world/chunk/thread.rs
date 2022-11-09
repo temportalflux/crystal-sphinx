@@ -1,10 +1,12 @@
 use crate::common::utility::ThreadHandle;
+use crate::common::world::chunk::WorldDelta;
 use crate::server::world::chunk::{
 	self, cache,
 	ticket::{self, Ticket},
 	Chunk, Level,
 };
 use anyhow::Result;
+use engine::channels::future;
 use engine::{math::nalgebra::Point3, utility::spawn_thread};
 use std::{
 	collections::HashMap,
@@ -18,6 +20,7 @@ static LOG: &'static str = "chunk-loading";
 /// State data about the loading thread.
 pub(crate) struct ThreadState {
 	root_dir: PathBuf,
+	send_world_updates: future::Sender<WorldDelta>,
 
 	/// The public cache of chunks that are currently loaded.
 	/// The cache holds no ownership of chunks,
@@ -47,6 +50,7 @@ pub(crate) struct ThreadState {
 pub fn start(
 	root_dir: PathBuf,
 	incoming_requests: ticket::Receiver,
+	send_world_updates: future::Sender<WorldDelta>,
 	cache: &cache::ArcLock,
 ) -> anyhow::Result<ThreadHandle> {
 	let handle = Arc::new(());
@@ -56,6 +60,7 @@ pub fn start(
 	let join_handle = spawn_thread(LOG, move || -> Result<()> {
 		let mut thread_state = ThreadState {
 			root_dir: root_dir.clone(),
+			send_world_updates: send_world_updates.clone(),
 			cache: cache.clone(),
 			ticket_bindings: Vec::new(),
 			chunk_states: HashMap::new(),
@@ -199,6 +204,8 @@ impl ThreadState {
 						tickets: vec![weak_ticket.clone()],
 					},
 				);
+
+				// TODO: Set update channel
 			}
 		}
 	}
@@ -309,7 +316,7 @@ impl ThreadState {
 				// 1. save to disk
 				// 2. drop the arc
 				let chunk = arc_chunk.read().unwrap();
-				chunk.save()
+				chunk.save();
 			}
 		}
 	}

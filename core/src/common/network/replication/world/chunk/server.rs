@@ -70,14 +70,14 @@ impl Sender {
 			server_chunk.chunk.clone()
 		};
 
-		self.send.write(&chunk.coordinate).await?;
+		self.send.write(chunk.coordinate()).await?;
 
-		self.send.write_size(chunk.block_ids.len()).await?;
+		self.send.write_size(chunk.blocks().len()).await?;
 
-		for (offset, block_id) in chunk.block_ids.into_iter() {
+		for (offset, data) in chunk.blocks().iter() {
 			let offset = offset.cast::<u8>();
 			self.send.write(&offset).await?;
-			self.send.write(&block_id).await?;
+			self.send.write(data.id()).await?;
 		}
 
 		Ok(())

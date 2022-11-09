@@ -127,12 +127,11 @@ impl Handle {
 							let operation = match weak_chunk.upgrade() {
 								Some(arc_chunk) => {
 									let server_chunk = arc_chunk.read().unwrap();
-									let coord = server_chunk.chunk.coordinate.clone();
+									let coord = server_chunk.chunk.coordinate().clone();
 									let updates = server_chunk
 										.chunk
-										.block_ids
-										.iter()
-										.map(|(offset, id)| (*offset, *id))
+										.block_ids()
+										.into_iter()
 										.collect::<Vec<_>>();
 									Operation::Insert(coord, updates)
 								}
