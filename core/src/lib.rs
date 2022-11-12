@@ -317,6 +317,13 @@ impl engine::Runtime for Runtime {
 		self.window().map(|window| window.graphics_chain().clone())
 	}
 
+	fn update(&self, delta_time: std::time::Duration, has_focus: bool) {
+		use engine::EngineSystem;
+		if let Some(physics) = self.systems.get_arclock::<common::physics::System>() {
+			physics.write().unwrap().update(delta_time, has_focus);
+		}
+	}
+
 	fn on_event_loop_complete(&self) {
 		// Make sure any app-state storages are cleared out before the window is destroyed (to ensure render objects are dropped in the correct order).
 		let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
@@ -415,7 +422,6 @@ impl InGameSystems {
 		{
 			let mut engine = Engine::get().write().unwrap();
 			engine.add_weak_system(Arc::downgrade(&old_physics));
-			engine.add_weak_system(Arc::downgrade(&physics));
 		}
 		self.systems.insert(old_physics);
 		self.systems.insert(physics);
