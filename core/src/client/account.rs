@@ -2,6 +2,7 @@ use crate::common::{
 	account::{self, Account},
 	utility::DataFile,
 };
+use anyhow::Context;
 use anyhow::Result;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -48,10 +49,11 @@ impl Manager {
 impl Manager {
 	pub fn scan_accounts(&mut self) -> Result<()> {
 		if !self.root.exists() {
-			std::fs::create_dir_all(&self.root)?;
+			std::fs::create_dir_all(&self.root).context("create accounts root dir")?;
 		}
-		for entry in std::fs::read_dir(&self.root)? {
-			let account = Account::load(&entry?.path())?;
+		for entry in std::fs::read_dir(&self.root).context("read accounts dir")? {
+			let path = entry?.path();
+			let account = Account::load(&path).context(format!("load account {path:?}"))?;
 			log::info!(target: LOG, "Scanned account {}", account);
 			self.accounts.insert(account.id().clone(), account);
 		}

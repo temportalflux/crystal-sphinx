@@ -31,9 +31,10 @@
 //!
 
 use crate::{app::state::State::InGame, common::network::mode, graphics::ChainConfig};
+use anyhow::Context;
 use engine::{
-	asset, graphics::Chain, task::PinFutureResultLifetime, ui::egui, window::Window, Application,
-	Engine, EventLoop,
+	asset, graphics::Chain, task::PinFutureResultLifetime, ui::egui, utility::ValueSet,
+	window::Window, Application, Engine, EventLoop,
 };
 use std::{
 	path::PathBuf,
@@ -66,12 +67,7 @@ impl Application for CrystalSphinx {
 
 pub struct Runtime {
 	config: plugin::Config,
-	app_mode: mode::Kind,
-
-	context: Arc<RwLock<SystemsContext>>,
-	#[allow(dead_code)]
-	egui_ui: Option<Arc<RwLock<egui::Ui>>>,
-	window: Option<Window>,
+	systems: Arc<ValueSet>,
 }
 
 impl Runtime {
@@ -87,13 +83,19 @@ impl Runtime {
 	}
 
 	pub fn new(config: plugin::Config) -> Self {
-		let app_mode = Self::get_network_mode();
+		let systems = ValueSet::new();
+		systems.insert(Self::get_network_mode());
 
 		let app_state = app::state::Machine::new(app::state::State::Launching).arclocked();
+		systems.insert(app_state.clone());
+
 		let world = entity::ArcLockEntityWorld::default();
+		systems.insert(world.clone());
+
 		entity::add_state_listener(&app_state, Arc::downgrade(&world));
 
 		let network_storage = common::network::Storage::new(&app_state);
+		systems.insert(network_storage.clone());
 		common::network::task::add_unloading_state_listener(&app_state);
 		entity::system::OwnedByConnection::add_state_listener(
 			&app_state,
@@ -106,18 +108,15 @@ impl Runtime {
 			Arc::downgrade(&world),
 		);
 
-		Self {
-			config,
-			app_mode,
-			context: Arc::new(RwLock::new(SystemsContext {
-				app_state,
-				world,
-				network_storage,
-				client: None,
-			})),
-			egui_ui: None,
-			window: None,
-		}
+		Self { config, systems }
+	}
+
+	fn window(&self) -> Option<Arc<Window>> {
+		self.systems.get_arc::<Window>()
+	}
+
+	fn app_mode(&self) -> mode::Kind {
+		self.systems.get::<mode::Kind>().unwrap()
 	}
 }
 impl engine::Runtime for Runtime {
@@ -138,7 +137,6 @@ impl engine::Runtime for Runtime {
 	}
 
 	fn initialize<'a>(&'a self, engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
-		use anyhow::Context;
 		Box::pin(async move {
 			// Load bundled plugins so they can be used throughout the instance
 			if let Ok(mut manager) = plugin::Manager::write() {
@@ -151,19 +149,23 @@ impl engine::Runtime for Runtime {
 			block::Lookup::initialize();
 			entity::component::register_types();
 
-			InGameSystems::add_state_listener(&self.context);
+			InGameSystems::add_state_listener(&self.systems);
 
-			let context = self.context.read().unwrap();
-
+			let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
 			if let Ok(mut engine) = engine.write() {
-				engine.add_weak_system(Arc::downgrade(&context.app_state));
+				engine.add_weak_system(Arc::downgrade(&app_state));
 			}
 
-			if self.app_mode == mode::Kind::Server {
+			if self.app_mode() == mode::Kind::Server {
+				let network_storage = self
+					.systems
+					.get_arclock::<common::network::Storage>()
+					.unwrap();
+				let world = self.systems.get_arclock::<entity::World>().unwrap();
 				common::network::task::load_dedicated_server(
-					context.app_state.clone(),
-					context.network_storage.clone(),
-					Arc::downgrade(&context.world),
+					app_state,
+					network_storage,
+					Arc::downgrade(&world),
 				)
 				.context("load_dedicated_server")?;
 			}
@@ -178,20 +180,20 @@ impl engine::Runtime for Runtime {
 		engine: &Arc<RwLock<Engine>>,
 		event_loop: &EventLoop<()>,
 	) -> anyhow::Result<()> {
-		if self.app_mode == mode::Kind::Server {
+		if self.app_mode() == mode::Kind::Server {
 			return Ok(());
 		}
 
 		{
 			let mut manager = client::account::Manager::write().unwrap();
-			manager.scan_accounts()?;
+			manager.scan_accounts().context("scan accounts")?;
 
 			let user_name = std::env::args()
 				.find_map(|arg| arg.strip_prefix("-user=").map(|s| s.to_owned()))
 				.unwrap();
 
 			let user_id = manager.ensure_account(&user_name)?;
-			manager.login_as(&user_id)?;
+			manager.login_as(&user_id).context("login account")?;
 		};
 
 		let input_user = input::init();
@@ -202,93 +204,86 @@ impl engine::Runtime for Runtime {
 				.with_size(1280.0, 720.0)
 				.with_resizable(true)
 				.with_application::<CrystalSphinx>()
-				.build(event_loop)?;
+				.build(event_loop)
+				.context("build window")?;
 			let graphics_chain = window.graphics_chain().clone();
-			self.window = Some(window);
+			self.systems.insert(Arc::new(window));
+			self.systems.insert(Arc::downgrade(&graphics_chain));
 			graphics_chain
 		};
 
 		let render_phases = {
 			let mut chain = graphics_chain.write().unwrap();
-			chain.apply_procedure::<ChainConfig>()?
+			chain
+				.apply_procedure::<ChainConfig>()
+				.context("apply render procedure")?
 		};
 
 		// TODO: wait for the thread to finish before allowing the user in the world.
 		let arc_camera = graphics::voxel::camera::ArcLockCamera::default();
 
-		self.context.write().unwrap().client = Some(ClientSystemsContext {
-			chain: Arc::downgrade(&graphics_chain),
-			render_phases: render_phases.clone(),
-			camera: arc_camera.clone(),
-			input_user: input_user.clone(),
-		});
+		self.systems.insert(render_phases.clone());
+		self.systems.insert(arc_camera.clone());
+		self.systems.insert(input_user.clone());
 
-		let context = self.context.read().unwrap();
-
-		common::network::task::add_load_network_listener(
-			&context.app_state,
-			&context.network_storage,
-			&context.world,
-		);
+		let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
+		let network_storage = self
+			.systems
+			.get_arclock::<common::network::Storage>()
+			.unwrap();
+		let world = self.systems.get_arclock::<entity::World>().unwrap();
+		common::network::task::add_load_network_listener(&app_state, &network_storage, &world);
 
 		entity::system::PlayerController::add_state_listener(
-			&context.app_state,
-			Arc::downgrade(&context.network_storage),
-			Arc::downgrade(&context.world),
+			&app_state,
+			Arc::downgrade(&network_storage),
+			Arc::downgrade(&world),
 			input_user.clone(),
 		);
 
-		let fn_view_world = Arc::downgrade(&context.world);
+		let fn_view_world = Arc::downgrade(&world);
 		let fn_view_input = input_user.clone();
-		app::store_during(&context.app_state, InGame, move || {
+		app::store_during(&app_state, InGame, move || {
 			client::UpdateCameraView::create(fn_view_world.clone(), &fn_view_input)
 		});
 
 		graphics::voxel::model::load_models(
-			&context.app_state,
-			Arc::downgrade(&context.network_storage),
+			&app_state,
+			Arc::downgrade(&network_storage),
 			&graphics_chain,
 			&render_phases.world,
 			&arc_camera,
-			&context.world,
+			&world,
 		);
 
 		if let Ok(mut engine) = engine.write() {
-			engine.add_system(
-				entity::system::UpdateCamera::new(&context.world, arc_camera).arclocked(),
-			);
+			engine.add_system(entity::system::UpdateCamera::new(&world, arc_camera).arclocked());
 		}
 
 		#[cfg(feature = "debug")]
 		{
-			let command_list = commands::create_list(&context.app_state);
-			let ui = egui::Ui::create(
-				self.window.as_ref().unwrap(),
-				&*event_loop,
-				&render_phases.egui,
-			)?;
+			let command_list = commands::create_list(&app_state);
+			let ui = egui::Ui::create(&self.window().unwrap(), &*event_loop, &render_phases.egui)
+				.context("create debug ui")?;
 			ui.write().unwrap().add_owned_element(
 				debug::Panel::new(&input_user)
 					.with_window("Commands", debug::CommandWindow::new(command_list.clone()))
-					.with_window(
-						"Entity Inspector",
-						debug::EntityInspector::new(&context.world),
-					)
+					.with_window("Entity Inspector", debug::EntityInspector::new(&world))
 					.with_window("Chunk Inspector", debug::ChunkInspector::new()),
 			);
 			if let Ok(mut engine) = engine.write() {
 				engine.add_winit_listener(&ui);
 			}
-			self.egui_ui = Some(ui);
+			self.systems.insert(ui);
 		}
 
 		let viewport = ui::AppStateViewport::new().arclocked();
 		// initial UI is added when a callback matching the initial state is added to the app-state-machine
-		ui::AppStateViewport::add_state_listener(&viewport, &context.app_state);
+		ui::AppStateViewport::add_state_listener(&viewport, &app_state);
 
 		// TEMPORARY: Emulate loading by causing a transition to the main menu after 3 seconds
 		{
-			let thread_app_state = context.app_state.clone();
+			let thread_app_state = app_state.clone();
 			engine::task::spawn("temp".to_owned(), async move {
 				tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 				thread_app_state
@@ -318,13 +313,14 @@ impl engine::Runtime for Runtime {
 		Ok(())
 	}
 
-	fn get_display_chain(&self) -> Option<&Arc<RwLock<Chain>>> {
-		self.window.as_ref().map(|window| window.graphics_chain())
+	fn get_display_chain(&self) -> Option<Arc<RwLock<Chain>>> {
+		self.window().map(|window| window.graphics_chain().clone())
 	}
 
 	fn on_event_loop_complete(&self) {
 		// Make sure any app-state storages are cleared out before the window is destroyed (to ensure render objects are dropped in the correct order).
-		if let Ok(mut app_state) = self.context.read().unwrap().app_state.write() {
+		let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
+		if let Ok(mut app_state) = app_state.write() {
 			app_state.clear_callbacks();
 		}
 		if let Ok(mut guard) = client::account::Manager::write() {
@@ -376,32 +372,11 @@ let _source = {
 };
 */
 
-#[derive(Clone)]
-pub struct SystemsContext {
-	pub app_state: Arc<RwLock<app::state::Machine>>,
-	pub world: Arc<RwLock<entity::World>>,
-	pub network_storage: Arc<RwLock<common::network::Storage>>,
-	pub client: Option<ClientSystemsContext>,
-}
-#[derive(Clone)]
-pub struct ClientSystemsContext {
-	pub chain: Weak<RwLock<engine::graphics::Chain>>,
-	pub render_phases: graphics::Phases,
-	pub camera: graphics::voxel::camera::ArcLockCamera,
-	pub input_user: Arc<RwLock<input::User>>,
-}
-impl ClientSystemsContext {
-	pub fn chain(&self) -> Arc<RwLock<engine::graphics::Chain>> {
-		self.chain.upgrade().unwrap()
-	}
-}
 pub struct InGameSystems {
-	#[allow(dead_code)]
-	pub old_physics: Arc<RwLock<common::physics::SimplePhysics>>,
-	pub physics: Arc<RwLock<common::physics::System>>,
+	systems: Arc<ValueSet>,
 }
 impl InGameSystems {
-	pub fn add_state_listener(context: &Arc<RwLock<SystemsContext>>) {
+	pub fn add_state_listener(systems: &Arc<ValueSet>) {
 		use app::state::{
 			storage::{Event::*, Storage},
 			State::*,
@@ -409,64 +384,63 @@ impl InGameSystems {
 			*,
 		};
 
-		let app_state = context.read().unwrap().app_state.clone();
-		let callback_context = Arc::downgrade(&context);
-		Storage::<(Self, Option<ClientInGameSystems>)>::default()
+		let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
+		let callback_systems = Arc::downgrade(&systems);
+		Storage::<Self>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
 			.create_callbacks(&app_state, move || {
 				profiling::scope!("init-game-systems");
-				let arc_context = callback_context.upgrade().unwrap();
-				let context = arc_context.read().unwrap();
-
-				// Both clients and servers run the physics simulation.
-				// The server will broadcast authoritative values (via components marked as `Replicatable`),
-				// and clients will tell the server of the changes to the entities they own via TBD.
-				let old_physics = common::physics::SimplePhysics::new(&context.world).arclocked();
-				let physics = common::physics::System::new(&context.world).arclocked();
-				{
-					let mut engine = Engine::get().write().unwrap();
-					engine.add_weak_system(Arc::downgrade(&old_physics));
-					engine.add_weak_system(Arc::downgrade(&physics));
+				let in_game = Self {
+					systems: callback_systems.upgrade().unwrap(),
+				};
+				in_game.add_common_systems();
+				if mode::get().contains(mode::Kind::Client) {
+					in_game.add_client_systems()?;
 				}
-
-				let systems = Self {
-					old_physics,
-					physics,
-				};
-
-				let client = if mode::get().contains(mode::Kind::Client) {
-					Some(ClientInGameSystems::new(&context, &systems)?)
-				} else {
-					None
-				};
-
-				Ok(Some((systems, client)))
+				Ok(Some(in_game))
 			});
 	}
-}
 
-#[allow(dead_code)]
-struct ClientInGameSystems {
-	pub render_chunk_boundaries: Arc<RwLock<graphics::chunk_boundary::Render>>,
-	pub gather_renderable_colliders: Arc<RwLock<client::physics::GatherRenderableColliders>>,
-	pub render_colliders: Arc<RwLock<client::physics::RenderColliders>>,
-}
-impl ClientInGameSystems {
 	#[profiling::function]
-	pub fn new(ctx: &SystemsContext, in_game: &InGameSystems) -> anyhow::Result<Self> {
-		let client_ctx = ctx.client.as_ref().unwrap();
-		let arc_chain = client_ctx.chain.upgrade().unwrap();
+	fn add_common_systems(&self) {
+		// Both clients and servers run the physics simulation.
+		// The server will broadcast authoritative values (via components marked as `Replicatable`),
+		// and clients will tell the server of the changes to the entities they own via TBD.
+		let world = self.systems.get_arclock::<entity::World>().unwrap();
+		let old_physics = common::physics::SimplePhysics::new(&world).arclocked();
+		let physics = common::physics::System::new(&world).arclocked();
+		{
+			let mut engine = Engine::get().write().unwrap();
+			engine.add_weak_system(Arc::downgrade(&old_physics));
+			engine.add_weak_system(Arc::downgrade(&physics));
+		}
+		self.systems.insert(old_physics);
+		self.systems.insert(physics);
+	}
 
-		let action_toggle_chunk_boundaries = input::User::get_action_in(
-			&client_ctx.input_user,
-			crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES,
-		);
+	#[profiling::function]
+	fn add_client_systems(&self) -> anyhow::Result<()> {
+		let arc_chain = self
+			.systems
+			.get_weaklock_upgraded::<engine::graphics::Chain>()
+			.unwrap();
+
+		let camera = self
+			.systems
+			.get_arclock::<graphics::voxel::camera::Camera>()
+			.unwrap();
+		let input_user = self.systems.get_arclock::<input::User>().unwrap();
+		let render_phases = self.systems.get::<graphics::Phases>().unwrap();
+
+		let action_toggle_chunk_boundaries =
+			input::User::get_action_in(&input_user, crate::input::ACTION_TOGGLE_CHUNK_BOUNDARIES);
+
 		let render_chunk_boundaries = graphics::chunk_boundary::Render::new(
 			&arc_chain.read().unwrap(),
-			client_ctx.camera.clone(),
+			camera.clone(),
 			action_toggle_chunk_boundaries.unwrap(),
 		)?
 		.arclocked();
@@ -474,7 +448,7 @@ impl ClientInGameSystems {
 		log::debug!("create collider systems");
 
 		let (gather_renderable_colliders, render_colliders) =
-			client::physics::create_collider_systems(ctx, in_game)?;
+			client::physics::create_collider_systems(&self.systems)?;
 		{
 			let mut engine = Engine::get().write().unwrap();
 			engine.add_weak_system(Arc::downgrade(&gather_renderable_colliders));
@@ -486,21 +460,38 @@ impl ClientInGameSystems {
 			profiling::scope!("attach chain operations");
 			let mut chain = arc_chain.write().unwrap();
 			chain.add_operation(
-				&client_ctx.render_phases.debug,
+				&render_phases.debug,
 				Arc::downgrade(&render_chunk_boundaries),
 				None,
 			)?;
 			chain.add_operation(
-				&client_ctx.render_phases.debug,
+				&render_phases.debug,
 				Arc::downgrade(&render_colliders),
 				None,
 			)?;
 		}
 
-		Ok(Self {
-			gather_renderable_colliders,
-			render_colliders,
-			render_chunk_boundaries,
-		})
+		self.systems.insert(render_chunk_boundaries);
+		self.systems.insert(gather_renderable_colliders);
+		self.systems.insert(render_colliders);
+
+		Ok(())
+	}
+}
+
+impl Drop for InGameSystems {
+	fn drop(&mut self) {
+		// Common
+		self.systems
+			.remove::<Arc<RwLock<common::physics::SimplePhysics>>>();
+		self.systems
+			.remove::<Arc<RwLock<common::physics::System>>>();
+		// Client
+		self.systems
+			.remove::<Arc<RwLock<graphics::chunk_boundary::Render>>>();
+		self.systems
+			.remove::<Arc<RwLock<client::physics::GatherRenderableColliders>>>();
+		self.systems
+			.remove::<Arc<RwLock<client::physics::RenderColliders>>>();
 	}
 }

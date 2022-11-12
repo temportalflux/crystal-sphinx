@@ -7,7 +7,7 @@ use crate::{
 	},
 	entity,
 	graphics::voxel::camera::{self, Camera},
-	CrystalSphinx, InGameSystems, SystemsContext,
+	CrystalSphinx,
 };
 use anyhow::Context;
 use engine::{
@@ -37,17 +37,24 @@ type InstanceBuffer = SectionedBuffer<ShapeType, rapier3d::prelude::ColliderHand
 
 #[profiling::function]
 pub fn create_collider_systems(
-	ctx: &SystemsContext,
-	in_game: &InGameSystems,
+	systems: &Arc<engine::utility::ValueSet>,
 ) -> anyhow::Result<(
 	Arc<RwLock<GatherRenderableColliders>>,
 	Arc<RwLock<RenderColliders>>,
 )> {
-	let client_ctx = ctx.client.as_ref().unwrap();
+	let arc_chain = systems
+		.get_weaklock_upgraded::<engine::graphics::Chain>()
+		.unwrap();
+	let world = systems.get_arclock::<entity::World>().unwrap();
+	let physics = systems
+		.get_arclock::<crate::common::physics::System>()
+		.unwrap();
+	let camera = systems
+		.get_arclock::<crate::graphics::voxel::camera::Camera>()
+		.unwrap();
 
 	let instance_buffer = Arc::new({
 		let allocator = {
-			let arc_chain = client_ctx.chain();
 			let chain = arc_chain.read().unwrap();
 			chain.allocator()?
 		};
@@ -57,14 +64,11 @@ pub fn create_collider_systems(
 	});
 
 	let gather_renderable_colliders =
-		GatherRenderableColliders::new(&ctx.world, &in_game.physics, instance_buffer.clone());
+		GatherRenderableColliders::new(&world, &physics, instance_buffer.clone());
 
-	let render_colliders = RenderColliders::new(
-		&*client_ctx.chain().read().unwrap(),
-		client_ctx.camera.clone(),
-		instance_buffer,
-	)
-	.context("creating render colliders operation")?;
+	let render_colliders =
+		RenderColliders::new(&*arc_chain.read().unwrap(), camera, instance_buffer)
+			.context("creating render colliders operation")?;
 
 	Ok((
 		gather_renderable_colliders.arclocked(),
