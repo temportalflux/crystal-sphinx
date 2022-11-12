@@ -1,5 +1,4 @@
 use anyhow::Result;
-use engine::EngineSystem;
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock},
@@ -232,10 +231,8 @@ impl Machine {
 	pub fn clear_callbacks(&mut self) {
 		self.callbacks.clear();
 	}
-}
-
-impl EngineSystem for Machine {
-	fn update(&mut self, _delta_time: std::time::Duration, _has_focus: bool) {
+	
+	pub fn update(&mut self) {
 		if let Some(transition) = self.next_transition.take() {
 			self.perform_transition(transition);
 		}

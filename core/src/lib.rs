@@ -38,7 +38,7 @@ use engine::{
 };
 use std::{
 	path::PathBuf,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
 
 pub mod client;
@@ -152,9 +152,6 @@ impl engine::Runtime for Runtime {
 			InGameSystems::add_state_listener(&self.systems);
 
 			let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
-			if let Ok(mut engine) = engine.write() {
-				engine.add_weak_system(Arc::downgrade(&app_state));
-			}
 
 			if self.app_mode() == mode::Kind::Server {
 				let network_storage = self
@@ -241,10 +238,9 @@ impl engine::Runtime for Runtime {
 			input_user.clone(),
 		);
 
-		let fn_view_world = Arc::downgrade(&world);
-		let fn_view_input = input_user.clone();
+		let fn_systems = self.systems.clone();
 		app::store_during(&app_state, InGame, move || {
-			client::UpdateCameraView::create(fn_view_world.clone(), &fn_view_input)
+			Ok(Some(fn_systems.insert_handle(client::UpdateCameraView::new(&fn_systems)?)))
 		});
 
 		graphics::voxel::model::load_models(
@@ -256,9 +252,8 @@ impl engine::Runtime for Runtime {
 			&world,
 		);
 
-		if let Ok(mut engine) = engine.write() {
-			engine.add_system(entity::system::UpdateCamera::new(&world, arc_camera).arclocked());
-		}
+		self.systems
+			.insert(entity::system::UpdateCamera::new(self.systems.clone()));
 
 		#[cfg(feature = "debug")]
 		{
@@ -319,9 +314,30 @@ impl engine::Runtime for Runtime {
 
 	fn update(&self, delta_time: std::time::Duration, has_focus: bool) {
 		use engine::EngineSystem;
+
+		if let Some(arc_state) = self.systems.get_arclock::<app::state::Machine>() {
+			let mut state = arc_state.write().unwrap();
+			state.update();
+		}
+
+		if let Some(old_physics) = self.systems.get_arclock::<common::physics::SimplePhysics>() {
+			old_physics.write().unwrap().update(delta_time, has_focus);
+		}
 		if let Some(physics) = self.systems.get_arclock::<common::physics::System>() {
 			physics.write().unwrap().update(delta_time, has_focus);
 		}
+		if let Some(camera_locrot) = self.systems.get::<entity::system::UpdateCamera>() {
+			camera_locrot.update();
+		}
+		if let Some(camera_pov) = self.systems.get_weak_upgraded::<client::UpdateCameraView>() {
+			camera_pov.update();
+		}
+		
+		if let Some(gather) = self.systems.get_arclock::<client::physics::GatherRenderableColliders>() {
+			gather.write().unwrap().update(delta_time, has_focus);
+		}
+
+
 	}
 
 	fn on_event_loop_complete(&self) {
@@ -419,10 +435,6 @@ impl InGameSystems {
 		let world = self.systems.get_arclock::<entity::World>().unwrap();
 		let old_physics = common::physics::SimplePhysics::new(&world).arclocked();
 		let physics = common::physics::System::new(&world).arclocked();
-		{
-			let mut engine = Engine::get().write().unwrap();
-			engine.add_weak_system(Arc::downgrade(&old_physics));
-		}
 		self.systems.insert(old_physics);
 		self.systems.insert(physics);
 	}
@@ -455,10 +467,6 @@ impl InGameSystems {
 
 		let (gather_renderable_colliders, render_colliders) =
 			client::physics::create_collider_systems(&self.systems)?;
-		{
-			let mut engine = Engine::get().write().unwrap();
-			engine.add_weak_system(Arc::downgrade(&gather_renderable_colliders));
-		}
 
 		log::debug!("collider systems created");
 

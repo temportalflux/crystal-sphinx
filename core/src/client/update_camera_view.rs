@@ -3,7 +3,7 @@ use crate::{
 	common::account,
 	entity::{self, component},
 };
-use engine::{input, Engine, EngineSystem};
+use engine::{input, utility::ValueSet, Engine, EngineSystem};
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
@@ -19,31 +19,24 @@ pub struct UpdateCameraView {
 }
 
 impl UpdateCameraView {
-	pub fn create(
-		world: Weak<RwLock<entity::World>>,
-		arc_user: &input::ArcLockUser,
-	) -> anyhow::Result<Option<Arc<RwLock<Self>>>> {
+	pub fn new(systems: &Arc<ValueSet>) -> anyhow::Result<Arc<Self>> {
+		let world = Arc::downgrade(&systems.get_arclock::<entity::World>().unwrap());
+		let arc_user = systems.get_arclock::<input::User>().unwrap();
+
 		let input_action =
 			crate::input::User::get_action_in(&arc_user, crate::input::ACTION_SWAP_CAMERA_POV)
 				.unwrap();
 		let account_id = crate::client::account::Manager::read()?
 			.active_account()?
 			.id();
-		let arc_self = Arc::new(RwLock::new(Self {
+		Ok(Arc::new(Self {
 			world,
 			account_id,
 			input_action,
-		}));
-		// Run updates on the system as long as the object exists (i.e. while the app's state is `InGame`).
-		if let Ok(mut engine) = Engine::get().write() {
-			engine.add_weak_system(Arc::downgrade(&arc_self));
-		}
-		Ok(Some(arc_self))
+		}))
 	}
-}
-
-impl EngineSystem for UpdateCameraView {
-	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
+	
+	pub fn update(&self) {
 		profiling::scope!("subsystem:update_camera_view");
 
 		if let Some(arc_state) = self.input_action.upgrade() {

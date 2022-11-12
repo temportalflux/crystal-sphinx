@@ -2,7 +2,7 @@ use crate::common::{
 	account::key::{self, Certificate, Key, PrivateKey, PublicKey},
 	utility::DataFile,
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -105,7 +105,8 @@ impl DataFile for Account {
 
 	fn load_from(file_path: &Path) -> Result<Self> {
 		let root = file_path.parent().unwrap().to_owned();
-		let meta_text = std::fs::read_to_string(&file_path).context(format!("read {file_path:?}"))?;
+		let meta_text =
+			std::fs::read_to_string(&file_path).context(format!("read {file_path:?}"))?;
 		let nodes = meta_text.parse::<kdl::KdlDocument>().context("parse kdl")?;
 		let mut display_name = String::new();
 		let mut key_id = String::new();
