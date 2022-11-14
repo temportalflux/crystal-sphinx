@@ -151,20 +151,9 @@ impl engine::Runtime for Runtime {
 
 			InGameSystems::add_state_listener(&self.systems);
 
-			let app_state = self.systems.get_arclock::<app::state::Machine>().unwrap();
-
 			if self.app_mode() == mode::Kind::Server {
-				let network_storage = self
-					.systems
-					.get_arclock::<common::network::Storage>()
-					.unwrap();
-				let world = self.systems.get_arclock::<entity::World>().unwrap();
-				common::network::task::load_dedicated_server(
-					app_state,
-					network_storage,
-					Arc::downgrade(&world),
-				)
-				.context("load_dedicated_server")?;
+				common::network::task::load_dedicated_server(self.systems.clone())
+					.context("load_dedicated_server")?;
 			}
 
 			log::info!(target: CrystalSphinx::name(), "Initialization finished");
@@ -229,7 +218,7 @@ impl engine::Runtime for Runtime {
 			.get_arclock::<common::network::Storage>()
 			.unwrap();
 		let world = self.systems.get_arclock::<entity::World>().unwrap();
-		common::network::task::add_load_network_listener(&app_state, &network_storage, &world);
+		common::network::task::add_load_network_listener(&self.systems);
 
 		entity::system::PlayerController::add_state_listener(
 			&app_state,
@@ -240,7 +229,9 @@ impl engine::Runtime for Runtime {
 
 		let fn_systems = self.systems.clone();
 		app::store_during(&app_state, InGame, move || {
-			Ok(Some(fn_systems.insert_handle(client::UpdateCameraView::new(&fn_systems)?)))
+			Ok(Some(fn_systems.insert_handle(
+				client::UpdateCameraView::new(&fn_systems)?,
+			)))
 		});
 
 		graphics::voxel::model::load_models(
@@ -332,12 +323,13 @@ impl engine::Runtime for Runtime {
 		if let Some(camera_pov) = self.systems.get_weak_upgraded::<client::UpdateCameraView>() {
 			camera_pov.update();
 		}
-		
-		if let Some(gather) = self.systems.get_arclock::<client::physics::GatherRenderableColliders>() {
+
+		if let Some(gather) = self
+			.systems
+			.get_arclock::<client::physics::GatherRenderableColliders>()
+		{
 			gather.write().unwrap().update(delta_time, has_focus);
 		}
-
-
 	}
 
 	fn on_event_loop_complete(&self) {

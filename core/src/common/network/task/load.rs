@@ -9,19 +9,15 @@ use crate::{
 	server::network::Storage as ServerStorage,
 };
 use anyhow::{Context, Result};
+use engine::utility::ValueSet;
 use socknet::{endpoint::Endpoint, Config};
 use std::sync::{Arc, RwLock, Weak};
 
 #[profiling::function]
-pub fn load_dedicated_server(
-	app_state: ArcLockMachine,
-	storage: Arc<RwLock<Storage>>,
-	entity_world: Weak<RwLock<entity::World>>,
-) -> Result<()> {
+pub fn load_dedicated_server(systems: Arc<ValueSet>) -> Result<()> {
+	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
 	load_network(
-		&app_state,
-		&storage,
-		&entity_world,
+		systems,
 		&Instruction {
 			mode: mode::Kind::Server.into(),
 			port: get_named_arg("host_port"),
@@ -36,22 +32,15 @@ pub fn load_dedicated_server(
 	Ok(())
 }
 
-pub fn add_load_network_listener(
-	app_state: &ArcLockMachine,
-	storage: &Arc<RwLock<Storage>>,
-	entity_world: &ArcLockEntityWorld,
-) {
+pub fn add_load_network_listener(systems: &Arc<ValueSet>) {
 	use app::state::{State::*, Transition::*, *};
+	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
 	for state in [LoadingWorld, Connecting].iter() {
-		let callback_app_state = app_state.clone();
-		let callback_storage = storage.clone();
-		let callback_entity_world = Arc::downgrade(&entity_world);
+		let callback_systems = Arc::downgrade(systems);
 		app_state.write().unwrap().add_async_callback(
 			OperationKey(None, Some(Enter), Some(*state)),
 			move |operation| {
-				let async_app_state = callback_app_state.clone();
-				let async_storage = callback_storage.clone();
-				let async_entity_world = callback_entity_world.clone();
+				let async_systems = callback_systems.clone();
 				let instruction = operation
 					.data()
 					.as_ref()
@@ -60,12 +49,10 @@ pub fn add_load_network_listener(
 					.unwrap()
 					.clone();
 				async move {
-					let endpoint = load_network(
-						&async_app_state,
-						&async_storage,
-						&async_entity_world,
-						&instruction,
-					)?;
+					let Some(systems) = async_systems.upgrade() else {
+						return Ok(());
+					};
+					let endpoint = load_network(systems, &instruction)?;
 
 					// Dedicated Client (mode == Client) needs to connect to the server.
 					// Additionally... Integrated Client-Server (mode == Client + Server) should run
@@ -96,13 +83,12 @@ pub fn add_load_network_listener(
 }
 
 #[profiling::function]
-fn load_network(
-	app_state: &ArcLockMachine,
-	storage: &Arc<RwLock<Storage>>,
-	entity_world: &Weak<RwLock<entity::World>>,
-	instruction: &Instruction,
-) -> Result<Arc<Endpoint>> {
+fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc<Endpoint>> {
 	mode::set(instruction.mode.clone());
+
+	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
+	let storage = systems.get_arclock::<crate::common::network::Storage>().unwrap();
+	let entity_world = Arc::downgrade(&systems.get_arclock::<entity::World>().unwrap());
 
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
@@ -165,7 +151,7 @@ fn load_network(
 		storage.set_connection_list(connection::List::new(
 			endpoint.connection_receiver().clone(),
 		));
-		storage.start_loading(&entity_world.upgrade().unwrap())?;
+		storage.start_loading(&systems)?;
 	}
 
 	Ok(endpoint)

@@ -231,7 +231,7 @@ impl Machine {
 	pub fn clear_callbacks(&mut self) {
 		self.callbacks.clear();
 	}
-	
+
 	pub fn update(&mut self) {
 		if let Some(transition) = self.next_transition.take() {
 			self.perform_transition(transition);

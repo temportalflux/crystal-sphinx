@@ -35,7 +35,7 @@ impl UpdateCameraView {
 			input_action,
 		}))
 	}
-	
+
 	pub fn update(&self) {
 		profiling::scope!("subsystem:update_camera_view");
 

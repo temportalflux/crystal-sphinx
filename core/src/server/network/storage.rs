@@ -5,7 +5,7 @@ use crate::{
 	server::world::{chunk, Database},
 };
 use anyhow::{Context, Result};
-use engine::{Engine, EngineSystem};
+use engine::{Engine, EngineSystem, utility::ValueSet};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -144,7 +144,7 @@ impl Storage {
 	}
 
 	#[profiling::function]
-	pub fn start_loading_world(&mut self) -> anyhow::Result<()> {
+	pub fn start_loading_world(&mut self, systems: &Arc<ValueSet>) -> anyhow::Result<()> {
 		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
 		let database = Database::new(Self::world_path(self.root_dir.to_owned()))?;
 
