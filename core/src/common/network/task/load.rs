@@ -100,8 +100,12 @@ pub fn add_load_network_listener(systems: &Arc<ValueSet>) {
 						return Ok(());
 					};
 
+					// Both
 					systems.remove::<Arc<world::Database>>();
+					// Server-Only
 					systems.remove::<Arc<crate::server::world::Loader>>();
+					// Client-Only
+					systems.remove::<Arc<crate::client::world::ChunkChannel>>();
 
 					Ok(())
 				}
@@ -119,12 +123,12 @@ fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc
 		.get_arclock::<crate::common::network::Storage>()
 		.unwrap();
 	let entity_world = Arc::downgrade(&systems.get_arclock::<entity::World>().unwrap());
+	let database = systems.get_arclock::<world::Database>().unwrap();
 
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
 		let server = ServerStorage::load(&world_name).context("loading server")?;
 
-		let database = systems.get_arclock::<world::Database>().unwrap();
 		systems.insert(Arc::new(crate::server::world::Loader::new(
 			server.world_path(),
 			Arc::downgrade(&database),
@@ -134,6 +138,12 @@ fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc
 	}
 	if instruction.mode.contains(mode::Kind::Client) {
 		storage.write().unwrap().set_client(Default::default());
+
+		// Add the async task to funnel world updates to the client channel
+		let recv_updates = database.write().unwrap().add_recv();
+		systems.insert(Arc::new(crate::client::world::ChunkChannel::new(
+			recv_updates,
+		)));
 	}
 
 	let socknet_port = instruction.port.unwrap_or(25565);
@@ -164,7 +174,7 @@ fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc
 						entity_world: entity_world.clone(),
 					}),
 				});
-				replication::world::register(&mut registry, Arc::downgrade(&storage));
+				replication::world::register(&mut registry, &systems);
 				registry.register(move_player::Identifier {
 					client: Arc::default(),
 					server: Arc::new(move_player::server::AppContext {

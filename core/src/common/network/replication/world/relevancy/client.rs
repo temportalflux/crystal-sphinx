@@ -1,7 +1,6 @@
 use crate::{
 	client::world::chunk, common::network::Storage, entity::system::replicator::relevancy,
 };
-use anyhow::Result;
 use engine::math::nalgebra::Point3;
 use socknet::stream;
 use socknet::{
@@ -12,8 +11,8 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock, Weak};
 
 /// The application context for the client/receiver of a world-relevancy stream.
-#[derive(Default)]
 pub struct AppContext {
+	pub chunk_channel: Option<Weak<crate::client::world::ChunkChannel>>,
 	/// The network storage for the client.
 	pub storage: Weak<RwLock<Storage>>,
 	/// The world relevancy last received from the server.
@@ -25,21 +24,6 @@ pub struct AppContext {
 impl stream::recv::AppContext for AppContext {
 	type Extractor = stream::bi::Extractor;
 	type Receiver = Handler;
-}
-
-impl AppContext {
-	/// Returns the client application's chunk instance buffer operation sender
-	/// (to send update operations to the graphics buffer).
-	fn client_chunk_sender(&self) -> Result<chunk::OperationSender> {
-		use crate::common::network::Error::{
-			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
-		};
-		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;
-		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
-		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
-		let client = arc.read().map_err(|_| FailedToReadClient)?;
-		Ok(client.chunk_sender().clone())
-	}
 }
 
 /// The stream handler for the client/receiver of a world-relevancy stream.
@@ -68,6 +52,8 @@ impl stream::handler::Receiver for Handler {
 		let log = super::Identifier::log_category("client", &self.connection);
 		self.connection.clone().spawn(log.clone(), async move {
 			use stream::kind::{Read, Write};
+
+			let Some(chunk_channel) = self.context.chunk_channel.as_ref() else { return Ok(()); };
 
 			// Read any incoming relevancy until the client is disconnected.
 			while let Ok(relevance) = self.recv.read::<relevancy::Relevance>().await {
@@ -101,10 +87,11 @@ impl stream::handler::Receiver for Handler {
 				// the server will open streams for any/all new chunks to be replicated.
 				// So its possible that those streams are now active while we are also
 				// removing old chunks from the cache.
-				if let Ok(sender) = self.context.client_chunk_sender() {
-					for coord in old_chunks.into_iter().rev() {
-						sender.try_send(chunk::Operation::Remove(coord))?;
-					}
+				let Some(chunk_channel) = chunk_channel.upgrade() else { continue; };
+				for coord in old_chunks.into_iter().rev() {
+					chunk_channel
+						.send()
+						.try_send(chunk::Operation::Remove(coord))?;
 				}
 			}
 

@@ -122,8 +122,8 @@ impl ThreadState {
 		};
 		let processed_chunks = self.sync_load_ticket_chunks(arc_ticket);
 		let mut ticket_chunks = Vec::with_capacity(processed_chunks.len());
-		for (coordinate, arc_chunk, level) in processed_chunks.into_iter() {
-			self.insert_or_update_chunk_state(&weak_ticket, coordinate, level, &arc_chunk);
+		for (coordinate, weak_chunk, level) in processed_chunks.into_iter() {
+			self.insert_or_update_chunk_state(&weak_ticket, coordinate, level, weak_chunk);
 			ticket_chunks.push(coordinate);
 		}
 		self.ticket_bindings.push((weak_ticket, ticket_chunks));
@@ -133,7 +133,7 @@ impl ThreadState {
 	fn sync_load_ticket_chunks(
 		&mut self,
 		ticket: Arc<Ticket>,
-	) -> Vec<(Point3<i64>, chunk::ArcLock, Level)> {
+	) -> Vec<(Point3<i64>, Weak<RwLock<chunk::Chunk>>, Level)> {
 		let mut chunks = Vec::new();
 		let coordinate_levels = ticket.coordinate_levels();
 		for (coordinate, level) in coordinate_levels.into_iter() {
@@ -143,13 +143,13 @@ impl ThreadState {
 			);
 			profiling::scope!("load-chunk", chunk_id.as_str());
 
-			let arc_chunk = self.sync_load_chunk(coordinate, level);
-			chunks.push((coordinate, arc_chunk, level));
+			let weak_chunk = self.sync_load_chunk(coordinate, level);
+			chunks.push((coordinate, weak_chunk, level));
 		}
 		chunks
 	}
 
-	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> chunk::ArcLock {
+	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> Weak<RwLock<chunk::Chunk>> {
 		let loaded_chunk = self
 			.database
 			.read()
@@ -157,13 +157,14 @@ impl ThreadState {
 			.find_chunk(&coordinate)
 			.map(|arc| arc.unwrap_server().clone());
 		let (_freshly_loaded, arc_chunk) = match loaded_chunk {
-			Some(arc_chunk) => (false, arc_chunk),
+			Some(arc_chunk) => (false, Arc::downgrade(&arc_chunk)),
 			None => {
 				let root_dir = self.root_dir.clone();
 				let arc_chunk = Chunk::load_or_generate(&coordinate, level, root_dir);
+				let weak_chunk = Arc::downgrade(&arc_chunk);
 				let mut database = self.database.write().unwrap();
-				database.insert_chunk(coordinate, arc_chunk.clone());
-				(true, arc_chunk)
+				database.insert_chunk(coordinate, arc_chunk);
+				(true, weak_chunk)
 			}
 		};
 
@@ -175,7 +176,7 @@ impl ThreadState {
 		weak_ticket: &Weak<Ticket>,
 		coordinate: Point3<i64>,
 		level: Level,
-		arc_chunk: &chunk::ArcLock,
+		weak_chunk: Weak<RwLock<chunk::Chunk>>,
 	) {
 		match self.chunk_states.get_mut(&coordinate) {
 			Some(state) => {
@@ -188,7 +189,7 @@ impl ThreadState {
 				self.chunk_states.insert(
 					coordinate,
 					ChunkState {
-						chunk: arc_chunk.clone(),
+						chunk: weak_chunk,
 						level: level,
 						tickets: vec![weak_ticket.clone()],
 					},
@@ -240,7 +241,7 @@ impl ThreadState {
 	}
 
 	#[profiling::function]
-	fn find_expired_chunks(&mut self) -> Vec<(Point3<i64>, chunk::ArcLock)> {
+	fn find_expired_chunks(&mut self) -> Vec<Point3<i64>> {
 		// Invalidate the flag indicating that there is some chunk pending expiration.
 		// We will later give it a proper value if there are still chunks in the list which will expire later.
 		self.earliest_expiration_timestamp = None;
@@ -265,9 +266,8 @@ impl ThreadState {
 				self.ticketless_chunks.remove(i);
 				// Only move the chunk to the list to be unloaded if no other tickets reference it.
 				if !has_been_renewed {
-					if let Some(state) = self.chunk_states.remove(&coordinate) {
-						chunks_for_unloading.push((coordinate, state.chunk));
-					}
+					let _ = self.chunk_states.remove(&coordinate);
+					chunks_for_unloading.push(coordinate);
 				}
 			} else {
 				i += 1;
@@ -286,7 +286,7 @@ impl ThreadState {
 	#[profiling::function]
 	fn unload_expired_chunks(
 		&mut self,
-		mut chunks_for_unloading: Vec<(Point3<i64>, chunk::ArcLock)>,
+		mut chunks_for_unloading: Vec<Point3<i64>>,
 	) {
 		// Unload each chunk, dropping them one-after-one after each iteration
 		if !chunks_for_unloading.is_empty() {
@@ -295,15 +295,17 @@ impl ThreadState {
 				"Unloading {} chunks",
 				chunks_for_unloading.len()
 			);
-			for (coordinate, arc_chunk) in chunks_for_unloading.drain(..) {
-				assert!(Arc::strong_count(&arc_chunk) == 1);
+			let mut database = self.database.write().unwrap();
+			for coordinate in chunks_for_unloading.drain(..) {
 				// remove the chunk from the database before unloading it
-				self.database.write().unwrap().remove_chunk(&coordinate);
-				// unload the chunk:
-				// 1. save to disk
-				// 2. drop the arc
-				let chunk = arc_chunk.read().unwrap();
-				chunk.save();
+				if let Some(entry) = database.remove_chunk(&coordinate) {
+					let arc_chunk = entry.unwrap_server();
+					// unload the chunk:
+					// 1. save to disk
+					// 2. drop the arc
+					let chunk = arc_chunk.read().unwrap();
+					chunk.save();
+				}
 			}
 		}
 	}
@@ -314,7 +316,7 @@ impl ThreadState {
 pub struct ChunkState {
 	/// The pointer to the actual chunk world data.
 	/// If this is dropped, the chunk is discarded (regardless of if its been saved or not).
-	pub chunk: chunk::ArcLock,
+	pub chunk: Weak<RwLock<chunk::Chunk>>,
 	/// The ticking level of the chunk.
 	/// If this state changes during [`update`](ChunkState::update), the value in the chunk world data is updated.
 	/// This value is driven by finding the highest level in the list of associated tickets.
@@ -348,7 +350,9 @@ impl ChunkState {
 			Some(level) => {
 				if self.level != level {
 					self.level = level;
-					self.chunk.write().unwrap().level = level;
+					if let Some(arc) = self.chunk.upgrade() {
+						arc.write().unwrap().level = level;
+					}
 				}
 				false
 			}

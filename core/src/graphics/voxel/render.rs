@@ -1,7 +1,7 @@
 use crate::{
 	app::state::{self, ArcLockMachine},
 	block,
-	client::world::chunk,
+	client::world,
 	common::network::Storage,
 	graphics::voxel::{
 		camera,
@@ -21,6 +21,7 @@ use engine::{
 		resource::ColorBuffer,
 		Chain, Drawable, Uniform,
 	},
+	utility::ValueSet,
 	Application,
 };
 use std::sync::{Arc, RwLock, Weak};
@@ -43,6 +44,7 @@ impl RenderVoxel {
 
 	pub fn add_state_listener(
 		app_state: &ArcLockMachine,
+		systems: Weak<ValueSet>,
 		storage: Weak<RwLock<Storage>>,
 		chain: Weak<RwLock<Chain>>,
 		phase: Weak<Phase>,
@@ -56,9 +58,9 @@ impl RenderVoxel {
 			*,
 		};
 
+		let callback_systems = systems;
 		let callback_chain = chain;
 		let callback_phase = phase;
-		let callback_storage = storage;
 		let callback_model_cache = model_cache;
 		let callback_camera = camera;
 		Storage::<ArcLockRenderVoxel>::default()
@@ -69,29 +71,12 @@ impl RenderVoxel {
 			.create_callbacks(&app_state, move || {
 				profiling::scope!("init-render", ID);
 				log::trace!(target: ID, "Received Enter(InGame) transition");
+				let systems = callback_systems.upgrade().unwrap();
 				let chain = callback_chain.upgrade().unwrap();
 				let phase = callback_phase.upgrade().unwrap();
 				let arc_camera = callback_camera.upgrade().unwrap();
 
-				let chunk_receiver = match callback_storage.upgrade() {
-					Some(arc_storage) => {
-						let storage = arc_storage.read().unwrap();
-						match storage.client() {
-							Some(arc_client) => {
-								let client = arc_client.read().unwrap();
-								client.chunk_receiver().clone()
-							}
-							None => {
-								log::error!(target: ID, "Failed to find client storage");
-								return Ok(None);
-							}
-						}
-					}
-					None => {
-						log::error!(target: ID, "Failed to find storage");
-						return Ok(None);
-					}
-				};
+				let chunk_channel = systems.get_arc::<world::ChunkChannel>().unwrap();
 
 				Ok(
 					match Self::create(
@@ -99,7 +84,7 @@ impl RenderVoxel {
 						&phase,
 						arc_camera,
 						callback_model_cache.clone(),
-						chunk_receiver,
+						chunk_channel,
 					) {
 						Ok(arclocked) => Some(arclocked),
 						Err(err) => {
@@ -116,11 +101,11 @@ impl RenderVoxel {
 		phase: &Arc<Phase>,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
-		chunk_receiver: chunk::OperationReceiver,
+		chunk_channel: Arc<world::ChunkChannel>,
 	) -> Result<ArcLockRenderVoxel> {
 		log::info!(target: ID, "Initializing");
 		let render_chunks =
-			Self::new(&chain.read().unwrap(), camera, model_cache, chunk_receiver)?.arclocked();
+			Self::new(&chain.read().unwrap(), camera, model_cache, chunk_channel)?.arclocked();
 
 		log::trace!(target: ID, "Adding to render chain");
 		let mut chain = chain.write().unwrap();
@@ -137,7 +122,7 @@ impl RenderVoxel {
 		chain: &Chain,
 		camera: Arc<RwLock<camera::Camera>>,
 		model_cache: Arc<model::Cache>,
-		chunk_receiver: chunk::OperationReceiver,
+		chunk_channel: Arc<world::ChunkChannel>,
 	) -> Result<Self> {
 		log::trace!(target: ID, "Creating renderer");
 
@@ -149,7 +134,7 @@ impl RenderVoxel {
 		let instance_buffer = instance::Buffer::new(
 			&chain.allocator()?,
 			Arc::downgrade(&model_cache),
-			chunk_receiver,
+			chunk_channel,
 		)?;
 
 		let camera_uniform = Uniform::new::<camera::UniformData>(

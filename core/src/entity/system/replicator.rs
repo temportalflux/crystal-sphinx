@@ -73,11 +73,15 @@ impl Replicator {
 
 				log::info!(target: LOG, "Initializing");
 
+				let Some(systems) = callback_systems.upgrade() else { return Ok(None); };
+
 				let database = {
-					let Some(systems) = callback_systems.upgrade() else { return Ok(None); };
 					let Some(database) = systems.get_arclock::<Database>() else { return Ok(None); };
 					Arc::downgrade(&database)
 				};
+				let local_client_chunk_sender = systems
+					.get_arc::<crate::client::world::ChunkChannel>()
+					.map(|channel| channel.send().clone());
 
 				let arc_storage = match callback_storage.upgrade() {
 					Some(arc_storage) => arc_storage,
@@ -86,21 +90,14 @@ impl Replicator {
 						return Ok(None);
 					}
 				};
-				let (connection_recv, connections, local_client_chunk_sender) = {
+				let (connection_recv, connections) = {
 					let storage = arc_storage.read().unwrap();
 					let (connection_recv, connections) = {
 						let arc_connection_list = storage.connection_list().clone();
 						let mut connection_list = arc_connection_list.write().unwrap();
 						(connection_list.add_recv(), connection_list.all().clone())
 					};
-					let local_client_chunk_sender = match storage.client().as_ref() {
-						Some(arc_client) => {
-							let client = arc_client.read().unwrap();
-							Some(client.chunk_sender().clone())
-						}
-						None => None,
-					};
-					(connection_recv, connections, local_client_chunk_sender)
+					(connection_recv, connections)
 				};
 
 				let world = callback_world.clone();

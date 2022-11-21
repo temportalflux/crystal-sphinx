@@ -16,7 +16,9 @@ use engine::{
 		utility::{BuildFromDevice, NameableBuilder},
 		Chain, DescriptorCache, Texture,
 	},
-	task, Application,
+	task,
+	utility::ValueSet,
+	Application,
 };
 use std::{
 	collections::{HashMap, HashSet},
@@ -28,6 +30,7 @@ static LOG: &'static str = "model::loader";
 /// Asynchronously loads the block assets so they can be loaded into the [`model cache`](super::Cache)
 /// and stitched block texture asset.
 pub fn load_models(
+	systems: &Arc<ValueSet>,
 	app_state: &ArcLockMachine,
 	storage: Weak<RwLock<Storage>>,
 	chain: &Arc<RwLock<Chain>>,
@@ -35,6 +38,8 @@ pub fn load_models(
 	camera: &Arc<RwLock<camera::Camera>>,
 	world: &Arc<RwLock<crate::entity::World>>,
 ) {
+	let thread_systems = Arc::downgrade(&systems);
+
 	let thread_app_state = app_state.clone();
 	let thread_storage = storage.clone();
 	let thread_chain = chain.clone();
@@ -326,6 +331,7 @@ pub fn load_models(
 
 		RenderVoxel::add_state_listener(
 			&thread_app_state,
+			thread_systems.clone(),
 			thread_storage.clone(),
 			Arc::downgrade(&thread_chain),
 			thread_phase.clone(),

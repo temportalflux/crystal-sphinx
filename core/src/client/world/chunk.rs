@@ -1,8 +1,9 @@
-use engine::channels::mpsc::{Receiver, Sender};
+use engine::channels::mpsc::{Pair, Receiver, Sender};
 use engine::math::nalgebra::Point3;
 
 use crate::block;
 
+pub type OperationPair = Pair<Operation>;
 pub type OperationSender = Sender<Operation>;
 pub type OperationReceiver = Receiver<Operation>;
 pub enum Operation {

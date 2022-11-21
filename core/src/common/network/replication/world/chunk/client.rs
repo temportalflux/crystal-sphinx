@@ -1,5 +1,6 @@
 use crate::{
-	block, client::world::chunk, common::network::Storage,
+	block,
+	common::{network::Storage, world::Database},
 	entity::system::replicator::relevancy::Relevance,
 };
 
@@ -17,27 +18,13 @@ use std::{
 pub struct AppContext {
 	pub local_relevance: Arc<RwLock<Relevance>>,
 	pub storage: Weak<RwLock<Storage>>,
+	pub database: Weak<RwLock<Database>>,
 }
 
 /// Creates the handler from an incoming unidirectional stream
 impl stream::recv::AppContext for AppContext {
 	type Extractor = stream::uni::Extractor;
 	type Receiver = Handler;
-}
-
-impl AppContext {
-	/// Returns the client application's chunk instance buffer operation sender
-	/// (to send update operations to the graphics buffer).
-	pub fn client_chunk_sender(&self) -> anyhow::Result<chunk::OperationSender> {
-		use crate::common::network::Error::{
-			FailedToReadClient, FailedToReadStorage, InvalidClient, InvalidStorage,
-		};
-		let arc_storage = self.storage.upgrade().ok_or(InvalidStorage)?;
-		let storage = arc_storage.read().map_err(|_| FailedToReadStorage)?;
-		let arc = storage.client().as_ref().ok_or(InvalidClient)?;
-		let client = arc.read().map_err(|_| FailedToReadClient)?;
-		Ok(client.chunk_sender().clone())
-	}
 }
 
 /// The stream handler for the client/receiver of a chunk replication stream.
@@ -85,12 +72,14 @@ impl Handler {
 		let start_time = Instant::now();
 
 		let block_count = self.recv.read_size().await?;
-		let mut contents = Vec::with_capacity(block_count);
+		//let mut contents = Vec::with_capacity(block_count);
+		let mut chunk = crate::common::world::chunk::Chunk::new(coord);
 		for _ in 0..block_count {
 			let offset = self.recv.read::<Point3<u8>>().await?;
 			let offset = offset.cast::<usize>();
 			let block_id = self.recv.read::<block::LookupId>().await?;
-			contents.push((offset, block_id));
+			//contents.push((offset, block_id));
+			chunk.set_block_id(offset, Some(block_id));
 		}
 
 		let end_time = Instant::now();
@@ -122,9 +111,12 @@ impl Handler {
 			}
 		}
 
-		self.context
-			.client_chunk_sender()?
-			.try_send(chunk::Operation::Insert(coord, contents))?;
+		if let Some(database) = self.context.database.upgrade() {
+			database
+				.write()
+				.unwrap()
+				.insert_chunk(*chunk.coordinate(), Arc::new(RwLock::new(chunk)));
+		}
 
 		Ok(())
 	}

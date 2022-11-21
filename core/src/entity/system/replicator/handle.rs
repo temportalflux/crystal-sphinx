@@ -122,23 +122,8 @@ impl Handle {
 							let _ = chunk_sender.try_send(Operation::Remove(coord));
 						}
 					}
-					relevancy::WorldUpdate::Chunks(new_chunks) => {
-						for weak_chunk in new_chunks.into_iter() {
-							let operation = match weak_chunk.upgrade() {
-								Some(arc_chunk) => {
-									let server_chunk = arc_chunk.read().unwrap();
-									let coord = server_chunk.chunk.coordinate().clone();
-									let updates = server_chunk
-										.chunk
-										.block_ids()
-										.into_iter()
-										.collect::<Vec<_>>();
-									Operation::Insert(coord, updates)
-								}
-								None => continue,
-							};
-							let _ = chunk_sender.try_send(operation);
-						}
+					relevancy::WorldUpdate::Chunks(_new_chunks) => {
+						// all updates are handled by the database broadcast channel
 					}
 				}
 			}

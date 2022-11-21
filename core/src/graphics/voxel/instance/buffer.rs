@@ -1,5 +1,5 @@
 use crate::{
-	client::world::chunk::{Operation, OperationReceiver as ChunkOperationReceiver},
+	client::world::{self, chunk::Operation},
 	common::{utility::ThreadHandle, world::chunk},
 	graphics::voxel::{
 		instance::{local, submitted, Instance},
@@ -27,7 +27,7 @@ impl Buffer {
 	pub fn new(
 		allocator: &Arc<alloc::Allocator>,
 		model_cache: Weak<model::Cache>,
-		chunk_receiver: ChunkOperationReceiver,
+		chunk_channel: Arc<world::ChunkChannel>,
 	) -> Result<Self> {
 		// TODO: Get this value from settings
 		let render_radius = 6;
@@ -68,7 +68,7 @@ impl Buffer {
 		let submitted_description = submitted::Description::new(allocator, instance_buffer_size)?;
 
 		let _thread_handle =
-			Self::start_thread(chunk_receiver, Arc::downgrade(&local_integrated_buffer))?;
+			Self::start_thread(chunk_channel, Arc::downgrade(&local_integrated_buffer))?;
 
 		Ok(Self {
 			_thread_handle,
@@ -78,7 +78,7 @@ impl Buffer {
 	}
 
 	fn start_thread(
-		chunk_receiver: ChunkOperationReceiver,
+		chunk_channel: Arc<world::ChunkChannel>,
 		description: Weak<Mutex<local::IntegratedBuffer>>,
 	) -> anyhow::Result<ThreadHandle> {
 		let handle = Arc::new(());
@@ -103,13 +103,13 @@ impl Buffer {
 				};
 
 				let delay_ms;
-				if !chunk_receiver.is_empty() {
+				if !chunk_channel.recv().is_empty() {
 					profiling::scope!("process");
 					if let Ok(mut description) = arc_description.try_lock() {
 						use anyhow::Context;
 						delay_ms = delay_between_batches;
 						let mut operation_count = 0;
-						while let Ok(operation) = chunk_receiver.try_recv() {
+						while let Ok(operation) = chunk_channel.recv().try_recv() {
 							let res = match operation {
 								Operation::Remove(coord) => {
 									let res = description.remove_chunk(&coord);

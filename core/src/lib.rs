@@ -236,6 +236,7 @@ impl engine::Runtime for Runtime {
 		});
 
 		graphics::voxel::model::load_models(
+			&self.systems,
 			&app_state,
 			Arc::downgrade(&network_storage),
 			&graphics_chain,

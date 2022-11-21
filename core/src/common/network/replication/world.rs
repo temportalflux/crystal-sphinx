@@ -3,11 +3,14 @@
 //! See [`register`] for stream graph.
 use std::sync::{Arc, RwLock, Weak};
 
-use engine::channels::future::{Receiver, Sender};
+use engine::{
+	channels::future::{Receiver, Sender},
+	utility::ValueSet,
+};
 use socknet::stream::Registry;
 
 use crate::{
-	common::network::Storage,
+	common::world,
 	entity::system::replicator::relevancy::{Relevance, WorldUpdate},
 	server::world::chunk::Chunk,
 };
@@ -43,20 +46,28 @@ pub type RecvChunks = Receiver<Weak<RwLock<Chunk>>>;
 /// 	end
 /// 	Note over S,C: Streams kept alive until client disconnects
 /// ```
-pub fn register(registry: &mut Registry, storage: Weak<RwLock<Storage>>) {
+pub fn register(registry: &mut Registry, systems: &Arc<ValueSet>) {
+	let storage = systems
+		.get_arclock::<crate::common::network::Storage>()
+		.unwrap();
+	let database = systems.get_arclock::<world::Database>().unwrap();
+	let chunk_channel = systems.get_arc::<crate::client::world::ChunkChannel>();
+
 	let local_relevance = Arc::new(RwLock::new(Relevance::default()));
 	registry.register(relevancy::Identifier {
 		server: Arc::default(),
 		client: Arc::new(relevancy::client::AppContext {
 			local_relevance: local_relevance.clone(),
-			storage: storage.clone(),
+			storage: Arc::downgrade(&storage),
+			chunk_channel: chunk_channel.map(|arc| Arc::downgrade(&arc)),
 		}),
 	});
 	registry.register(chunk::Identifier {
 		server: Arc::default(),
 		client: Arc::new(chunk::client::AppContext {
 			local_relevance: local_relevance.clone(),
-			storage: storage.clone(),
+			storage: Arc::downgrade(&storage),
+			database: Arc::downgrade(&database),
 		}),
 	});
 }

@@ -1,5 +1,5 @@
 use crate::block;
-use engine::{asset, channels::future, math::nalgebra::Point3};
+use engine::{asset, math::nalgebra::Point3};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
@@ -18,7 +18,6 @@ pub struct Chunk {
 	/// The coordinate of the chunk in the world.
 	coordinate: Point3<i64>,
 	blocks: HashMap<Point3<usize>, Arc<BlockData>>,
-	send_chunk_changed: Option<future::Sender<WorldDelta>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -69,7 +68,6 @@ impl From<ChunkSaveData> for Chunk {
 		Self {
 			coordinate: save_data.coordinate,
 			blocks,
-			send_chunk_changed: None,
 		}
 	}
 }
@@ -79,7 +77,6 @@ impl Chunk {
 		Self {
 			coordinate,
 			blocks: HashMap::new(),
-			send_chunk_changed: None,
 		}
 	}
 
@@ -121,41 +118,10 @@ impl Chunk {
 			Some(block_id) => {
 				let data = Arc::new(BlockData::new(point, block_id));
 				self.blocks.insert(point, data.clone());
-				if let Some(sender) = &self.send_chunk_changed {
-					let delta = WorldDelta::BlockInserted(self.coordinate, Arc::downgrade(&data));
-					sender.try_send(delta).unwrap();
-				}
 			}
 			None => {
-				if let Some(block_data) = self.blocks.remove(&point) {
-					if let Some(sender) = &self.send_chunk_changed {
-						let delta = WorldDelta::BlockDropped(self.coordinate, block_data);
-						sender.try_send(delta).unwrap();
-					}
-				}
+				self.blocks.remove(&point);
 			}
-		}
-	}
-
-	pub fn set_update_channel(&mut self, channel: future::Sender<WorldDelta>) {
-		let weak_blocks = self
-			.blocks
-			.iter()
-			.map(|(_, arc)| Arc::downgrade(&arc))
-			.collect();
-		let delta = WorldDelta::ChunkInserted(self.coordinate, weak_blocks);
-		channel.try_send(delta).unwrap();
-
-		self.send_chunk_changed = Some(channel);
-	}
-}
-
-impl Drop for Chunk {
-	fn drop(&mut self) {
-		if let Some(channel) = self.send_chunk_changed.take() {
-			let blocks = self.blocks.iter().map(|(_, arc)| arc.clone()).collect();
-			let delta = WorldDelta::ChunkDropped(self.coordinate, blocks);
-			channel.try_send(delta).unwrap();
 		}
 	}
 }

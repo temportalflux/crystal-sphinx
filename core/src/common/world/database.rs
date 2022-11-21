@@ -1,8 +1,8 @@
 use crate::common::world::Point;
-use engine::{channels::future, math::nalgebra::Point3};
+use engine::{channels::broadcast, math::nalgebra::Point3};
 use std::{
 	collections::HashMap,
-	sync::{Arc, RwLock, Weak},
+	sync::{Arc, RwLock},
 };
 
 /// Holds ownership over the state of the world. Chunks can be inserted/removed as they are loaded or replicated,
@@ -10,7 +10,7 @@ use std::{
 /// When the world state changes, the update channel is broadcasted to, enabling listeners to react to chunks or blocks being changed.
 pub struct Database {
 	chunks: HashMap<Point3<i64>, Entry>,
-	update_channel: future::Pair<Update<()>>, // TODO: Might need to use engine::broadcast instead of engine::future.
+	update_channel: broadcast::Bus<UpdateBlockId>,
 }
 
 #[derive(Clone)]
@@ -42,56 +42,97 @@ impl Entry {
 			Self::Server(_) => unimplemented!(),
 		}
 	}
+
+	pub fn map_chunk<R, F>(&self, f: F) -> R
+	where
+		F: FnOnce(&super::chunk::Chunk) -> R + 'static,
+	{
+		match self {
+			Self::Server(chunk) => {
+				let read_chunk = chunk.read().unwrap();
+				f(&read_chunk.chunk)
+			}
+			Self::Client(chunk) => {
+				let read_chunk = chunk.read().unwrap();
+				f(&*read_chunk)
+			}
+		}
+	}
+
+	pub fn block_ids(&self) -> Vec<(Point3<usize>, crate::block::LookupId)> {
+		self.map_chunk(|chunk| chunk.block_ids().into_iter().collect::<Vec<_>>())
+	}
 }
 
+pub type UpdateBlockId = Update<(Point3<usize>, crate::block::LookupId)>;
+
+#[derive(Clone)]
 pub enum Update<T> {
-	Inserted(Point3<i64>, Vec<Weak<T>>),
-	Dropped(Point3<i64>, Vec<Arc<T>>),
+	Inserted(Point3<i64>, Arc<Vec<T>>),
+	Dropped(Point3<i64>, Arc<Vec<T>>),
+}
+impl<T> std::fmt::Debug for Update<T> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Inserted(coord, entries) => write!(
+				f,
+				"Inserted(<{}, {}, {}>, {} entries)",
+				coord.x,
+				coord.y,
+				coord.z,
+				entries.len()
+			),
+			Self::Dropped(coord, entries) => write!(
+				f,
+				"Dropped(<{}, {}, {}>, {} entries)",
+				coord.x,
+				coord.y,
+				coord.z,
+				entries.len()
+			),
+		}
+	}
 }
 
 impl Database {
 	pub fn new() -> Self {
-		let update_channel = future::unbounded();
 		Self {
 			chunks: HashMap::new(),
-			update_channel,
+			update_channel: broadcast::Bus::new(100),
 		}
 	}
 
-	pub fn recv_updates(&self) -> &future::Receiver<Update<()>> {
-		&self.update_channel.1
+	pub fn add_recv(&mut self) -> broadcast::BusReader<UpdateBlockId> {
+		self.update_channel.add_rx()
 	}
 
 	pub fn insert_chunk<T>(&mut self, coordinate: Point3<i64>, chunk: T)
 	where
-		T: Into<Entry>,
+		Entry: From<T>,
 	{
-		let previous = self.chunks.insert(coordinate, chunk.into());
-		if let Some(_prev) = previous {
-			// TODO: Extract the block data from the chunk (previous) and send it through the channel.
+		let entry = Entry::from(chunk);
+		let insert_updates = entry.block_ids();
+		let previous = self.chunks.insert(coordinate, entry);
+		if let Some(prev) = previous {
+			// Extract the block data from the chunk (previous) and send it through the channel.
 			// The chunk is about to be dropped in this frame.
-			let _ = self
-				.update_channel
-				.0
-				.try_send(Update::Dropped(coordinate, vec![]));
+			self.update_channel
+				.broadcast(Update::Dropped(coordinate, Arc::new(prev.block_ids())));
 		}
-		// TODO: Clone the block data from the chunk (chunk/new/given) and send it through the channel.
-		let _ = self
-			.update_channel
-			.0
-			.try_send(Update::Inserted(coordinate, vec![]));
+		// Clone the block data from the chunk (chunk/new/given) and send it through the channel.
+		self.update_channel
+			.broadcast(Update::Inserted(coordinate, Arc::new(insert_updates)));
 	}
 
-	pub fn remove_chunk(&mut self, coordinate: &Point3<i64>) {
+	pub fn remove_chunk(&mut self, coordinate: &Point3<i64>) -> Option<Entry> {
 		let previous = self.chunks.remove(coordinate);
-		if let Some(_prev) = previous {
-			// TODO: Extract the block data from the chunk and send it through the channel.
+		if let Some(prev) = &previous {
+			// Extract the block data from the chunk and send it through the channel.
 			// The chunk is about to be dropped in this frame.
-			let _ = self
-				.update_channel
-				.0
-				.try_send(Update::Dropped(*coordinate, vec![]));
+			self.update_channel
+				.broadcast(Update::Dropped(*coordinate, Arc::new(prev.block_ids())));
 		}
+		previous
 	}
 
 	pub fn find_chunk(&self, coordinate: &Point3<i64>) -> Option<&Entry> {
