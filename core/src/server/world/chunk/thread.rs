@@ -1,13 +1,13 @@
 use crate::common::utility::ThreadHandle;
-use crate::common::world::chunk::WorldDelta;
+use crate::common::world::Database;
 use crate::server::world::chunk::{
-	self, cache,
+	self,
 	ticket::{self, Ticket},
 	Chunk, Level,
 };
 use anyhow::Result;
-use engine::channels::future;
 use engine::{math::nalgebra::Point3, utility::spawn_thread};
+use std::sync::RwLock;
 use std::{
 	collections::HashMap,
 	path::PathBuf,
@@ -20,12 +20,7 @@ static LOG: &'static str = "chunk-loading";
 /// State data about the loading thread.
 pub(crate) struct ThreadState {
 	root_dir: PathBuf,
-	send_world_updates: future::Sender<WorldDelta>,
-
-	/// The public cache of chunks that are currently loaded.
-	/// The cache holds no ownership of chunks,
-	/// just weak references to what is loaded at any given time.
-	cache: cache::ArcLock,
+	database: Arc<RwLock<Database>>,
 
 	/// List of inactive and recently dropped tickets (and the chunk coordinates they reference).
 	ticket_bindings: Vec<(Weak<Ticket>, Vec<Point3<i64>>)>,
@@ -50,18 +45,16 @@ pub(crate) struct ThreadState {
 pub fn start(
 	root_dir: PathBuf,
 	incoming_requests: ticket::Receiver,
-	send_world_updates: future::Sender<WorldDelta>,
-	cache: &cache::ArcLock,
+	database: Weak<RwLock<Database>>,
 ) -> anyhow::Result<ThreadHandle> {
 	let handle = Arc::new(());
 	let weak_handle = Arc::downgrade(&handle);
-	let cache = cache.clone();
+	let database = database.clone();
 	let root_dir = root_dir.clone();
 	let join_handle = spawn_thread(LOG, move || -> Result<()> {
 		let mut thread_state = ThreadState {
 			root_dir: root_dir.clone(),
-			send_world_updates: send_world_updates.clone(),
-			cache: cache.clone(),
+			database: database.upgrade().unwrap(),
 			ticket_bindings: Vec::new(),
 			chunk_states: HashMap::new(),
 			expiration_delay: std::time::Duration::from_secs(60),
@@ -70,7 +63,7 @@ pub fn start(
 			disconnected_from_requests: false,
 		};
 
-		// while the database/cache has not been discarded,
+		// while the database has not been discarded,
 		// processing any pending load requests & unload any chunks no longer needed
 		log::info!(target: LOG, "Starting chunk-loading thread");
 		while weak_handle.strong_count() > 0 {
@@ -158,22 +151,18 @@ impl ThreadState {
 
 	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> chunk::ArcLock {
 		let loaded_chunk = self
-			.cache
+			.database
 			.read()
 			.unwrap()
-			.find(&coordinate)
-			.map(|arc| arc.clone());
+			.find_chunk(&coordinate)
+			.map(|arc| arc.unwrap_server().clone());
 		let (_freshly_loaded, arc_chunk) = match loaded_chunk {
-			Some(weak_chunk) => {
-				let some_arc_chunk = weak_chunk.upgrade();
-				assert!(some_arc_chunk.is_some());
-				(false, some_arc_chunk.unwrap())
-			}
+			Some(arc_chunk) => (false, arc_chunk),
 			None => {
 				let root_dir = self.root_dir.clone();
 				let arc_chunk = Chunk::load_or_generate(&coordinate, level, root_dir);
-				let mut cache = self.cache.write().unwrap();
-				cache.insert(coordinate, Arc::downgrade(&arc_chunk));
+				let mut database = self.database.write().unwrap();
+				database.insert_chunk(coordinate, arc_chunk.clone());
 				(true, arc_chunk)
 			}
 		};
@@ -204,8 +193,6 @@ impl ThreadState {
 						tickets: vec![weak_ticket.clone()],
 					},
 				);
-
-				// TODO: Set update channel
 			}
 		}
 	}
@@ -310,8 +297,8 @@ impl ThreadState {
 			);
 			for (coordinate, arc_chunk) in chunks_for_unloading.drain(..) {
 				assert!(Arc::strong_count(&arc_chunk) == 1);
-				// remove the chunk from cache before unloading it
-				self.cache.write().unwrap().remove(&coordinate);
+				// remove the chunk from the database before unloading it
+				self.database.write().unwrap().remove_chunk(&coordinate);
 				// unload the chunk:
 				// 1. save to disk
 				// 2. drop the arc

@@ -1,17 +1,18 @@
 use super::Instruction;
 use crate::{
-	app::{self, state::ArcLockMachine},
+	app,
 	common::{
-		network::{connection, mode, Storage},
+		network::{connection, mode},
 		utility::get_named_arg,
+		world,
 	},
-	entity::{self, ArcLockEntityWorld},
+	entity,
 	server::network::Storage as ServerStorage,
 };
 use anyhow::{Context, Result};
 use engine::utility::ValueSet;
 use socknet::{endpoint::Endpoint, Config};
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, RwLock};
 
 #[profiling::function]
 pub fn load_dedicated_server(systems: Arc<ValueSet>) -> Result<()> {
@@ -35,6 +36,8 @@ pub fn load_dedicated_server(systems: Arc<ValueSet>) -> Result<()> {
 pub fn add_load_network_listener(systems: &Arc<ValueSet>) {
 	use app::state::{State::*, Transition::*, *};
 	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
+
+	// Construct world systems when entering the world
 	for state in [LoadingWorld, Connecting].iter() {
 		let callback_systems = Arc::downgrade(systems);
 		app_state.write().unwrap().add_async_callback(
@@ -52,6 +55,10 @@ pub fn add_load_network_listener(systems: &Arc<ValueSet>) {
 					let Some(systems) = async_systems.upgrade() else {
 						return Ok(());
 					};
+
+					// Add the world database whenever the world is loaded, client and server alike.
+					systems.insert(Arc::new(RwLock::new(world::Database::new())));
+
 					let endpoint = load_network(systems, &instruction)?;
 
 					// Dedicated Client (mode == Client) needs to connect to the server.
@@ -80,6 +87,27 @@ pub fn add_load_network_listener(systems: &Arc<ValueSet>) {
 			},
 		);
 	}
+
+	// Deconstruct world systems when leaving the world
+	for state in [Unloading, Disconnecting].iter() {
+		let callback_systems = Arc::downgrade(systems);
+		app_state.write().unwrap().add_async_callback(
+			OperationKey(None, Some(Enter), Some(*state)),
+			move |_operation| {
+				let async_systems = callback_systems.clone();
+				async move {
+					let Some(systems) = async_systems.upgrade() else {
+						return Ok(());
+					};
+
+					systems.remove::<Arc<world::Database>>();
+					systems.remove::<Arc<crate::server::world::Loader>>();
+
+					Ok(())
+				}
+			},
+		);
+	}
 }
 
 #[profiling::function]
@@ -87,12 +115,21 @@ fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc
 	mode::set(instruction.mode.clone());
 
 	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
-	let storage = systems.get_arclock::<crate::common::network::Storage>().unwrap();
+	let storage = systems
+		.get_arclock::<crate::common::network::Storage>()
+		.unwrap();
 	let entity_world = Arc::downgrade(&systems.get_arclock::<entity::World>().unwrap());
 
 	if instruction.mode.contains(mode::Kind::Server) {
 		let world_name = instruction.world_name.as_ref().unwrap();
 		let server = ServerStorage::load(&world_name).context("loading server")?;
+
+		let database = systems.get_arclock::<world::Database>().unwrap();
+		systems.insert(Arc::new(crate::server::world::Loader::new(
+			server.world_path(),
+			Arc::downgrade(&database),
+		)?));
+
 		storage.write().unwrap().set_server(server);
 	}
 	if instruction.mode.contains(mode::Kind::Client) {

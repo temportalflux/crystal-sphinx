@@ -106,6 +106,7 @@ impl Runtime {
 			&app_state,
 			Arc::downgrade(&network_storage),
 			Arc::downgrade(&world),
+			&systems,
 		);
 
 		Self { config, systems }
@@ -136,7 +137,7 @@ impl engine::Runtime for Runtime {
 		registry.register::<client::model::blender::Asset>();
 	}
 
-	fn initialize<'a>(&'a self, engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
+	fn initialize<'a>(&'a self, _engine: Arc<RwLock<Engine>>) -> PinFutureResultLifetime<'a, bool> {
 		Box::pin(async move {
 			// Load bundled plugins so they can be used throughout the instance
 			if let Ok(mut manager) = plugin::Manager::write() {

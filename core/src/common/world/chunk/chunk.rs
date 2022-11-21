@@ -3,7 +3,7 @@ use engine::{asset, channels::future, math::nalgebra::Point3};
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
-	sync::{Arc, Mutex, RwLock, Weak},
+	sync::{Arc, Mutex, Weak},
 };
 
 pub enum WorldDelta {

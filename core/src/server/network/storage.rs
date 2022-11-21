@@ -1,11 +1,10 @@
 use crate::{
 	common::account::{self, key},
 	entity::{self, ArcLockEntityWorld},
-	server::user,
-	server::world::{chunk, Database},
+	server::{user, world::Loader},
 };
 use anyhow::{Context, Result};
-use engine::{Engine, EngineSystem, utility::ValueSet};
+use engine::{Engine, EngineSystem};
 use std::{
 	collections::HashMap,
 	path::{Path, PathBuf},
@@ -21,7 +20,6 @@ pub struct Storage {
 	private_key: key::PrivateKey,
 	users: HashMap<account::Id, Arc<RwLock<user::Active>>>,
 
-	database: Option<Arc<RwLock<Database>>>,
 	systems: Vec<Arc<RwLock<dyn EngineSystem + Send + Sync>>>,
 }
 
@@ -49,7 +47,6 @@ impl Storage {
 			users: Self::load_users(&Self::players_dir_path(savegame_path.to_owned()))
 				.context("loading users")?,
 
-			database: None,
 			systems: vec![],
 		})
 	}
@@ -73,10 +70,6 @@ impl Storage {
 
 	pub fn get_players_dir_path(&self) -> PathBuf {
 		Self::players_dir_path(self.root_dir.clone())
-	}
-
-	fn world_name(&self) -> &str {
-		self.root_dir.file_name().unwrap().to_str().unwrap()
 	}
 
 	fn load_users(path: &Path) -> Result<HashMap<account::Id, Arc<RwLock<user::Active>>>> {
@@ -116,13 +109,15 @@ impl Storage {
 		self.users.get(id)
 	}
 
-	fn world_path(mut savegame_path: PathBuf) -> PathBuf {
-		savegame_path.push("world");
-		savegame_path
+	pub fn world_path(&self) -> PathBuf {
+		self.root_dir.join("world")
 	}
 
-	pub fn initialize_systems(&mut self, entity_world: &ArcLockEntityWorld) {
-		self.add_system(entity::system::UserChunkTicketUpdater::new(&entity_world));
+	pub fn initialize_systems(&mut self, entity_world: &ArcLockEntityWorld, loader: &Arc<Loader>) {
+		self.add_system(entity::system::UserChunkTicketUpdater::new(
+			&entity_world,
+			&loader,
+		));
 	}
 
 	pub fn add_system<T>(&mut self, system: T)
@@ -141,23 +136,5 @@ impl Storage {
 		let certificate: rustls::Certificate = self.certificate.clone().into();
 		let private_key: rustls::PrivateKey = self.private_key.clone().into();
 		Ok((certificate, private_key))
-	}
-
-	#[profiling::function]
-	pub fn start_loading_world(&mut self, systems: &Arc<ValueSet>) -> anyhow::Result<()> {
-		log::warn!(target: "world-loader", "Loading world \"{}\"", self.world_name());
-		let database = Database::new(Self::world_path(self.root_dir.to_owned()))?;
-
-		let arc_database = Arc::new(RwLock::new(database));
-		let origin_res = Database::load_origin_chunk(&arc_database);
-		assert!(origin_res.is_ok());
-
-		self.database = Some(arc_database);
-		Ok(())
-	}
-
-	pub fn chunk_cache(&self) -> chunk::cache::ArcLock {
-		let database = self.database.as_ref().unwrap().read().unwrap();
-		database.chunk_cache().clone()
 	}
 }

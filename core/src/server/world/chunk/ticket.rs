@@ -1,10 +1,5 @@
-use crate::server::world::{
-	chunk::{Level, ParameterizedLevel},
-	Database,
-};
-use anyhow::Result;
+use crate::server::world::chunk::{Level, ParameterizedLevel};
 use engine::math::nalgebra::{Point3, Vector3};
-use std::sync::Arc;
 
 /// The channel through which chunk [tickets are sent](Ticket::submit).
 pub(crate) type Sender = engine::channels::mpsc::Sender<std::sync::Weak<Ticket>>;
@@ -35,17 +30,6 @@ impl std::fmt::Display for Ticket {
 }
 
 impl Ticket {
-	/// Wraps the ticket in a Arc-Mutex (Arctex), and then sends a weak clone through
-	/// the chunk-loading channel to be processed by the loading thread.
-	/// If the returned Arctex is dropped before the loading thread can process it, the request is canceled.
-	/// If the arctex is dropped at any point in the future,
-	/// the affected chunks will be unloaded if no other ticket references them.
-	pub fn submit(self) -> Result<Arc<Ticket>> {
-		let arctex = Arc::new(self);
-		Database::send_chunk_ticket(&arctex)?;
-		Ok(arctex)
-	}
-
 	pub(crate) fn coordinate_levels(&self) -> Vec<(Point3<i64>, Level)> {
 		let mut points = Vec::new();
 

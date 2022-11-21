@@ -1,4 +1,4 @@
-use crate::server::world::chunk;
+use crate::server::world::{chunk, Loader};
 use engine::math::nalgebra::Point3;
 use std::sync::Arc;
 
@@ -56,7 +56,7 @@ impl TicketOwner {
 		self.current_ticket.as_ref().map(|active| active.coordinate)
 	}
 
-	pub(crate) fn submit_ticket(&mut self, coordinate: Point3<i64>) {
+	pub(crate) fn submit_ticket(&mut self, coordinate: Point3<i64>, loader: &Arc<Loader>) {
 		let scope_tag = format!("<{}, {}, {}>", coordinate[0], coordinate[1], coordinate[2]);
 		profiling::scope!("submit_ticket", scope_tag.as_str());
 		self.current_ticket = None;
@@ -64,8 +64,7 @@ impl TicketOwner {
 			coordinate,
 			level: (chunk::Level::Ticking, self.server_load_radius).into(),
 		};
-		if let Ok(handle) = ticket.submit() {
-			self.current_ticket = Some(ActiveTicket { coordinate, handle })
-		}
+		let handle = loader.submit(ticket);
+		self.current_ticket = Some(ActiveTicket { coordinate, handle });
 	}
 }

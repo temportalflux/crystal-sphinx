@@ -9,12 +9,14 @@ type QueryBundle<'c> = hecs::PreparedQuery<(
 
 pub struct UserChunkTicketUpdater {
 	world: Weak<RwLock<entity::World>>,
+	loader: Weak<crate::server::world::Loader>,
 }
 
 impl UserChunkTicketUpdater {
-	pub fn new(world: &ArcLockEntityWorld) -> Self {
+	pub fn new(world: &ArcLockEntityWorld, loader: &Arc<crate::server::world::Loader>) -> Self {
 		Self {
 			world: Arc::downgrade(&world),
+			loader: Arc::downgrade(loader),
 		}
 	}
 
@@ -27,19 +29,21 @@ impl EngineSystem for UserChunkTicketUpdater {
 	fn update(&mut self, _delta_time: std::time::Duration, _: bool) {
 		profiling::scope!("subsystem:update-user-chunk-tickets");
 
+		let Some(loader) = self.loader.upgrade() else { return; };
+
 		let arc_world = match self.world.upgrade() {
 			Some(arc) => arc,
 			None => return,
 		};
 		let mut world = arc_world.write().unwrap();
 		let mut query_bundle = QueryBundle::new();
-		for (_entity, (position, chunk_loader)) in query_bundle.query_mut(&mut world) {
+		for (_entity, (position, ticket_owner)) in query_bundle.query_mut(&mut world) {
 			// The coordinate of the chunk the entity is in
 			let current_chunk = *position.chunk();
 			// The coordinate of the chunk the loader's ticket is for
-			let ticket_chunk = chunk_loader.ticket_coordinate();
+			let ticket_chunk = ticket_owner.ticket_coordinate();
 			if ticket_chunk.is_none() || ticket_chunk.unwrap() != current_chunk {
-				chunk_loader.submit_ticket(current_chunk);
+				ticket_owner.submit_ticket(current_chunk, &loader);
 			}
 		}
 	}

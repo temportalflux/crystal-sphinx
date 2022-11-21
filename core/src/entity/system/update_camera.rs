@@ -1,9 +1,9 @@
 use crate::{
-	entity::{self, component, ArcLockEntityWorld},
+	entity::{self, component},
 	graphics::voxel::camera,
 };
-use engine::{math::nalgebra::Point3, utility::ValueSet, EngineSystem};
-use std::sync::{Arc, RwLock, Weak};
+use engine::{math::nalgebra::Point3, utility::ValueSet};
+use std::sync::Arc;
 
 type QueryBundle<'c> = hecs::PreparedQuery<(
 	&'c component::physics::linear::Position,

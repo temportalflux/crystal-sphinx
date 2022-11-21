@@ -1,7 +1,7 @@
 pub mod chunk;
 
-mod database;
-pub use database::*;
+mod loader;
+pub use loader::*;
 
 mod settings;
 pub use settings::*;

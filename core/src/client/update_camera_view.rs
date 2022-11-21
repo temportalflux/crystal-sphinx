@@ -3,7 +3,7 @@ use crate::{
 	common::account,
 	entity::{self, component},
 };
-use engine::{input, utility::ValueSet, Engine, EngineSystem};
+use engine::{input, utility::ValueSet};
 use std::sync::{Arc, RwLock, Weak};
 
 type QueryBundle<'c> = hecs::PreparedQuery<(

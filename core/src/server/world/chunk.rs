@@ -1,9 +1,6 @@
 mod chunk;
 pub use chunk::*;
 
-pub mod cache;
-pub use cache::Cache;
-
 mod level;
 pub use level::*;
 

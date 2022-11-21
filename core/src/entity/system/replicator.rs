@@ -2,16 +2,16 @@ use crate::{
 	app::state,
 	common::network::connection,
 	common::network::Storage,
-	common::utility::MultiSet,
+	common::{utility::MultiSet, world::Database},
 	entity::{
 		self,
 		component::{self, binary, network},
 		ArcLockEntityWorld,
 	},
-	server::world::chunk::{self, Chunk},
+	server::world::chunk::Chunk,
 };
 use anyhow::Result;
-use engine::channels::broadcast::BusReader;
+use engine::{channels::broadcast::BusReader, utility::ValueSet};
 use engine::{math::nalgebra::Point3, Engine, EngineSystem};
 use multimap::MultiMap;
 use socknet::connection::Connection;
@@ -34,7 +34,7 @@ pub mod relevancy;
 /// Replicates entities on the Server to connected Clients while they are net-relevant.
 pub struct Replicator {
 	world: Weak<RwLock<entity::World>>,
-	chunk_cache: chunk::cache::WeakLock,
+	database: Weak<RwLock<Database>>,
 	local_client_chunk_sender: Option<crate::client::world::chunk::OperationSender>,
 	connection_recv: BusReader<connection::Event>,
 	connection_handles: HashMap<SocketAddr, Handle>,
@@ -46,6 +46,7 @@ impl Replicator {
 		app_state: &Arc<RwLock<state::Machine>>,
 		storage: Weak<RwLock<Storage>>,
 		world: Weak<RwLock<entity::World>>,
+		systems: &Arc<ValueSet>,
 	) {
 		use state::{
 			storage::{Event::*, Storage},
@@ -56,6 +57,7 @@ impl Replicator {
 
 		let callback_storage = storage.clone();
 		let callback_world = world.clone();
+		let callback_systems = Arc::downgrade(&systems);
 		Storage::<Arc<RwLock<Self>>>::default()
 			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
 			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
@@ -71,6 +73,12 @@ impl Replicator {
 
 				log::info!(target: LOG, "Initializing");
 
+				let database = {
+					let Some(systems) = callback_systems.upgrade() else { return Ok(None); };
+					let Some(database) = systems.get_arclock::<Database>() else { return Ok(None); };
+					Arc::downgrade(&database)
+				};
+
 				let arc_storage = match callback_storage.upgrade() {
 					Some(arc_storage) => arc_storage,
 					None => {
@@ -78,9 +86,8 @@ impl Replicator {
 						return Ok(None);
 					}
 				};
-				let (server, connection_recv, connections, local_client_chunk_sender) = {
+				let (connection_recv, connections, local_client_chunk_sender) = {
 					let storage = arc_storage.read().unwrap();
-					let server = storage.server().as_ref().unwrap().clone();
 					let (connection_recv, connections) = {
 						let arc_connection_list = storage.connection_list().clone();
 						let mut connection_list = arc_connection_list.write().unwrap();
@@ -93,19 +100,13 @@ impl Replicator {
 						}
 						None => None,
 					};
-					(
-						server,
-						connection_recv,
-						connections,
-						local_client_chunk_sender,
-					)
+					(connection_recv, connections, local_client_chunk_sender)
 				};
 
-				let chunk_cache = Arc::downgrade(&server.read().unwrap().chunk_cache());
 				let world = callback_world.clone();
 				let mut replicator = Self {
 					local_client_chunk_sender,
-					chunk_cache,
+					database,
 					world,
 					connection_recv,
 					connection_handles: HashMap::new(),
@@ -148,10 +149,7 @@ impl EngineSystem for Replicator {
 			None => return,
 		};
 
-		let chunk_cache = match self.chunk_cache.upgrade() {
-			Some(arc) => arc,
-			None => return,
-		};
+		let Some(database) = self.database.upgrade() else { return; };
 
 		// Look for any new network connections so their replication streams can be set up.
 		let _new_connections = self.poll_connections();
@@ -162,7 +160,7 @@ impl EngineSystem for Replicator {
 		// - destroyed
 		let updates = EntityUpdates::new(&self.entities_relevant);
 		let updates = updates.query(&arc_world);
-		let updates = updates.collect_chunks(&chunk_cache, &mut self.connection_handles);
+		let updates = updates.collect_chunks(&database, &mut self.connection_handles);
 
 		// Entity updates are turned into operations on a given set of connections.
 		// This can result in multiple of the same operation for different connections
@@ -288,7 +286,7 @@ impl EntityUpdates {
 
 	fn collect_chunks(
 		mut self,
-		arc_chunk_cache: &chunk::cache::ArcLock,
+		database: &Arc<RwLock<Database>>,
 		connection_handles: &mut HashMap<SocketAddr, Handle>,
 	) -> Self {
 		use std::time::{Duration, Instant};
@@ -300,10 +298,7 @@ impl EntityUpdates {
 		// Needed because the `send-pending` block can consume tens of ms per frame without rate-limiting.
 		static PERF_BUDGET_MS_PER_CONNECTION: Duration = Duration::from_micros(500); // 0.5 ms
 
-		let chunk_cache = match arc_chunk_cache.try_read() {
-			Ok(locked) => locked,
-			Err(_) => return self,
-		};
+		let Ok(database) = database.try_read() else { return self; };
 
 		for (handle_addr, handle) in connection_handles.iter_mut() {
 			let perf_budget_start = Instant::now();
@@ -340,9 +335,10 @@ impl EntityUpdates {
 					};
 
 					// If the chunk is in the cache, then the server has it loaded (to some degree).
-					if let Some(weak_chunk) = chunk_cache.find(&coordinate) {
+					if let Some(entry) = database.find_chunk(&coordinate) {
+						let weak_server_chunk = Arc::downgrade(entry.unwrap_server());
 						self.new_chunks
-							.insert(handle_addr.clone(), weak_chunk.clone());
+							.insert(handle_addr.clone(), weak_server_chunk);
 					} else {
 						// If chunk is not load or we've exceeded our alloted time/amount for this update,
 						// then the chunk needs to go back on the component for the next update cycle.

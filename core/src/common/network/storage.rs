@@ -1,7 +1,4 @@
-use crate::{
-	app::state::ArcLockMachine, common::network::connection, common::network::mode,
-	entity::ArcLockEntityWorld,
-};
+use crate::{app::state::ArcLockMachine, common::network::connection, common::network::mode};
 use anyhow::Result;
 use engine::utility::ValueSet;
 use socknet::endpoint::{Config, Endpoint};
@@ -158,8 +155,9 @@ impl Storage {
 	pub fn start_loading(&self, systems: &Arc<ValueSet>) -> anyhow::Result<()> {
 		if let Some(arc_server) = self.server.as_ref() {
 			if let Ok(mut server) = arc_server.write() {
-				server.start_loading_world(&systems)?;
-				server.initialize_systems(&systems.get_arclock::<crate::entity::World>().unwrap());
+				let world = systems.get_arclock::<crate::entity::World>().unwrap();
+				let loader = systems.get_arc::<crate::server::world::Loader>().unwrap();
+				server.initialize_systems(&world, &loader);
 			}
 		}
 		Ok(())
