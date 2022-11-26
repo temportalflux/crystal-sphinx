@@ -94,18 +94,18 @@ impl PlayerController {
 		arc_user: input::ArcLockUser,
 	) {
 		use crate::app::state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		let callback_storage = storage.clone();
 		let callback_world = world.clone();
 		Storage::<Arc<RwLock<Self>>>::default()
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				profiling::scope!("init-subsystem", LOG);
 
 				// This system should only be active/present while
@@ -134,7 +134,8 @@ impl PlayerController {
 				}
 
 				return Ok(Some(arc_self));
-			});
+			}))
+			.build(&app_state);
 	}
 }
 

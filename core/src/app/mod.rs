@@ -15,13 +15,38 @@ pub fn store_during<T, F>(
 	F: (Fn() -> anyhow::Result<Option<T>>) + 'static + Send + Sync,
 {
 	use state::{
-		storage::{Event::*, Storage},
+		storage::{Callback, Storage},
+		OperationKey,
 		Transition::*,
-		*,
 	};
 
 	Storage::<T>::default()
-		.with_event(Create, OperationKey(None, Some(Enter), Some(state)))
-		.with_event(Destroy, OperationKey(Some(state), Some(Exit), None))
-		.create_callbacks(&app_state, fn_create);
+		.create_when(OperationKey(None, Some(Enter), Some(state)))
+		.destroy_when(OperationKey(Some(state), Some(Exit), None))
+		.with_callback(Callback::recurring(fn_create))
+		.build(&app_state);
+}
+
+pub fn store_during_once<T, F>(
+	app_state: &Arc<RwLock<state::Machine>>,
+	state: state::State,
+	fn_create: F,
+) where
+	T: 'static + Send + Sync,
+	F: (FnOnce() -> anyhow::Result<Option<T>>) + 'static + Send + Sync,
+{
+	use state::{
+		storage::{Callback, Storage},
+		OperationKey,
+		Transition::*,
+	};
+
+	// TODO: This should be a one-off, but because the callbacks are stored,
+	// it is actually called each time the game enters the state.
+	// The function should be FnOnce and the storage should be discarded on exit.
+	Storage::<T>::default()
+		.create_when(OperationKey(None, Some(Enter), Some(state)))
+		.destroy_when(OperationKey(Some(state), Some(Exit), None))
+		.with_callback(Callback::once(fn_create))
+		.build(&app_state);
 }

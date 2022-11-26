@@ -52,10 +52,10 @@ impl RenderVoxel {
 		model_cache: Arc<model::Cache>,
 	) {
 		use state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		let callback_systems = systems;
@@ -65,10 +65,10 @@ impl RenderVoxel {
 		let callback_camera = camera;
 		Storage::<ArcLockRenderVoxel>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				profiling::scope!("init-render", ID);
 				log::trace!(target: ID, "Received Enter(InGame) transition");
 				let systems = callback_systems.upgrade().unwrap();
@@ -93,7 +93,8 @@ impl RenderVoxel {
 						}
 					},
 				)
-			});
+			}))
+			.build(&app_state);
 	}
 
 	fn create(

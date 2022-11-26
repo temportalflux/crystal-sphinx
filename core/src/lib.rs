@@ -395,20 +395,20 @@ pub struct InGameSystems {
 impl InGameSystems {
 	pub fn add_state_listener(systems: &Arc<ValueSet>) {
 		use app::state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
 		let callback_systems = Arc::downgrade(&systems);
 		Storage::<Self>::default()
 			// On Enter InGame => create Self and hold ownership in `storage`
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
 			// On Exit InGame => drop the renderer from storage, thereby removing it from the render-chain
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				profiling::scope!("init-game-systems");
 				let in_game = Self {
 					systems: callback_systems.upgrade().unwrap(),
@@ -418,7 +418,8 @@ impl InGameSystems {
 					in_game.add_client_systems()?;
 				}
 				Ok(Some(in_game))
-			});
+			}))
+			.build(&app_state);
 	}
 
 	#[profiling::function]

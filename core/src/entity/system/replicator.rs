@@ -49,19 +49,19 @@ impl Replicator {
 		systems: &Arc<ValueSet>,
 	) {
 		use state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		let callback_storage = storage.clone();
 		let callback_world = world.clone();
 		let callback_systems = Arc::downgrade(&systems);
 		Storage::<Arc<RwLock<Self>>>::default()
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				use crate::common::network::mode;
 				profiling::scope!("init-subsystem", LOG);
 
@@ -121,7 +121,8 @@ impl Replicator {
 				}
 
 				return Ok(Some(arc_self));
-			});
+			}))
+			.build(&app_state);
 	}
 }
 

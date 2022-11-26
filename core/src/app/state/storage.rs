@@ -1,17 +1,12 @@
-use super::{ArcLockMachine, Callback, OperationKey};
+use crate::app::state::{self, ArcLockMachine, OperationKey};
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
 
-pub enum Event {
-	Create,
-	Destroy,
-}
-
-pub enum StorageCallback<T> {
+pub enum Callback<T> {
 	Recurring(Box<dyn Fn() -> Result<Option<T>> + 'static + Send + Sync>),
 	Once(Box<dyn FnOnce() -> Result<Option<T>> + 'static + Send + Sync>),
 }
-impl<T> StorageCallback<T> {
+impl<T> Callback<T> {
 	pub fn recurring<F>(callback: F) -> Self
 	where
 		F: Fn() -> Result<Option<T>> + 'static + Send + Sync,
@@ -27,13 +22,13 @@ impl<T> StorageCallback<T> {
 	}
 }
 
-pub struct Storage2<T> {
+pub struct Storage<T> {
 	create: Option<OperationKey>,
 	destroy: Option<OperationKey>,
-	creator: Option<StorageCallback<T>>,
+	creator: Option<Callback<T>>,
 	_phantom: std::marker::PhantomData<T>,
 }
-impl<T> Default for Storage2<T> {
+impl<T> Default for Storage<T> {
 	fn default() -> Self {
 		Self {
 			create: None,
@@ -43,7 +38,7 @@ impl<T> Default for Storage2<T> {
 		}
 	}
 }
-impl<T> Storage2<T>
+impl<T> Storage<T>
 where
 	T: 'static + Send + Sync,
 {
@@ -57,7 +52,7 @@ where
 		self
 	}
 
-	pub fn with_callback(mut self, callback: StorageCallback<T>) -> Self {
+	pub fn with_callback(mut self, callback: Callback<T>) -> Self {
 		self.creator = Some(callback);
 		self
 	}
@@ -70,11 +65,11 @@ where
 		if let Some(operation_key) = self.destroy {
 			let storage_in_fn = storage.clone();
 			let callback = match &creator {
-				StorageCallback::Recurring(_) => Callback::recurring(move |_| {
+				Callback::Recurring(_) => state::Callback::recurring(move |_| {
 					let mut storage = storage_in_fn.lock().unwrap();
 					*storage = None;
 				}),
-				StorageCallback::Once(_) => Callback::once(move |_| {
+				Callback::Once(_) => state::Callback::once(move |_| {
 					let mut storage = storage_in_fn.lock().unwrap();
 					*storage = None;
 				}),
@@ -85,8 +80,8 @@ where
 		if let Some(operation_key) = self.create {
 			let storage_in_fn = storage.clone();
 			let callback = match creator {
-				StorageCallback::Recurring(creator) => {
-					Callback::recurring(move |_| match creator() {
+				Callback::Recurring(creator) => {
+					state::Callback::recurring(move |_| match creator() {
 						Ok(item) => {
 							let mut storage = storage_in_fn.lock().unwrap();
 							*storage = item;
@@ -96,7 +91,7 @@ where
 						}
 					})
 				}
-				StorageCallback::Once(creator) => Callback::once(move |_| match creator() {
+				Callback::Once(creator) => state::Callback::once(move |_| match creator() {
 					Ok(item) => {
 						let mut storage = storage_in_fn.lock().unwrap();
 						*storage = item;
@@ -108,38 +103,5 @@ where
 			};
 			app_state.insert_callback(operation_key, callback);
 		}
-	}
-}
-
-pub struct Storage<T> {
-	inner: Storage2<T>,
-}
-impl<T> Default for Storage<T> {
-	fn default() -> Self {
-		Self {
-			inner: Default::default(),
-		}
-	}
-}
-
-impl<T> Storage<T>
-where
-	T: 'static + Send + Sync,
-{
-	pub fn with_event(mut self, event: Event, key: OperationKey) -> Self {
-		match event {
-			Event::Create => self.inner = self.inner.create_when(key),
-			Event::Destroy => self.inner = self.inner.destroy_when(key),
-		}
-		self
-	}
-
-	pub fn create_callbacks<F>(self, app_state: &ArcLockMachine, create_callback: F)
-	where
-		F: (Fn() -> Result<Option<T>>) + 'static + Send + Sync,
-	{
-		self.inner
-			.with_callback(StorageCallback::recurring(create_callback))
-			.build(app_state);
 	}
 }

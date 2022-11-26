@@ -35,10 +35,10 @@ struct RenderSystemObjects {
 impl SystemDependencies {
 	pub fn add_state_listener(self, app_state: &Arc<RwLock<state::Machine>>) {
 		use state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		// In theory, this struct will be kept around as long as the storage callback exists.
@@ -47,9 +47,9 @@ impl SystemDependencies {
 		// and the rest of the data are weak references.
 		let callback_deps = self;
 		Storage::<RenderSystemObjects>::default()
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				use crate::common::network::mode;
 
 				// This system should only be active/present while
@@ -88,6 +88,7 @@ impl SystemDependencies {
 					GatherEntitiesToRender::create(world.clone(), &instance_buffer, &texture_cache);
 
 				return Ok(Some(RenderSystemObjects { render, system }));
-			});
+			}))
+			.build(&app_state);
 	}
 }

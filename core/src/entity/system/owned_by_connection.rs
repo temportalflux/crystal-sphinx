@@ -33,18 +33,18 @@ impl OwnedByConnection {
 		arc_world: Weak<RwLock<entity::World>>,
 	) {
 		use state::{
-			storage::{Event::*, Storage},
+			storage::{Callback, Storage},
+			OperationKey,
 			State::*,
 			Transition::*,
-			*,
 		};
 
 		let callback_storage = arc_storage.clone();
 		let callback_world = arc_world.clone();
 		Storage::<Arc<RwLock<Self>>>::default()
-			.with_event(Create, OperationKey(None, Some(Enter), Some(InGame)))
-			.with_event(Destroy, OperationKey(Some(InGame), Some(Exit), None))
-			.create_callbacks(&app_state, move || {
+			.create_when(OperationKey(None, Some(Enter), Some(InGame)))
+			.destroy_when(OperationKey(Some(InGame), Some(Exit), None))
+			.with_callback(Callback::recurring(move || {
 				use crate::common::network::mode;
 				profiling::scope!("init-subsystem", LOG);
 
@@ -79,7 +79,8 @@ impl OwnedByConnection {
 				}
 
 				return Ok(Some(arc_self));
-			});
+			}))
+			.build(&app_state);
 	}
 }
 
