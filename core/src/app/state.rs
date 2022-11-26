@@ -1,4 +1,5 @@
 use anyhow::Result;
+use multimap::MultiMap;
 use std::{
 	collections::HashMap,
 	sync::{Arc, RwLock},
@@ -95,7 +96,6 @@ pub struct Operation<'transition>(
 	State,
 	&'transition TransitionData,
 );
-pub type FnOperation = Box<dyn Fn(&Operation) + Send + Sync>;
 
 impl<'transition> Operation<'transition> {
 	pub fn prev(&self) -> &Option<State> {
@@ -131,10 +131,43 @@ impl<'transition> Operation<'transition> {
 	}
 }
 
+pub enum Callback {
+	Recurring(Box<dyn Fn(&Operation) + 'static + Send + Sync>),
+	Once(Box<dyn FnOnce(&Operation) + 'static + Send + Sync>),
+}
+impl Callback {
+	pub fn recurring<F>(callback: F) -> Self
+	where
+		F: Fn(&Operation) + 'static + Send + Sync,
+	{
+		Self::Recurring(Box::new(callback))
+	}
+
+	pub fn once<F>(callback: F) -> Self
+	where
+		F: FnOnce(&Operation) + 'static + Send + Sync,
+	{
+		Self::Once(Box::new(callback))
+	}
+
+	fn call(self, operation: &Operation) -> Option<Self> {
+		match self {
+			Self::Recurring(box_fn) => {
+				box_fn(operation);
+				Some(Self::Recurring(box_fn))
+			}
+			Self::Once(box_fn) => {
+				box_fn(operation);
+				None
+			}
+		}
+	}
+}
+
 pub type ArcLockMachine = Arc<RwLock<Machine>>;
 pub struct Machine {
 	state: State,
-	callbacks: HashMap<OperationKey, Vec<FnOperation>>,
+	callbacks: MultiMap<OperationKey, Callback>,
 	next_transition: Option<(State, TransitionData)>,
 }
 
@@ -142,7 +175,7 @@ impl Machine {
 	pub fn new(state: State) -> Self {
 		Self {
 			state,
-			callbacks: HashMap::new(),
+			callbacks: MultiMap::new(),
 			next_transition: None,
 		}
 	}
@@ -190,21 +223,16 @@ impl Machine {
 		));
 	}
 
-	pub fn add_callback<F>(&mut self, key: OperationKey, callback: F)
-	where
-		F: Fn(&Operation) + Send + Sync + 'static,
-	{
+	pub fn insert_callback(&mut self, key: OperationKey, mut callback: Callback) {
 		if key.2 == Some(self.state) && key.1 == Some(Transition::Enter) {
-			callback(&Operation(None, Transition::Enter, self.state, &None));
+			let enter_current = Operation(None, Transition::Enter, self.state, &None);
+			match callback.call(&enter_current) {
+				Some(retained) => callback = retained,
+				None => return,
+			};
 		}
 
-		if !self.callbacks.contains_key(&key) {
-			self.callbacks.insert(key.clone(), Vec::new());
-		}
-		self.callbacks
-			.get_mut(&key)
-			.unwrap()
-			.push(Box::new(callback));
+		self.callbacks.insert(key, callback);
 	}
 
 	pub fn add_async_callback<F, T>(&mut self, key: OperationKey, callback: F)
@@ -212,19 +240,24 @@ impl Machine {
 		F: Fn(&Operation) -> T + Send + Sync + 'static,
 		T: futures::future::Future<Output = Result<()>> + Send + 'static,
 	{
-		self.add_callback(key, move |operation| {
-			engine::task::spawn("app-state".to_string(), callback(operation));
-		});
+		self.insert_callback(
+			key,
+			Callback::recurring(move |operation| {
+				engine::task::spawn("app-state".to_string(), callback(operation));
+			}),
+		);
 	}
 
 	fn dispatch_callback(&mut self, operation: Operation) {
-		let relevant_callbacks = operation
-			.all_keys()
-			.into_iter()
-			.filter_map(|key| self.callbacks.get(&key))
-			.flatten();
-		for callback in relevant_callbacks {
-			callback(&operation);
+		for key in operation.all_keys().into_iter() {
+			let Some(callbacks) = self.callbacks.remove(&key) else { continue; };
+			let mut retained = Vec::with_capacity(callbacks.len());
+			for callback in callbacks.into_iter() {
+				if let Some(callback) = callback.call(&operation) {
+					retained.push(callback);
+				}
+			}
+			self.callbacks.insert_many(key, retained);
 		}
 	}
 

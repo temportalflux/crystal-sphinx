@@ -149,7 +149,11 @@ impl ThreadState {
 		chunks
 	}
 
-	fn sync_load_chunk(&mut self, coordinate: Point3<i64>, level: Level) -> Weak<RwLock<chunk::Chunk>> {
+	fn sync_load_chunk(
+		&mut self,
+		coordinate: Point3<i64>,
+		level: Level,
+	) -> Weak<RwLock<chunk::Chunk>> {
 		let loaded_chunk = self
 			.database
 			.read()
@@ -284,10 +288,7 @@ impl ThreadState {
 	}
 
 	#[profiling::function]
-	fn unload_expired_chunks(
-		&mut self,
-		mut chunks_for_unloading: Vec<Point3<i64>>,
-	) {
+	fn unload_expired_chunks(&mut self, mut chunks_for_unloading: Vec<Point3<i64>>) {
 		// Unload each chunk, dropping them one-after-one after each iteration
 		if !chunks_for_unloading.is_empty() {
 			log::debug!(

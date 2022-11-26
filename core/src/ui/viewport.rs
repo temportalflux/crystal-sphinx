@@ -83,14 +83,14 @@ impl AppStateViewport {
 			for presentation in Self::presentation_list().into_iter() {
 				let callback_viewport = viewport.clone();
 				let ui_instantiator = presentation.1;
-				app_state.add_callback(
+				app_state.insert_callback(
 					OperationKey(None, Some(Enter), Some(presentation.0)),
-					move |_operation| {
+					Callback::recurring(move |_operation| {
 						profiling::scope!("updating-ui-root");
 						if let Ok(mut viewport) = callback_viewport.write() {
 							viewport.set_root(ui_instantiator());
 						}
-					},
+					}),
 				);
 			}
 		}

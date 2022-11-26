@@ -26,9 +26,9 @@ impl Storage {
 		{
 			let callback_storage = arclocked.clone();
 			let callback_app_state = Arc::downgrade(&app_state);
-			app_state.write().unwrap().add_callback(
+			app_state.write().unwrap().insert_callback(
 				OperationKey(None, Some(Enter), Some(Disconnecting)),
-				move |_operation| {
+				Callback::recurring(move |_operation| {
 					assert!(mode::get() == mode::Kind::Client);
 					mode::set(mode::Set::empty());
 					if let Ok(mut storage) = callback_storage.write() {
@@ -48,16 +48,16 @@ impl Storage {
 						}
 						Ok(())
 					});
-				},
+				}),
 			);
 		}
 
 		// Add callback to clear the server storage if the server unloads
 		{
 			let callback_storage = arclocked.clone();
-			app_state.write().unwrap().add_callback(
+			app_state.write().unwrap().insert_callback(
 				OperationKey(None, Some(Enter), Some(Unloading)),
-				move |_operation| {
+				Callback::recurring(move |_operation| {
 					profiling::scope!("unloading-network");
 					assert!(mode::get().contains(mode::Kind::Server));
 					mode::set(mode::Set::empty());
@@ -68,7 +68,7 @@ impl Storage {
 						storage.endpoint = None;
 						storage.connection_list = None;
 					}
-				},
+				}),
 			);
 		}
 
