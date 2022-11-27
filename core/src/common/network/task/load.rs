@@ -143,6 +143,7 @@ fn load_network(systems: Arc<ValueSet>, instruction: &Instruction) -> Result<Arc
 		let recv_updates = database.write().unwrap().add_recv();
 		systems.insert(Arc::new(crate::client::world::ChunkChannel::new(
 			recv_updates,
+			Arc::downgrade(&systems),
 		)));
 	}
 

@@ -122,8 +122,21 @@ impl Handle {
 							let _ = chunk_sender.try_send(Operation::Remove(coord));
 						}
 					}
-					relevancy::WorldUpdate::Chunks(_new_chunks) => {
-						// all updates are handled by the database broadcast channel
+					relevancy::WorldUpdate::Chunks(new_chunks) => {
+						// TODO: This should only insert new chunks, the actual chunk updates
+						// should be processed through database channel. Potentially should leverage
+						// relevancy update for detecting new chunks?
+						for weak_chunk in new_chunks.into_iter() {
+							let Some(arc_chunk) = weak_chunk.upgrade() else { continue; };
+							let server_chunk = arc_chunk.read().unwrap();
+							let coord = server_chunk.chunk.coordinate().clone();
+							let updates = server_chunk
+								.chunk
+								.block_ids()
+								.into_iter()
+								.collect::<Vec<_>>();
+							//let _ = chunk_sender.try_send(Operation::Insert(coord, updates));
+						}
 					}
 				}
 			}

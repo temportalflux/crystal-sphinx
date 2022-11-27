@@ -1,6 +1,6 @@
-use crate::common::world;
-use engine::channels::broadcast;
-use std::sync::Arc;
+use crate::{common::world, entity::system::replicator::relevancy::Relevance};
+use engine::{channels::broadcast, utility::ValueSet};
+use std::sync::{Arc, Weak};
 
 pub mod chunk;
 
@@ -12,7 +12,10 @@ pub struct ChunkChannel {
 }
 
 impl ChunkChannel {
-	pub fn new(mut recv_updates: broadcast::BusReader<world::UpdateBlockId>) -> Self {
+	pub fn new(
+		mut recv_updates: broadcast::BusReader<world::UpdateBlockId>,
+		systems: Weak<ValueSet>,
+	) -> Self {
 		static LOG: &'static str = "client_chunk_channel";
 		let channel = engine::channels::mpsc::unbounded();
 		let task_handle = Arc::new(());
@@ -24,7 +27,17 @@ impl ChunkChannel {
 				if let Ok(update) = recv_updates.try_recv() {
 					match update {
 						world::Update::Inserted(coord, contents) => {
-							let _ = chunk_sender.try_send(chunk::Operation::Insert(coord, contents.to_vec()));
+							let is_relevant = {
+								let Some(systems) = systems.upgrade() else { continue; };
+								let Some(arc_relevance) = systems.get_arclock::<Relevance>() else { continue; };
+								let relevance = arc_relevance.read().unwrap();
+								relevance.is_relevant(&coord)
+							};
+							
+							if is_relevant {
+								let _ = chunk_sender
+									.try_send(chunk::Operation::Insert(coord, contents.to_vec()));
+							}
 						}
 						world::Update::Dropped(coord, _items) => {
 							let _ = chunk_sender.try_send(chunk::Operation::Remove(coord));

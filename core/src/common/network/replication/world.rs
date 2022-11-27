@@ -1,19 +1,18 @@
 //! Stream for replicating data about the physical world; what chunks are relevant and what blocks each chunk contains.
 //!
 //! See [`register`] for stream graph.
-use std::sync::{Arc, RwLock, Weak};
-
+use crate::{
+	app::{self, state::State::InGame},
+	common::world,
+	entity::system::replicator::relevancy::{Relevance, WorldUpdate},
+	server::world::chunk::Chunk,
+};
 use engine::{
 	channels::future::{Receiver, Sender},
 	utility::ValueSet,
 };
 use socknet::stream::Registry;
-
-use crate::{
-	common::world,
-	entity::system::replicator::relevancy::{Relevance, WorldUpdate},
-	server::world::chunk::Chunk,
-};
+use std::sync::{Arc, RwLock, Weak};
 
 pub mod chunk;
 pub mod relevancy;
@@ -69,5 +68,14 @@ pub fn register(registry: &mut Registry, systems: &Arc<ValueSet>) {
 			storage: Arc::downgrade(&storage),
 			database: Arc::downgrade(&database),
 		}),
+	});
+
+	// Put the local client-relevance arc in the systems set so
+	// it can be referred to as long as the player is in a game session.
+	let app_state = systems.get_arclock::<app::state::Machine>().unwrap();
+	let fn_systems = systems.clone();
+	app::store_during_once(&app_state, InGame, move || {
+		log::info!(target: "client", "Inserting local client relevance");
+		Ok(Some(fn_systems.insert_handle(local_relevance)))
 	});
 }
